@@ -1,0 +1,43 @@
+# === 環境與憑證（絕不進 Git）===
+.env
+.env.local
+*.pem
+*.key
+credentials
+aws_credentials
+.aws/
+
+# === Python ===
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ipynb_checkpoints/
+
+# === 大型資料（放 S3，不進 Git；見 README 資料存放說明）===
+youbike資料集/
+output/
+*.parquet
+*.csv
+# 例外：小型範例/mock 資料仍可進 Git（若之後有）
+!frontend/src/mock/mock_data.json
+
+# === 課程/個人筆記（與專案協作無關）===
+aws上課內容/
+
+# === 前端 ===
+node_modules/
+dist/
+frontend/.env
+
+# === 系統/編輯器 ===
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# === 大型產出檔 ===
+# dashboard 等產出的 html 不進 Git（可重新產生）；審查報告 html 保留於根目錄
+output/*.html

@@ -1,0 +1,850 @@
+<title>YouBike 調度架構審查</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+:root{
+  --bg:#F4F6F3; --surface:#FFFFFF; --surface-2:#EDF0EC;
+  --ink:#16211F; --ink-2:#3A4744; --muted:#5F6E6A; --line:#D8DED8;
+  --accent:#0F6E5C; --accent-soft:#DDEDE7; --signal:#C2410C;
+  --fa-bg:#DCE9F8; --fa-line:#2A6099; --fa-tx:#123A63;
+  --fb-bg:#EAE1F7; --fb-line:#6B4BA1; --fb-tx:#3B2566;
+  --fc-bg:#DCEFE2; --fc-line:#2E7D4F; --fc-tx:#16442B;
+  --fn-bg:#E9ECEA; --fn-line:#6B7B77; --fn-tx:#26302E;
+  --fg-bg:#FBE3C2; --fg-line:#B45309; --fg-tx:#7A3A05;
+  --fs-bg:#F1EDE4; --fs-line:#8A7F66; --fs-tx:#3B3527;
+  --fx-bg:#FBE0DC; --fx-line:#B3453A; --fx-tx:#7B2A22;
+  --fe-bg:#FDE3C8; --fe-line:#C2410C; --fe-tx:#7C2D12;
+  --lay-fill:#FFFFFF;
+  --e-n:#5F6E6A; --e-a:#2A6099; --e-b:#6B4BA1; --e-c:#2E7D4F; --e-s:#C2410C;
+  --sev-hi-bg:#FBE0DC; --sev-hi-tx:#8A3025;
+  --sev-md-bg:#FBE9CC; --sev-md-tx:#7A4A05;
+  --sev-lo-bg:#E4EDE9; --sev-lo-tx:#3D5A50;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1413; --surface:#161F1D; --surface-2:#1C2624;
+    --ink:#E7ECE8; --ink-2:#C4CFCA; --muted:#93A29D; --line:#2A3532;
+    --accent:#5CC3A8; --accent-soft:#16302A; --signal:#F0864F;
+    --fa-bg:#16304A; --fa-line:#79ACE2; --fa-tx:#D2E4F8;
+    --fb-bg:#2A2043; --fb-line:#AE92E0; --fb-tx:#E2D9F6;
+    --fc-bg:#153020; --fc-line:#74BE90; --fc-tx:#D5EDDD;
+    --fn-bg:#1F2927; --fn-line:#93A29D; --fn-tx:#DEE5E2;
+    --fg-bg:#3A2508; --fg-line:#E3A75F; --fg-tx:#F8E2C4;
+    --fs-bg:#2A2519; --fs-line:#BCAC8A; --fs-tx:#EFE7D7;
+    --fx-bg:#3B1B17; --fx-line:#E58F80; --fx-tx:#F8D8D2;
+    --fe-bg:#3D1F0D; --fe-line:#EC9862; --fe-tx:#FADFCA;
+    --lay-fill:#131B19;
+    --e-n:#93A29D; --e-a:#79ACE2; --e-b:#AE92E0; --e-c:#74BE90; --e-s:#F0864F;
+    --sev-hi-bg:#3B1B17; --sev-hi-tx:#F0A79A;
+    --sev-md-bg:#3A2508; --sev-md-tx:#EFC183;
+    --sev-lo-bg:#1C2A26; --sev-lo-tx:#9CBCB0;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1413; --surface:#161F1D; --surface-2:#1C2624;
+  --ink:#E7ECE8; --ink-2:#C4CFCA; --muted:#93A29D; --line:#2A3532;
+  --accent:#5CC3A8; --accent-soft:#16302A; --signal:#F0864F;
+  --fa-bg:#16304A; --fa-line:#79ACE2; --fa-tx:#D2E4F8;
+  --fb-bg:#2A2043; --fb-line:#AE92E0; --fb-tx:#E2D9F6;
+  --fc-bg:#153020; --fc-line:#74BE90; --fc-tx:#D5EDDD;
+  --fn-bg:#1F2927; --fn-line:#93A29D; --fn-tx:#DEE5E2;
+  --fg-bg:#3A2508; --fg-line:#E3A75F; --fg-tx:#F8E2C4;
+  --fs-bg:#2A2519; --fs-line:#BCAC8A; --fs-tx:#EFE7D7;
+  --fx-bg:#3B1B17; --fx-line:#E58F80; --fx-tx:#F8D8D2;
+  --fe-bg:#3D1F0D; --fe-line:#EC9862; --fe-tx:#FADFCA;
+  --lay-fill:#131B19;
+  --e-n:#93A29D; --e-a:#79ACE2; --e-b:#AE92E0; --e-c:#74BE90; --e-s:#F0864F;
+  --sev-hi-bg:#3B1B17; --sev-hi-tx:#F0A79A;
+  --sev-md-bg:#3A2508; --sev-md-tx:#EFC183;
+  --sev-lo-bg:#1C2A26; --sev-lo-tx:#9CBCB0;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans","Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+  font-size:15.5px; line-height:1.75; letter-spacing:.005em;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px; margin:0 auto; padding:0 24px}
+h1,h2,h3{font-family:"Archivo","Noto Sans TC",sans-serif; text-wrap:balance; margin:0}
+code,.mono{font-family:"IBM Plex Mono","Noto Sans TC",monospace; font-size:.88em}
+code{background:var(--surface-2); padding:.1em .38em; border-radius:4px; color:var(--ink-2)}
+
+header{padding:56px 0 34px; border-bottom:1px solid var(--line)}
+.eyebrow{font-family:"IBM Plex Mono",monospace; font-size:11.5px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent); margin-bottom:14px}
+h1{font-size:clamp(30px,4.4vw,44px); line-height:1.16; font-weight:700; letter-spacing:-.015em}
+.lede{margin:18px 0 0; font-size:17px; color:var(--ink-2); max-width:62ch}
+.meta{display:flex; flex-wrap:wrap; gap:8px 22px; margin-top:24px;
+  font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted)}
+
+section{padding:44px 0}
+section + section{border-top:1px solid var(--line)}
+h2{font-size:24px; font-weight:600; letter-spacing:-.01em; margin-bottom:6px}
+.sec-note{color:var(--muted); font-size:14px; margin:0 0 24px}
+
+.verdict{display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); margin-top:24px}
+.vcard{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:18px 20px}
+.vcard .k{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--muted)}
+.vcard .v{font-family:"Archivo",sans-serif; font-size:30px; font-weight:600; line-height:1.2; margin:6px 0 4px;
+  font-variant-numeric:tabular-nums}
+.vcard p{margin:0; font-size:13.5px; color:var(--ink-2)}
+.vcard.hi .v{color:var(--signal)} .vcard.ok .v{color:var(--accent)}
+
+.figwrap{background:var(--surface); border-top:1px solid var(--line); border-bottom:1px solid var(--line)}
+figure{margin:0; padding:32px 0 26px}
+.scroller{overflow-x:auto; padding:0 24px 6px}
+svg.arch{display:block; width:100%; min-width:1240px; height:auto; margin:0 auto; max-width:1400px}
+figcaption{max-width:1000px; margin:20px auto 0; padding:0 24px; color:var(--muted); font-size:13.5px}
+
+.legend{max-width:1400px; margin:0 auto; padding:0 24px 4px; display:flex; flex-wrap:wrap; gap:8px 16px}
+.chip{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-2)}
+.chip i{width:13px; height:13px; border-radius:3px; border:1.5px solid; display:inline-block}
+.chip.a i{background:var(--fa-bg); border-color:var(--fa-line)}
+.chip.b i{background:var(--fb-bg); border-color:var(--fb-line)}
+.chip.c i{background:var(--fc-bg); border-color:var(--fc-line)}
+.chip.n i{background:var(--fn-bg); border-color:var(--fn-line)}
+.chip.g i{background:var(--fg-bg); border-color:var(--fg-line)}
+.chip.s i{background:var(--fs-bg); border-color:var(--fs-line)}
+.chip.x i{background:var(--fx-bg); border-color:var(--fx-line)}
+.chip.e i{background:var(--fe-bg); border-color:var(--fe-line)}
+.chip.dash i{background:transparent; border:none; width:24px; height:0; border-top:2px dashed var(--e-s)}
+
+.finding{background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--line);
+  border-radius:10px; padding:20px 22px; margin-bottom:14px}
+.finding.hi{border-left-color:var(--signal)}
+.finding.md{border-left-color:var(--fg-line)}
+.finding.lo{border-left-color:var(--accent)}
+.fhead{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:10px}
+.fnum{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums}
+.ftitle{font-family:"Archivo","Noto Sans TC",sans-serif; font-weight:600; font-size:17.5px; letter-spacing:-.005em}
+.sev{font-size:11px; font-family:"IBM Plex Mono",monospace; letter-spacing:.08em; padding:2px 9px;
+  border-radius:99px; text-transform:uppercase}
+.sev.hi{background:var(--sev-hi-bg); color:var(--sev-hi-tx)}
+.sev.md{background:var(--sev-md-bg); color:var(--sev-md-tx)}
+.sev.lo{background:var(--sev-lo-bg); color:var(--sev-lo-tx)}
+.finding p{margin:0 0 8px; font-size:14.5px; color:var(--ink-2)}
+.finding p:last-child{margin-bottom:0}
+.finding b{color:var(--ink); font-weight:600}
+.fix{background:var(--accent-soft); border-radius:7px; padding:10px 14px; margin-top:12px;
+  font-size:14px; color:var(--ink-2)}
+.fix b{color:var(--accent)}
+
+ul.plain{margin:0; padding-left:20px}
+ul.plain li{margin-bottom:7px; font-size:14.5px; color:var(--ink-2)}
+ul.plain li b{color:var(--ink); font-weight:600}
+
+.tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:10px; background:var(--surface)}
+table{border-collapse:collapse; width:100%; min-width:560px; font-size:14px}
+th,td{text-align:left; padding:11px 16px; border-bottom:1px solid var(--line); vertical-align:top}
+th{font-family:"IBM Plex Mono",monospace; font-size:11.5px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted); font-weight:500; background:var(--surface-2)}
+tr:last-child td{border-bottom:none}
+td.ok{color:var(--accent); font-weight:600; white-space:nowrap}
+td.no{color:var(--signal); font-weight:600; white-space:nowrap}
+
+footer{padding:38px 0 64px; color:var(--muted); font-size:13.5px; border-top:1px solid var(--line)}
+footer b{color:var(--ink-2)}
+
+/* ---- SVG theming ---- */
+svg.arch text{font-family:"IBM Plex Sans","Noto Sans TC",sans-serif; dominant-baseline:auto}
+svg.arch .lay{fill:var(--lay-fill); stroke-width:2}
+svg.arch .lt{font-size:14.5px; font-weight:700}
+svg.arch .bx{stroke-width:1.5}
+svg.arch .bt{font-size:13px; font-weight:600}
+svg.arch .bs{font-size:11px}
+svg.arch g.a .bx{fill:var(--fa-bg); stroke:var(--fa-line)} svg.arch g.a text{fill:var(--fa-tx)}
+svg.arch g.b .bx{fill:var(--fb-bg); stroke:var(--fb-line)} svg.arch g.b text{fill:var(--fb-tx)}
+svg.arch g.c .bx{fill:var(--fc-bg); stroke:var(--fc-line)} svg.arch g.c text{fill:var(--fc-tx)}
+svg.arch g.n .bx{fill:var(--fn-bg); stroke:var(--fn-line)} svg.arch g.n text{fill:var(--fn-tx)}
+svg.arch g.g .bx{fill:var(--fg-bg); stroke:var(--fg-line)} svg.arch g.g text{fill:var(--fg-tx)}
+svg.arch g.s .bx{fill:var(--fs-bg); stroke:var(--fs-line)} svg.arch g.s text{fill:var(--fs-tx)}
+svg.arch g.x .bx{fill:var(--fx-bg); stroke:var(--fx-line)} svg.arch g.x text{fill:var(--fx-tx)}
+svg.arch g.e .bx{fill:var(--fe-bg); stroke:var(--fe-line)} svg.arch g.e text{fill:var(--fe-tx)}
+svg.arch .lay-a{stroke:var(--fa-line)} svg.arch .lt-a{fill:var(--fa-line)}
+svg.arch .lay-b{stroke:var(--fb-line)} svg.arch .lt-b{fill:var(--fb-line)}
+svg.arch .lay-c{stroke:var(--fc-line)} svg.arch .lt-c{fill:var(--fc-line)}
+svg.arch .lay-n{stroke:var(--fn-line)} svg.arch .lt-n{fill:var(--fn-line)}
+svg.arch .lay-s{stroke:var(--fs-line)} svg.arch .lt-s{fill:var(--fs-line)}
+svg.arch .ed{fill:none; stroke-width:2}
+svg.arch .ed-n{stroke:var(--e-n)} svg.arch .mk-n{fill:var(--e-n)}
+svg.arch .ed-a{stroke:var(--e-a)} svg.arch .mk-a{fill:var(--e-a)}
+svg.arch .ed-b{stroke:var(--e-b)} svg.arch .mk-b{fill:var(--e-b)}
+svg.arch .ed-c{stroke:var(--e-c)} svg.arch .mk-c{fill:var(--e-c)}
+svg.arch .ed-s{stroke:var(--e-s); stroke-dasharray:6 4} svg.arch .mk-s{fill:var(--e-s)}
+svg.arch .el{font-size:11px; font-weight:500}
+svg.arch .el-n{fill:var(--e-n)} svg.arch .el-a{fill:var(--e-a)} svg.arch .el-b{fill:var(--e-b)}
+svg.arch .el-c{fill:var(--e-c)} svg.arch .el-s{fill:var(--e-s)}
+svg.arch .note{font-size:11px; fill:var(--muted)}
+.ev{margin:10px 0; padding:11px 14px; background:var(--surface-2); border-radius:7px;
+  font-size:13.5px; line-height:1.7; color:var(--ink-2)}
+.ev .src{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--muted)}
+.ev .vs{display:block; font-family:"IBM Plex Mono",monospace; color:var(--signal);
+  font-size:11px; letter-spacing:.14em; margin:5px 0}
+.grouphead{display:flex; align-items:baseline; gap:12px; margin:36px 0 16px;
+  padding-bottom:9px; border-bottom:1px solid var(--line)}
+.grouphead h3{font-size:19px; font-weight:600}
+.grouphead .count{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted)}
+ol.minor{margin:0; padding-left:24px}
+ol.minor li{margin-bottom:10px; font-size:14px; color:var(--ink-2)}
+ol.minor li b{color:var(--ink); font-weight:600}
+.rootcause{background:var(--accent-soft); border-radius:10px; padding:18px 22px; margin:6px 0 8px;
+  font-size:14.5px; color:var(--ink-2)}
+.rootcause b{color:var(--accent)}
+@media (prefers-reduced-motion:no-preference){ .finding{transition:border-color .2s} }
+a{color:var(--accent)}
+</style>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">新北市黑客松 · 架構審查</div>
+    <h1>YouBike 調度架構審查</h1>
+    <p class="lede">五層骨架與 spec 一致，方向是對的。問題出在圖漏掉了三個 spec 明列的模組、把 <code>geo_batch</code> 放錯層、把整份設計最核心的「參數三層」壓成一個方塊，而且底色與方塊同色，圖上等於只剩邊框在撐版面。<b>已更新：</b>動態觸發已完整落地（config、design.md §7、rule_engine.py 都換版並實跑驗證）。另外把七份文件互相對照了一遍，找到 39 處邏輯打架，根因是 <code>api_contract.md</code> 與 <code>requirements.md</code> 停在 8/19 沒跟上 8/31 的改動。</p>
+    <div class="meta">
+      <span>審查對象：design_dataflow.drawio</span>
+      <span>比對基準：.kiro/specs ×4 + steering</span>
+      <span>更新：動態觸發已落地 + 七份文件交叉檢查</span>
+      <span>2026-08-31</span>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>結論</h2>
+    <p class="sec-note">分三個面向看：層次骨架、模組完整度、視覺可讀性。</p>
+    <div class="verdict">
+      <div class="vcard ok">
+        <div class="k">層次骨架</div>
+        <div class="v">正確</div>
+        <p>五層切分、A/B/C 分工歸屬、三條資料流敘述，都和 <code>design.md §1.1 / §3 / §4</code> 對得上。</p>
+      </div>
+      <div class="vcard hi">
+        <div class="k">模組完整度</div>
+        <div class="v">缺 5 項</div>
+        <p>degradation、simulation/replay、FR-13 站點動態管理、data_source 介面、versioning 都沒出現在圖上。</p>
+      </div>
+      <div class="vcard hi">
+        <div class="k">視覺可讀性</div>
+        <div class="v">需重做</div>
+        <p>分區底色與模組方塊同一個色值，方塊等於隱形；箭頭只連到分區框，看不出模組間的呼叫關係。</p>
+      </div>
+      <div class="vcard hi">
+        <div class="k">文件一致性</div>
+        <div class="v">39 處</div>
+        <p>七份文件互相對照，12 處會出事、16 處要釐清、11 處小不一致。根因是兩份 spec 停在 8/19 沒跟上。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="figwrap">
+  <figure>
+    <div class="scroller">
+<svg class="arch" viewBox="0 0 1400 950" role="img" aria-label="YouBike 智慧調度系統修正版架構圖：資料源層經 data_source 介面進入執行平面，執行平面的預測與緊急度結果進入控制平面，控制平面經人工確認閘門派發任務，再經 API 層送到前端；右側為三層參數子系統與橫切的儲存設定層，並標出任務回報與緊急覆寫兩條回流路徑。">
+<defs>
+  <marker id="ar-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mk-n" d="M0 0L10 5L0 10z"/></marker>
+  <marker id="ar-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mk-a" d="M0 0L10 5L0 10z"/></marker>
+  <marker id="ar-b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mk-b" d="M0 0L10 5L0 10z"/></marker>
+  <marker id="ar-c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mk-c" d="M0 0L10 5L0 10z"/></marker>
+  <marker id="ar-s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="mk-s" d="M0 0L10 5L0 10z"/></marker>
+</defs>
+
+<!-- ============ L1 資料源 ============ -->
+<rect class="lay lay-n" x="72" y="16" width="880" height="158" rx="8"/>
+<text class="lt lt-n" x="84" y="38">① 資料源層 — 共用，A 維護介面</text>
+<g class="n">
+  <rect class="bx" x="84" y="52" width="163" height="36" rx="6"/>
+  <text class="bt" x="165" y="68" text-anchor="middle">歷史 Parquet</text>
+  <text class="bs" x="165" y="82" text-anchor="middle">S3 / Athena</text>
+  <rect class="bx" x="257" y="52" width="163" height="36" rx="6"/>
+  <text class="bt" x="338" y="68" text-anchor="middle">TDX 即時 API</text>
+  <text class="bs" x="338" y="82" text-anchor="middle">正式 / Demo</text>
+  <rect class="bx" x="430" y="52" width="163" height="36" rx="6"/>
+  <text class="bt" x="511" y="68" text-anchor="middle">YouBike 官方源</text>
+  <text class="bs" x="511" y="82" text-anchor="middle">現場可換</text>
+  <rect class="bx" x="603" y="52" width="163" height="36" rx="6"/>
+  <text class="bt" x="684" y="68" text-anchor="middle">氣象 API</text>
+  <text class="bs" x="684" y="82" text-anchor="middle">活動 / 行事曆</text>
+  <rect class="bx" x="776" y="52" width="163" height="36" rx="6"/>
+  <text class="bt" x="857" y="68" text-anchor="middle">Mock 假資料</text>
+  <text class="bs" x="857" y="82" text-anchor="middle">解鎖 C 開發</text>
+  <rect class="bx" x="84" y="104" width="856" height="30" rx="6"/>
+  <text class="bt" x="512" y="123" text-anchor="middle">data_source 介面（唯一入口）　get_current_status() / get_history()　換源＝新增一個 adapter + 改 config.data_source.mode（NFR-7）</text>
+</g>
+<g class="x">
+  <rect class="bx" x="84" y="140" width="856" height="24" rx="6"/>
+  <text class="bs" x="512" y="156" text-anchor="middle">degradation：來源失效 → 用歷史同時段補值 ＋ 明確標記「過期資料」（NFR-10 降級 / NFR-5 失敗可見）</text>
+</g>
+<path class="ed ed-n" d="M165 88V104" marker-end="url(#ar-n)"/>
+<path class="ed ed-n" d="M338 88V104" marker-end="url(#ar-n)"/>
+<path class="ed ed-n" d="M511 88V104" marker-end="url(#ar-n)"/>
+<path class="ed ed-n" d="M684 88V104" marker-end="url(#ar-n)"/>
+<path class="ed ed-n" d="M857 88V104" marker-end="url(#ar-n)"/>
+<path class="ed ed-n" d="M512 174V196" marker-end="url(#ar-n)"/>
+<text class="el el-n" x="522" y="189">統一格式站況</text>
+
+<!-- ============ L2 執行平面 ============ -->
+<rect class="lay lay-b" x="72" y="196" width="880" height="118" rx="8"/>
+<text class="lt lt-b" x="84" y="218">② 執行平面（無狀態、可平行）— B 主責　門口固定、門內自由</text>
+<g class="b">
+  <rect class="bx" x="84" y="230" width="205" height="72" rx="6"/>
+  <text class="bt" x="186" y="252" text-anchor="middle">predictor</text>
+  <text class="bs" x="186" y="270" text-anchor="middle">LightGBM 預測（含區間）</text>
+  <text class="bs" x="186" y="288" text-anchor="middle">+ 歷史同星期同時段淨流出</text>
+  <rect class="bx" x="301" y="230" width="205" height="72" rx="6"/>
+  <text class="bt" x="403" y="252" text-anchor="middle">urgency</text>
+  <text class="bs" x="403" y="270" text-anchor="middle">緊急度 0~100</text>
+  <text class="bs" x="403" y="288" text-anchor="middle">calc_urgency()</text>
+  <rect class="bx" x="518" y="230" width="205" height="72" rx="6"/>
+  <text class="bt" x="620" y="252" text-anchor="middle">rebalance_detector</text>
+  <text class="bs" x="620" y="270" text-anchor="middle">調度介入辨識</text>
+  <text class="bs" x="620" y="288" text-anchor="middle">MAD + 時段 + 鄰近站</text>
+  <rect class="bx" x="735" y="230" width="205" height="72" rx="6"/>
+  <text class="bt" x="837" y="252" text-anchor="middle">param_optimizer</text>
+  <text class="bs" x="837" y="270" text-anchor="middle">② 每日最適化建議</text>
+  <text class="bs" x="837" y="288" text-anchor="middle">排除異常日 + 幅度上限</text>
+</g>
+<path class="ed ed-b" d="M512 314V468" marker-end="url(#ar-b)"/>
+<text class="el el-b" x="522" y="380">預測（含區間）</text>
+<text class="el el-b" x="522" y="396">＋ 緊急度</text>
+
+<!-- ============ L3 控制平面 ============ -->
+<rect class="lay lay-a" x="72" y="468" width="880" height="164" rx="8"/>
+<text class="lt lt-a" x="84" y="490">③ 控制平面（有狀態、管決策）— A 主責　一律走「預覽 → 確認 → 執行 → 驗證」</text>
+<g class="a">
+  <rect class="bx" x="84" y="502" width="140" height="64" rx="6"/>
+  <text class="bt" x="154" y="522" text-anchor="middle">rule_engine</text>
+  <text class="bs" x="154" y="539" text-anchor="middle">預測到達存量</text>
+  <text class="bs" x="154" y="556" text-anchor="middle">vs 安全緩衝（動態）</text>
+  <rect class="bx" x="244" y="502" width="156" height="64" rx="6"/>
+  <text class="bt" x="322" y="522" text-anchor="middle">dispatcher</text>
+  <text class="bs" x="322" y="539" text-anchor="middle">優先級 + 位置導向</text>
+  <text class="bs" x="322" y="556" text-anchor="middle">+ 動態轉派</text>
+  <rect class="bx" x="580" y="502" width="150" height="64" rx="6"/>
+  <text class="bt" x="655" y="522" text-anchor="middle">task_manager</text>
+  <text class="bs" x="655" y="539" text-anchor="middle">任務狀態機</text>
+  <text class="bs" x="655" y="556" text-anchor="middle">可續跑 + 逐站驗證</text>
+  <rect class="bx" x="750" y="502" width="190" height="64" rx="6"/>
+  <text class="bt" x="845" y="522" text-anchor="middle">alert_service</text>
+  <text class="bs" x="845" y="539" text-anchor="middle">警示分級 + 推播 + webhook</text>
+  <text class="bs" x="845" y="556" text-anchor="middle">★ 現行系統沒有</text>
+  <rect class="bx" x="84" y="572" width="140" height="54" rx="6"/>
+  <text class="bt" x="154" y="594" text-anchor="middle">override_service</text>
+  <text class="bs" x="154" y="611" text-anchor="middle">③ 即時覆寫</text>
+  <rect class="bx" x="244" y="572" width="156" height="54" rx="6"/>
+  <text class="bt" x="322" y="594" text-anchor="middle">audit</text>
+  <text class="bs" x="322" y="611" text-anchor="middle">稽核留痕 誰 / 何時 / 為何</text>
+  <rect class="bx" x="420" y="572" width="150" height="54" rx="6"/>
+  <text class="bt" x="495" y="594" text-anchor="middle">simulation/replay</text>
+  <text class="bs" x="495" y="611" text-anchor="middle">Before / After（FR-5）</text>
+  <rect class="bx" x="590" y="572" width="350" height="54" rx="6"/>
+  <text class="bt" x="765" y="592" text-anchor="middle">站點動態管理（FR-13）</text>
+  <text class="bs" x="765" y="610" text-anchor="middle">新增 → 套鄰近站參數冷啟動；刪除 → 移除該站參數組，模型不動</text>
+</g>
+<g class="g">
+  <rect class="bx" x="420" y="502" width="140" height="64" rx="6"/>
+  <text class="bt" x="490" y="522" text-anchor="middle">人工確認閘門</text>
+  <text class="bs" x="490" y="539" text-anchor="middle">POST /dispatch/confirm</text>
+  <text class="bs" x="490" y="556" text-anchor="middle">NFR-2 人在迴圈</text>
+</g>
+<path class="ed ed-a" d="M224 534H244" marker-end="url(#ar-a)"/>
+<path class="ed ed-a" d="M400 534H420" marker-end="url(#ar-a)"/>
+<path class="ed ed-s" style="stroke-dasharray:none" d="M560 534H580" marker-end="url(#ar-s)"/>
+<text class="el el-n" x="322" y="494" text-anchor="middle">建議清單</text>
+<text class="el el-s" x="570" y="494" text-anchor="middle">核可後派發</text>
+
+<!-- ============ 資安邊界 ============ -->
+<path class="ed ed-a" d="M512 632V654"/>
+<g class="x">
+  <rect class="bx" x="72" y="654" width="880" height="26" rx="6"/>
+  <text class="bs" x="512" y="671" text-anchor="middle">入向資安邊界：CORS 白名單 · 權限一律後端驗（前端隱藏按鈕不算保護）· Rate limit · 輸入驗證 · 錯誤不外洩內部（NFR-8）</text>
+</g>
+<path class="ed ed-a" d="M512 680V692" marker-end="url(#ar-a)"/>
+<text class="el el-a" x="522" y="648">決策結果</text>
+
+<!-- ============ L4 API ============ -->
+<rect class="lay lay-a" x="72" y="692" width="880" height="94" rx="8"/>
+<text class="lt lt-a" x="84" y="714">④ API 層（FastAPI）— A 主責　薄層：驗證輸入 → 呼叫 core → 轉 JSON</text>
+<g class="a">
+  <rect class="bx" x="84" y="728" width="856" height="40" rx="6"/>
+  <text class="bt" x="512" y="753" text-anchor="middle">stations · dispatch · operators · alerts(SSE) · optimization · kpi · simulation · events · audit · weather</text>
+</g>
+<path class="ed ed-c" d="M512 786V810" marker-end="url(#ar-c)"/>
+<text class="el el-c" x="522" y="802">HTTP + JSON / SSE</text>
+
+<!-- ============ L5 前端 ============ -->
+<rect class="lay lay-c" x="72" y="810" width="880" height="112" rx="8"/>
+<text class="lt lt-c" x="84" y="832">⑤ 前端層（React + Vite）— C 主責　只透過 API 存取，不直接連 DB</text>
+<g class="c">
+  <rect class="bx" x="84" y="844" width="205" height="66" rx="6"/>
+  <text class="bt" x="186" y="865" text-anchor="middle">Dashboard</text>
+  <text class="bs" x="186" y="882" text-anchor="middle">後台調派員</text>
+  <text class="bs" x="186" y="899" text-anchor="middle">地圖 + 建議 + KPI + 警示</text>
+  <rect class="bx" x="301" y="844" width="205" height="66" rx="6"/>
+  <text class="bt" x="403" y="865" text-anchor="middle">OperatorApp</text>
+  <text class="bs" x="403" y="882" text-anchor="middle">調度員</text>
+  <text class="bs" x="403" y="899" text-anchor="middle">任務佇列 + 導航 + 回報</text>
+  <rect class="bx" x="518" y="844" width="205" height="66" rx="6"/>
+  <text class="bt" x="620" y="865" text-anchor="middle">Overview</text>
+  <text class="bs" x="620" y="882" text-anchor="middle">長官</text>
+  <text class="bs" x="620" y="899" text-anchor="middle">全域調度總覽</text>
+  <rect class="bx" x="735" y="844" width="205" height="66" rx="6"/>
+  <text class="bt" x="837" y="865" text-anchor="middle">警示中心</text>
+  <text class="bs" x="837" y="882" text-anchor="middle">GET /alerts/stream</text>
+  <text class="bs" x="837" y="899" text-anchor="middle">SSE 即時串流</text>
+</g>
+
+<!-- ============ 回流：任務回報 / 緊急覆寫 ============ -->
+<path class="ed ed-s" d="M72 875H24V508H72" marker-end="url(#ar-s)"/>
+<text class="el el-s" x="16" y="700" text-anchor="middle" transform="rotate(-90 16 700)">任務回報（含位置）→ 驗證 → dispatcher 重算下一站</text>
+<path class="ed ed-s" d="M72 850H44V599H84" marker-end="url(#ar-s)"/>
+<text class="el el-s" x="58" y="742" text-anchor="middle" transform="rotate(-90 58 742)">③ 緊急覆寫（經 API）</text>
+
+<!-- ============ 參數子系統 ============ -->
+<rect class="lay lay-b" x="972" y="196" width="200" height="372" rx="8"/>
+<text class="lt lt-b" x="982" y="218">參數子系統</text>
+<text class="note" x="982" y="232">一個模型 × 每站一組參數</text>
+<g class="b">
+  <rect class="bx" x="982" y="240" width="160" height="64" rx="6"/>
+  <text class="bt" x="1062" y="262" text-anchor="middle">生效參數（每站）</text>
+  <text class="bs" x="1062" y="280" text-anchor="middle">predictor / rule_engine</text>
+  <text class="bs" x="1062" y="296" text-anchor="middle">讀這一份</text>
+</g>
+<g class="a">
+  <rect class="bx" x="982" y="316" width="160" height="56" rx="6"/>
+  <text class="bt" x="1062" y="338" text-anchor="middle">③ 即時覆寫</text>
+  <text class="bs" x="1062" y="356" text-anchor="middle">最高優先 · 時效即恢復</text>
+</g>
+<g class="g">
+  <rect class="bx" x="982" y="384" width="160" height="44" rx="6"/>
+  <text class="bt" x="1062" y="404" text-anchor="middle">人工確認</text>
+  <text class="bs" x="1062" y="420" text-anchor="middle">approve / reject</text>
+</g>
+<g class="b">
+  <rect class="bx" x="982" y="440" width="160" height="56" rx="6"/>
+  <text class="bt" x="1062" y="462" text-anchor="middle">② AI 每日最適化</text>
+  <text class="bs" x="1062" y="480" text-anchor="middle">±10% 上限 · 可回溯</text>
+  <rect class="bx" x="982" y="508" width="160" height="52" rx="6"/>
+  <text class="bt" x="1062" y="528" text-anchor="middle">① 基礎參數</text>
+  <text class="bs" x="1062" y="546" text-anchor="middle">geo_batch 地形/區域換算</text>
+</g>
+<path class="ed ed-b" d="M1062 508V496" marker-end="url(#ar-b)"/>
+<path class="ed ed-b" d="M1062 440V428" marker-end="url(#ar-b)"/>
+<path class="ed ed-s" style="stroke-dasharray:none" d="M1062 384V372" marker-end="url(#ar-s)"/>
+<path class="ed ed-a" d="M1062 316V304" marker-end="url(#ar-a)"/>
+<path class="ed ed-b ed-dash" style="stroke-dasharray:6 4" d="M837 302V322H960V468H982" marker-end="url(#ar-b)"/>
+<text class="el el-b" x="900" y="316" text-anchor="middle">產生建議</text>
+<path class="ed ed-b" style="stroke-dasharray:6 4" d="M982 272H952" marker-end="url(#ar-b)"/>
+
+<!-- ============ 機關系統 webhook ============ -->
+<g class="e">
+  <rect class="bx" x="972" y="820" width="200" height="66" rx="6"/>
+  <text class="bt" x="1072" y="841" text-anchor="middle">機關系統</text>
+  <text class="bs" x="1072" y="858" text-anchor="middle">訂閱警示 webhook</text>
+  <text class="bs" x="1072" y="875" text-anchor="middle">★ 現行沒有的功能</text>
+</g>
+<path class="ed ed-s" d="M940 534H960V853H972" marker-end="url(#ar-s)"/>
+<text class="el el-s" x="954" y="700" text-anchor="middle" transform="rotate(-90 954 700)">POST 警示 · 驗簽章、限重試</text>
+
+<!-- ============ 儲存 / 設定 ============ -->
+<rect class="lay lay-s" x="1192" y="16" width="196" height="560" rx="8"/>
+<text class="lt lt-s" x="1202" y="36">橫切：儲存與設定</text>
+<g class="s">
+  <rect class="bx" x="1202" y="52" width="176" height="68" rx="6"/>
+  <text class="bt" x="1290" y="76" text-anchor="middle">熱：記憶體 / 快取</text>
+  <text class="bs" x="1290" y="94" text-anchor="middle">即時站況 近 1~2 週</text>
+  <rect class="bx" x="1202" y="132" width="176" height="76" rx="6"/>
+  <text class="bt" x="1290" y="154" text-anchor="middle">溫：S3 Parquet</text>
+  <text class="bs" x="1290" y="172" text-anchor="middle">+ Athena · 近 1~3 個月</text>
+  <text class="bs" x="1290" y="189" text-anchor="middle">重訓練 / 時間軸</text>
+  <rect class="bx" x="1202" y="220" width="176" height="60" rx="6"/>
+  <text class="bt" x="1290" y="244" text-anchor="middle">冷：歸檔或刪除</text>
+  <text class="bs" x="1290" y="262" text-anchor="middle">超過 3 個月</text>
+  <rect class="bx" x="1202" y="292" width="176" height="76" rx="6"/>
+  <text class="bt" x="1290" y="314" text-anchor="middle">SQLite</text>
+  <text class="bs" x="1290" y="332" text-anchor="middle">tasks / audit_logs</text>
+  <text class="bs" x="1290" y="349" text-anchor="middle">station_params（含版本）</text>
+  <rect class="bx" x="1202" y="380" width="176" height="76" rx="6"/>
+  <text class="bt" x="1290" y="402" text-anchor="middle">config.yaml</text>
+  <text class="bs" x="1290" y="420" text-anchor="middle">安全緩衝 · 靈敏度 · 權重</text>
+  <text class="bs" x="1290" y="437" text-anchor="middle">D8 外部化 · 現場可調</text>
+  <rect class="bx" x="1202" y="468" width="176" height="64" rx="6"/>
+  <text class="bt" x="1290" y="492" text-anchor="middle">prediction/artifacts</text>
+  <text class="bs" x="1290" y="510" text-anchor="middle">訓練好的模型檔</text>
+</g>
+<text class="note" x="1290" y="554" text-anchor="middle">所有層共用；前端不直接存取</text>
+</svg>
+    </div>
+    <div class="legend">
+      <span class="chip a"><i></i>A（PM）控制平面 / API / 資料</span>
+      <span class="chip b"><i></i>B（空間）預測與參數換算</span>
+      <span class="chip c"><i></i>C（品質）前端</span>
+      <span class="chip n"><i></i>共用資料源</span>
+      <span class="chip g"><i></i>人工確認閘門</span>
+      <span class="chip s"><i></i>儲存 / 設定</span>
+      <span class="chip x"><i></i>資安與降級</span>
+      <span class="chip e"><i></i>外部機關系統</span>
+      <span class="chip dash"><i></i>回流／出向（虛線）</span>
+    </div>
+    <figcaption>修正版：分區容器改為白底＋分工色邊框，讓模組方塊的色塊自己承擔分工訊息；箭頭改成模組對模組，並補上兩條原本缺席的向上回流（任務回報、緊急覆寫）。參數三層從一個方塊擴成右側子系統，儲存層從最底下移到右側橫切欄。</figcaption>
+  </figure>
+</div>
+
+<section>
+  <div class="wrap">
+    <h2>架構落差</h2>
+    <p class="sec-note">依「會不會讓隊友照著圖做錯事」排序。</p>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">01</span><span class="ftitle">參數三層被壓成一個方塊</span><span class="sev hi">高</span></div>
+      <p><b>問題：</b>圖上只有控制平面裡的「params 三層」一格。但 <code>model_architecture.md</code> 開宗明義說這是「整個系統最核心的設計決策」，而三層的來源其實散在三個地方——① 建置時的腳本、② 執行平面的 <code>param_optimizer</code>、③ 控制平面的 <code>override_service</code>——彼此還有覆寫優先序。</p>
+      <p><b>後果：</b>看圖的人（含評審）看不出「一個模型 × 每站一組參數」這個最有說服力的設計，也看不出 ② 必須過人工確認才會生效。</p>
+      <div class="fix"><b>修正：</b>拉成獨立的參數子系統，由下往上畫 ① → ② → 閘門 → ③ → 生效參數，並用一條線標明生效參數是被 predictor 與 rule_engine 讀走的。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">02</span><span class="ftitle">geo_batch 放錯層</span><span class="sev hi">高</span></div>
+      <p><b>問題：</b>圖上把 <code>geo_batch</code> 畫在「執行平面」，和 predictor、urgency 並排。但 <code>design.md §2</code> 把它放在 <code>backend/params/geo_batch.py</code>，屬於參數建置，性質是「批次一次算」，不是每次請求都跑的無狀態運算。</p>
+      <p><b>後果：</b>並排會讓人以為它在即時路徑上，可能被實作成每次預測都去查高程／POI。</p>
+      <div class="fix"><b>修正：</b>移進參數子系統的 ① 基礎參數，維持 B 主責的紫色，層歸屬和擁有者就都對了。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">03</span><span class="ftitle">箭頭只連分區框，不連模組</span><span class="sev hi">高</span></div>
+      <p><b>問題：</b>原圖五條主箭頭全部是 <code>l1bg → l2bg</code> 這種背景框對背景框，圖裡沒有任何一條 <code>rule_engine → dispatcher</code> 這種真正的呼叫關係。三條資料流只存在於底下那段文字裡。</p>
+      <p><b>後果：</b>「資料流圖」實際上只表達了分層，沒表達流。閘門在哪一步介入、任務回報回到誰身上，都得回去讀文字。</p>
+      <div class="fix"><b>修正：</b>畫出控制平面的主鏈 rule_engine → dispatcher → 閘門 → task_manager，並補上兩條向上的回流：任務回報、緊急覆寫。</div>
+    </div>
+
+    <div class="finding md">
+      <div class="fhead"><span class="fnum">04</span><span class="ftitle">缺 degradation：資料源掛掉沒有路徑</span><span class="sev md">中</span></div>
+      <p><b>問題：</b><code>NFR-10</code> 明列降級策略、<code>design.md</code> 也有 <code>data/degradation.py</code>，但圖上完全沒出現。現場 Demo 最可能出事的就是即時源，這條路徑不畫等於沒設計。</p>
+      <div class="fix"><b>修正：</b>放在資料源層底部，寫清楚「歷史同時段補值 ＋ 標記過期」，讓 NFR-5「失敗可見」在圖上看得到。</div>
+    </div>
+
+    <div class="finding md">
+      <div class="fhead"><span class="fnum">05</span><span class="ftitle">缺 data_source 介面這個抽象本身</span><span class="sev md">中</span></div>
+      <p><b>問題：</b>五個資料源並排，但真正的設計價值在「它們都實作同一個介面，換源不用改其他任何地方」。原圖只在分區標題括號裡寫了一句「介面可抽換」。</p>
+      <p>另外原圖漏了 YouBike 官方即時源——<code>design.md</code> 特別註明現場不確定是 TDX 還是官方源，這正是抽換設計要解決的情境。</p>
+      <div class="fix"><b>修正：</b>把介面畫成一個實體橫條，五個源全部往下匯入它，官方源補進來。</div>
+    </div>
+
+    <div class="finding md">
+      <div class="fhead"><span class="fnum">06</span><span class="ftitle">缺 simulation/replay 與 FR-13 站點動態管理</span><span class="sev md">中</span></div>
+      <p><b>問題：</b>API 層的 <code>kpi</code> 端點涵蓋 3.8 模擬重放，<code>stations</code> 端點涵蓋 3.19 新增／刪除站別，但下面對應的模組在圖上都不存在。FR-5 是 Demo 成效的主力，FR-13 又是這套「單一模型 + 外掛參數」設計最好的展示點。</p>
+      <div class="fix"><b>修正：</b>兩者都補進控制平面第二排；FR-13 直接把「新增 → 套鄰近站參數冷啟動」寫在框裡。</div>
+    </div>
+
+    <div class="finding lo">
+      <div class="fhead"><span class="fnum">07</span><span class="ftitle">儲存層畫在前端下面，位置說錯了故事</span><span class="sev lo">低</span></div>
+      <p><b>問題：</b>原圖把儲存壓成最底下一行文字，剛好在前端層正下方。前端層自己寫著「只透過 API 存取，不碰 DB」，視覺上卻是前端直接坐在資料庫上。</p>
+      <div class="fix"><b>修正：</b>移到右側當橫切欄，並補上 <code>versioning</code> 所在的 station_params 表與 <code>prediction/artifacts</code> 模型檔。</div>
+    </div>
+
+    <div class="finding lo">
+      <div class="fhead"><span class="fnum">08</span><span class="ftitle">config.yaml 已改為動態判斷版</span><span class="sev lo">已處理</span></div>
+      <p><b>原本：</b>根目錄 <code>config.yaml</code> 還停在死數字版本（<code>空站危險_可借車數: 3</code>、<code>滿站危險_可還位數: 3</code>），而 <code>design.md §7</code> 已改成動態判斷。</p>
+      <p><b>已確認的決策：</b>以 design.md 的動態判斷為準。門檻不是固定台數，而是<b>「當前存量 − 該站該時段的歷史淨流出 = 預測到達時存量」，再比對 <code>trigger.安全緩衝_台數</code></b>；<code>低水位_借用率百分比</code> / <code>高水位_借用率百分比</code> 只當保底輔助門檻。</p>
+      <div class="fix"><b>已更新：</b><code>config.yaml</code> 直接取自 design.md §7 的完整定義（17 個設定區塊，已通過 YAML 驗證），檔頭寫明動態判斷的決策；舊版原封不動保留成 <code>config.poc_v1.yaml</code>。</div>
+    </div>
+
+    <div class="finding lo">
+      <div class="fhead"><span class="fnum">09</span><span class="ftitle">rule_engine.py 已遷移成動態版</span><span class="sev lo">已處理</span></div>
+      <p><b>原本：</b>PoC 版的條件 1～5 全是固定門檻比較（<code>available &lt;= 空站危險_可借車數</code>），換 config 後還會直接 KeyError。</p>
+      <p><b>已改成：</b>主判斷吃 <b>預測區間下界</b>當「預測到達存量」，比對 <code>trigger.安全緩衝_台數</code>；滿站側對稱用區間上界推「預測可還位下界」。<code>觸發靈敏度</code> 有了明確定義：<code>調整後到達存量 = 當前存量 −（當前存量 − 下界）× 靈敏度</code>。</p>
+      <p><b>順帶處理的矛盾：</b>design.md §7 原本只寫「用歷史同時段淨流出算到達存量」，但 steering §5 與 design §3 都要求 rule_engine 吃區間下界。兩者若各自實作會變成「繞過模型用歷史均值減法」——跑起來不會報錯，只會在尖峰系統性漏觸發。已把 §7 註解與 config 檔頭都改寫成「吃 lower_bound，歷史淨流出只是沒有預測時的降級路徑」。</p>
+      <div class="fix"><b>已驗證：</b>用 6 月 <code>2026-06-02 08:00</code> 的 1554 站真實快照跑過，輸出 15 筆建議、觸發原因是完整句子。每筆都帶 <code>判斷依據</code> 欄（區間下界／歷史同時段淨流出（降級）／保底門檻），降級絕不偽裝成預測值（NFR-5）。舊版原封保留成 <code>rule_engine.poc_v1.py</code>。</div>
+    </div>
+
+    <div class="finding md">
+      <div class="fhead"><span class="fnum">09b</span><span class="ftitle">實跑發現：預測檔只覆蓋 1／1554 站</span><span class="sev md">中</span></div>
+      <p>遷移後實跑，<code>output/model_results/prediction_sample.csv</code> 在該時間點只對上 1 站，其餘 1553 站全部走降級路徑。這不是遷移造成的，是 sample 檔本來就只有單站時間序列。</p>
+      <div class="fix"><b>建議：</b>B 產出全站預測時，把 <code>station_id</code> ×（時間點）的完整區間輸出成一份，rule_engine 才會走主判斷而不是降級。現在依據欄會誠實顯示「降級」，正好可以當成對接完成的驗收訊號。</div>
+    </div>
+
+    <div class="finding lo">
+      <div class="fhead"><span class="fnum">10</span><span class="ftitle">三個舊 key 已補回 design.md §7 再同步 config</span><span class="sev lo">已處理</span></div>
+      <p><code>fleet.調度車數量: 20</code> 與 <code>fleet.響應時間_分鐘: 30</code> 已補進 design.md §7（先改 spec 再同步 config，不在 config 偷加 spec 沒有的 key）；<code>每站最大搬運量</code> 由 <code>fleet.每車容量</code> 取代並註明。順手把「時段 = 30 分鐘」寫進註解，因為全套文件從沒定義過「時段」多長。</p>
+      <div class="fix"><b>兩個新 key 都有實際消費者：</b><code>響應時間_分鐘</code> 成為觸發判斷的前瞻窗口（觸發原因會寫「30 分鐘後預測到達存量…」）；<code>調度車數量</code> 用在容量上限 <code>min(每時段最大調度站數, 調度車數量 × 每趟最大站數)</code>，不再是躺著沒人讀的設定。</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>架構邏輯衝突檢查</h2>
+    <p class="sec-note">把 requirements / design / api_contract / model_architecture / parameter_groups / steering / config.yaml 七份文件互相對照，找同一件事在兩處講法不同、職責重疊、資料流斷掉的地方。</p>
+
+    <div class="rootcause">
+      <b>根因只有一個：兩份文件停在 8/19，三份走到 8/31。</b>
+      <code>api_contract.md</code>（8/19）與 <code>requirements.md</code>（8/19）沒跟上 <code>design.md</code> / <code>model_architecture.md</code> / <code>parameter_groups.md</code>（8/31）的改動。下面 39 項裡，超過一半是「新版改了、舊版沒同步」，而不是設計本身想錯。所以優先動作不是重新設計，是把這兩份補上去。
+    </div>
+
+    <div class="verdict" style="margin-top:20px">
+      <div class="vcard hi"><div class="k">會出事</div><div class="v">12</div><p>會在 W3 對接時直接卡住，或安靜地讓系統變差。</p></div>
+      <div class="vcard"><div class="k">需要釐清</div><div class="v">16</div><p>缺負責人、缺欄位、缺表，或兩處說法不同但還沒撞上。</p></div>
+      <div class="vcard ok"><div class="k">小不一致</div><div class="v">11</div><p>範例值、路徑、名詞對不上，改起來很快。</p></div>
+    </div>
+
+    <div class="grouphead"><h3>會出事</h3><span class="count">12 項</span></div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">C-01</span><span class="ftitle">緊急度尺度自相矛盾：0~100 vs 8.7</span><span class="sev hi">高</span></div>
+      <div class="ev">
+        <span class="src">api_contract §4 / §2.12</span>　<code>calc_urgency()</code> 回傳「0~100」、<code>"urgency_score": 65</code>
+        <span class="vs">VS</span>
+        <span class="src">api_contract §2.3 範例</span>　<code>"priority_score": 8.7</code>（明顯是 0~10 尺度）
+      </div>
+      <p><b>後果：</b>C 照 §2.3 做 mock 顯示 8.7／10，A 照 <code>config.alert.warning_urgency: 60</code> 判警示等級，B 回 0~100。整合當天所有站點都不會觸發 warning，因為 8.7 &lt; 60。</p>
+      <div class="fix"><b>建議：</b>§2.3 範例改成 87.0，並註明 <code>priority_score</code> 與 <code>urgency_score</code> 同尺度 0~100。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">C-02</span><span class="ftitle">③ 覆寫要把緊急度拉滿，但沒有任何介面能把覆寫送進緊急度</span><span class="sev hi">高</span></div>
+      <div class="ev">
+        <span class="src">parameter_groups §緊急度因子</span>　「即時人工覆寫（③層）｜緊急直接拉滿 100」
+        <span class="vs">VS</span>
+        <span class="src">api_contract §4</span>　<code>calc_urgency(prediction, station_meta, arrival_minutes)</code> — 三個參數都不含覆寫狀態
+        <span class="vs">而且</span>
+        <span class="src">design §1 / §3</span>　urgency 屬「執行平面（無狀態）」、覆寫屬「控制平面（有狀態）」，<code>override_service</code> 明訂「不動模型參數」
+      </div>
+      <p><b>後果：</b>B 會說「我拿不到覆寫」，A 會說「我不能改你的 urgency」，最後只能在 dispatcher 裡偷加 <code>if</code>——決策邏輯就散到兩個模組，違反 design §3 的切法。</p>
+      <div class="fix"><b>建議：</b>二選一寫死：<code>calc_urgency()</code> 加第四個參數 <code>override</code>，或明訂「覆寫不進 urgency，只在 dispatcher 排序時當最前綴」。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">C-03</span><span class="ftitle">horizon_minutes 綁死「調度到達時間」，但有三個消費場景根本沒有調度員</span><span class="sev hi">高</span></div>
+      <div class="ev">
+        <span class="src">api_contract §2.2</span>　「<code>horizon_minutes</code>：動態，不固定。等於『調度到達時間』…只在調度員要觸發新任務時才計算」
+        <span class="vs">VS</span>
+        <span class="src">api_contract §2.5 + config.refresh_interval_sec: 60</span>　每 60 秒對全市做一次警示掃描，先跑預測 + 緊急度
+        <span class="vs">VS</span>
+        <span class="src">api_contract §2.12 / §8.8</span>　歷史時間軸要為過去每個時間點每站預存 <code>urgency_score</code>
+      </div>
+      <p><b>後果：</b>全站警示掃描與歷史回填時，沒有調度員、沒有 arrival time，<code>arrival_minutes</code> 無值可填。同一個介面對三個呼叫端有三種語意，B 寫 <code>predict()</code> 時會卡住。</p>
+      <div class="fix"><b>建議：</b>拆成兩種 horizon——警示與歷史用 config 的固定 <code>default_horizon_minutes</code>，派任務時才用動態到達時間，並在 Prediction 加 <code>horizon_source</code> 標明。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">C-04</span><span class="ftitle">環境係數鎖死 [0,1]，「假日／活動需求上升」在數學上無法表達</span><span class="sev hi">高</span></div>
+      <div class="ev">
+        <span class="src">design §7 / config.yaml</span>　「所有係數範圍 [0, 1]，最大 1（完全不影響需求）」，<code>holiday_factor</code> 三個值全是 1.0
+        <span class="vs">VS</span>
+        <span class="src">parameter_groups 群組 4 / §4</span>　「暫時<b>調高</b>該站的需求參數」「影響比越高 → 需求參數上調越多」
+        <span class="vs">VS</span>
+        <span class="src">api_contract §2.7</span>　<code>"influence_factor": 1.8</code>（&gt; 1，直接違反同一份 config 宣告的值域）
+      </div>
+      <p><b>後果：</b>B 照值域規則實作，係數永遠只能往下打折。假日尖峰、跨年活動一律預測不足——正好是最需要調度準的時候。</p>
+      <div class="fix"><b>建議：</b>值域改為 [0, 3]（1.0 = 無影響），或明確分成「衰減係數 [0,1]」與「放大係數 [1,N]」兩類。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">C-05</span><span class="ftitle">target_level 的單位與存在與否，同一份文件有兩種說法</span><span class="sev hi">高</span></div>
+      <div class="ev">
+        <span class="src">api_contract §2.11</span>　<code>"target_level": 0.5</code>（比例）
+        <span class="vs">VS</span>
+        <span class="src">design §7 / config</span>　<code>target.預設借用率百分比: 50</code>（百分比）
+        <span class="vs">而且</span>
+        <span class="src">api_contract §3.12 回傳範例</span>　params 只有 <code>outflow_rate</code> / <code>inflow_rate</code> / <code>buffer_level</code>——<code>target_level</code> 消失了
+      </div>
+      <p><b>後果：</b>FR-3 要求「即時水位 vs 動態目標水位」。C 呼叫 3.12 拿不到 <code>target_level</code> 就畫不出來；就算拿到，<code>usage_rate</code> 是 18.75（百分比）而 <code>target_level</code> 是 0.5（比例），直接比大小會讓所有站顯示滿載。</p>
+      <div class="fix"><b>建議：</b>統一為 0~1 比例（<code>usage_rate</code> 一起改），並補回 3.12 範例的 <code>target_level</code>。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">C-06</span><span class="ftitle">SQLite 三張表放不下至少四種端點狀態</span><span class="sev hi">高</span></div>
+      <div class="ev">
+        <span class="src">design §8</span>　「三張主表」<code>tasks</code> / <code>audit_logs</code> / <code>station_params</code>
+        <span class="vs">VS</span>
+        <span class="src">api_contract §3.11 / §3.15 / §3.16</span>　需要持久化的還有：警示已讀 <code>acknowledged</code>、機關 webhook 訂閱 <code>callback_url</code>、生效中活動 <code>events</code>、調度員 <code>today_stats</code>（疲勞管理要用）
+      </div>
+      <p><b>後果：</b>服務重啟後已讀警示全變未讀、機關訂閱消失、調度員今日工時歸零，<code>fatigue.法定休息間隔小時: 4</code> 直接失效。另外 <code>tasks</code> 表缺 <code>estimated_travel_minutes</code>、<code>estimated_work_minutes</code>、<code>estimated_distance_km</code>、<code>assigned_at</code>、<code>route_map_url</code> 五個 §2.4 欄位，<code>GET /dispatch/tasks</code> 回傳不出完整的 DispatchTask（FR-4 要顯示交通時間與油錢）。</p>
+      <div class="fix"><b>建議：</b>補 <code>alerts</code> / <code>alert_subscriptions</code> / <code>events</code> / <code>operator_daily_stats</code> 四張表，tasks 補齊五個欄位。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">C-07</span><span class="ftitle">事件影響計算沒有任何模組負責，是一條完整的死路</span><span class="sev hi">高</span></div>
+      <div class="ev">
+        <span class="src">api_contract §3.15</span>　「系統自動換算影響半徑、找出範圍內站點、計算各站影響度」
+        <span class="vs">VS</span>
+        <span class="src">design §2 / §3</span>　B 的模組只有 predictor / urgency / features / rebalance_detector / param_optimizer / geo_batch；A 的 core 六個決策模組也沒有；<code>api/events.py</code> 被標為「對應端點的轉發」
+      </div>
+      <p><b>後果：</b><code>POST /events</code> 進來之後沒有程式碼算 <code>affected_stations</code>，<code>influence_factor</code> 沒有生產者，config 的 <code>event_radius</code> / <code>event_impact</code> 三個參數沒有任何模組會讀。</p>
+      <div class="fix"><b>建議：</b>design §2/§3 新增 <code>backend/prediction/event_impact.py</code>（B），介面 <code>compute_event_impact(event, stations) → affected_stations</code>。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">C-08</span><span class="ftitle">存取控制整條沒落地，report 端點在資料上就無法驗證身分</span><span class="sev hi">高</span></div>
+      <div class="ev">
+        <span class="src">requirements NFR-8 / design §6.2</span>　「調度員只能回報自己的任務」「權限一定在後端驗，前端不可信」
+        <span class="vs">VS</span>
+        <span class="src">config.security</span>　只有 <code>allowed_origins</code> 與 <code>rate_limit_per_min</code>，沒有任何角色設定；design §2 沒有 auth 模組
+        <span class="vs">VS</span>
+        <span class="src">api_contract §3.6 / §3.13</span>　report 的 body 只有 <code>status</code> / <code>note</code> / <code>operator_location</code>，<b>沒有身分</b>
+      </div>
+      <p><b>後果：</b>後端收到回報時無從得知是誰送的，「只能回報自己的任務」在 Schema 層面就做不到。<code>POST /dispatch/confirm</code> 這個人在迴圈的唯一閘門，任何人都能直接打，NFR-2 形同虛設。</p>
+      <div class="fix"><b>建議：</b>黑客松規模不必做 OAuth，但閘門要真的存在：加 header <code>X-Operator-Id</code> + config 角色對照表，report body 補 <code>operator_id</code>。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">C-09</span><span class="ftitle">「資料過期標記」沒有任何 Schema 欄位承載</span><span class="sev hi">高</span></div>
+      <div class="ev">
+        <span class="src">requirements NFR-10</span>　「標記為『資料過期』，前端顯示提醒」「降級狀態必須明確標示」
+        <span class="vs">VS</span>
+        <span class="src">api_contract §2.1 StationStatus</span>　十一個欄位，沒有任何過期／降級旗標
+      </div>
+      <p><b>後果：</b>過期標記掛在哪個欄位沒人定義，C 不知道要讀什麼，降級時前端照樣顯示成即時真實資料——正好是 NFR-10 明文禁止的事。</p>
+      <div class="fix"><b>建議：</b>StationStatus 加 <code>data_freshness: "live" | "stale" | "historical_fallback"</code> 與 <code>source_timestamp</code>。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">C-10</span><span class="ftitle">任務狀態機缺「已指派、未開始」，動態轉派因此無法成立</span><span class="sev hi">高</span></div>
+      <div class="ev">
+        <span class="src">model_architecture ③-4 / api_contract §2.4</span>　「已接緊急任務但尚未開始執行 → 可轉派；一旦開始執行 → 鎖定」
+        <span class="vs">VS</span>
+        <span class="src">api_contract §2.4 狀態表</span>　只有 <code>pending</code>（待派發）/ <code>in_progress</code>（執行中）/ … 沒有「已派發但未開始」
+      </div>
+      <p><b>後果：</b>已進佇列、<code>assigned_operator</code> 已填、但人還沒動身的緊急任務該填什麼？填 <code>pending</code> 會被 dispatcher 當成未派發再派一次；填 <code>in_progress</code> 則立刻鎖定、永遠不能轉派——FR-10 的動態轉派直接死掉。</p>
+      <div class="fix"><b>建議：</b><code>task_status</code> 加 <code>assigned</code>，轉派條件明訂為 <code>task_type == emergency AND task_status == assigned</code>。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">C-11</span><span class="ftitle">天氣 API 串接同時指派給 C 和 A</span><span class="sev hi">高</span></div>
+      <div class="ev">
+        <span class="src">parameter_groups §實作分工提示</span>　「群組 3（環境）：<b>C</b> — 串接天氣 API + 設定係數」
+        <span class="vs">VS</span>
+        <span class="src">design §2 / §3</span>　<code>data/weather_api.py</code> 與 <code>api/weather.py</code> 都在 <b>A</b> 名下，C 的表格只有 frontend/
+      </div>
+      <p><b>後果：</b>兩人都以為對方會做（或各做一份）。而且讓前端工程師去接氣象 API 也違反 design §1 的分層；<code>weather_factor</code> 五個係數的維護者因此無主。</p>
+      <div class="fix"><b>建議：</b>API 串接歸 A、係數校準歸 B，改掉 parameter_groups 的分工提示那行。</div>
+    </div>
+
+    <div class="finding hi">
+      <div class="fhead"><span class="fnum">C-12</span><span class="ftitle">車隊三個數字彼此推導不出可行的班表</span><span class="sev hi">高</span></div>
+      <div class="ev">
+        <span class="src">config.fleet / fatigue</span>　每車容量 25、每趟最大站數 5、每時段最大調度站數 15、單次最大搬運量 150
+        <span class="vs">VS</span>
+        <span class="src">api_contract §2.3 / §2.4</span>　單站 <code>quantity: 15</code>、一趟三站 <code>estimated_total_minutes: 45</code>
+      </div>
+      <p><b>後果：</b>一趟 5 站若都補 15 台需要 75 台車，是每車容量的三倍——純補車路線上「每趟 5 站」不可能成立。而單趟 45 分鐘 &gt; 時段 30 分鐘，一個時段內任何一車都跑不完一趟。「單次最大搬運量 150」的「單次」若指一趟，又和每車容量 25 直接衝突。</p>
+      <div class="fix"><b>建議：</b>「時段 = 30 分鐘」已寫進 config 註解，還需要註明「單次 = 單一輪班」；<code>每趟最大站數</code> 改由 <code>每車容量 ÷ 平均 quantity</code> 推導，或直接降為 2~3。</div>
+    </div>
+
+    <div class="grouphead"><h3>需要釐清</h3><span class="count">16 項</span></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>項目</th><th>衝突點</th><th>建議</th></tr></thead>
+        <tbody>
+          <tr><td><code>params/</code> 三個檔沒人負責</td><td>design §2 有 <code>param_layers.py</code> / <code>versioning.py</code> / <code>station_params.py</code>，但 §3 分工表 A 只涵蓋 api+core+data、B 只認領 geo_batch</td><td>整個 <code>params/</code>（geo_batch 除外）劃給 A</td></tr>
+          <tr><td>覆寫端點沒有路由檔</td><td>api_contract 把「② 每日最適化」和「③ 緊急覆寫」混在 3.12，但 design 的 <code>api/optimization.py</code> 明訂「不跑最適化演算法」、也沒提覆寫</td><td>拆出 <code>api/overrides.py</code>，契約拆成 3.12（②）與 3.20（③）</td></tr>
+          <tr><td>③ 覆寫不寫參數，卻被建模成參數版本</td><td>model_architecture ③「不影響模型參數」 vs <code>param_source</code> 有 <code>emergency_override</code> 這個值</td><td>移除該列舉值，改用 <code>override_active: bool</code></td></tr>
+          <tr><td><code>anomaly_tags</code> 八個標籤只有一個有生產者</td><td>§2.12 列 8 個標籤，design 只有 <code>rebalance_detector</code>，而且回傳的是信心分數不是標籤</td><td>新增 <code>prediction/anomaly_tagger.py</code>（B），並指定寫回 Parquet</td></tr>
+          <tr><td>FR-12 熱溫冷沒有執行者</td><td>config 有 <code>retention</code>，design §5 有保留表，但 <code>scripts/</code> 沒有歸檔或清理腳本，也沒有排程</td><td>補 <code>scripts/retention_job.py</code>，或明確標「黑客松期間僅設計不執行」</td></tr>
+          <tr><td>NFR-9 最硬的效能要求沒有端點</td><td>「調度員任務更新 1~2 秒、只推工作範圍」vs 全部端點裡唯一推送通道是全市警示 SSE</td><td>加 <code>GET /operators/{id}/stream</code>，或把該列降級為輪詢並註明取捨</td></tr>
+          <tr><td>NFR-4 說無伺服器費用，部署卻是 EC2</td><td>NFR-4「Serverless，無伺服器持續費用」vs §8.3／design §10「EC2 Free Tier（主）」</td><td>改寫成「資料層 Serverless、運算層 EC2」，並記一份 ADR</td></tr>
+          <tr><td>調度到達時間是兩項還是三項</td><td>api_contract §2.2 說「三項（含彈性時間），見 parameter_groups 第 7 點」，但第 7 點標題明寫「兩項加總」</td><td>以三項為準，修 parameter_groups §7</td></tr>
+          <tr><td>最適化排程 × 人工確認會堆積或互蓋</td><td>design §4.3 把 versioning 存舊版排在人工確認<b>之前</b>；若 reject，那筆已寫入的版本狀態未定義。<code>daily-review</code> 是單數資源，連續數天沒人審會互相覆蓋</td><td>versioning 移到 approve 之後；加 <code>review_id</code>，未審批時新排程 skip 並發 info</td></tr>
+          <tr><td>覆寫到期 vs 任務未完成，沒規定誰贏</td><td>覆寫「先到先觸發」恢復 vs 一般任務「一旦指派就固定，系統不能收回」</td><td>明訂「覆寫到期時，由它產生的未開始任務一併降級或取消，執行中不受影響」</td></tr>
+          <tr><td>前瞻窗口緊急度歸 A 還是 B</td><td>api_contract §1（8/19）把「含前瞻窗口緊急度」寫在 A 的規則引擎 vs design §3 緊急度在 B 的 <code>urgency.py</code>、rule_engine「不算預測」</td><td>api_contract §1 直接對齊 design §3</td></tr>
+          <tr><td><code>data_source</code> 設定格式兩份不同</td><td>api_contract §6 是字串 <code>data_source: "tdx"</code> vs config 是物件（mode / api_key / url / interval）；第四種來源 <code>youbike_official</code> 只存在於 design 與 config</td><td>api_contract §6 改物件寫法並補第四種；requirements NFR-7 同步</td></tr>
+          <tr><td>三個參數缺來源或缺載體</td><td><code>buffer_level</code> 出現在 Schema 但五個參數群組都沒定義它；反過來 <code>nearby_stations</code> / <code>capacity_class</code> 有定義、FR-13 要重算，但 StationParams 沒有這兩個欄位</td><td>Schema 補兩個欄位；<code>buffer_level</code> 補定義或刪除</td></tr>
+          <tr><td><code>predict()</code> 回傳欄位不足</td><td>§4 docstring 回 3 欄 vs §2.2 Prediction 有 7 欄，而 <code>GET /stations/{id}</code> 要回完整 Prediction</td><td>明訂由 A 的呼叫端補時間／識別欄，或把 docstring 補成 7 欄</td></tr>
+          <tr><td>油耗率與車速沒進 config</td><td>§2.4 要算 <code>estimated_fuel_cost</code>「依距離 × 油耗率」，但 config 全檔沒有油耗、油價、車速；steering §3 說「任何閾值都不准寫死」</td><td>config 新增 <code>cost</code> 與 <code>travel</code> 兩區塊</td></tr>
+          <tr><td>路由順序會互相攔截</td><td><code>/stations/heatmap</code>、<code>/stations/timeline</code> 會被 <code>/stations/{station_id}</code> 吃掉；且 <code>/dispatch/overview</code> 被放進 <code>api/operators.py</code>，同一前綴散在兩檔</td><td>在 <code>api/stations.py</code> 加註「靜態路徑先註冊」；overview 移回 <code>dispatch.py</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grouphead"><h3>小不一致</h3><span class="count">11 項</span></div>
+    <ol class="minor">
+      <li><b><code>usage_rate</code> 公式算不出範例值。</b>§2.1 寫 <code>available_bikes / total_docks</code>，但範例 12/64 給的是 18.75——公式漏了 ×100（或範例該是 0.1875）。</li>
+      <li><b>低／高水位兩套數字。</b>§2.1 的 <code>status</code> 用 &lt;15% / &gt;85%，config 保底門檻是 10% / 90%。會出現「地圖顯示綠色但清單建議調度」。</li>
+      <li><b>回報端點路徑兩處不同。</b>design §4.2 寫 <code>POST /tasks/{id}/report</code>，api_contract 是 <code>POST /dispatch/tasks/{task_id}/report</code>。</li>
+      <li><b><code>history_24h</code> 這個參數不存在。</b>§5 給 C 的約定提到它，但 §3.2 實際參數是 <code>history_range=24h|7d</code>。</li>
+      <li><b>天氣類別對不上。</b>parameter_groups 寫「雷雨」，config 與 §2.10 是 <code>heavy_rain</code>（豪雨）——不同氣象條件。</li>
+      <li><b>同一時刻兩個空站數。</b>§3.7 KPI 的 <code>empty_rate: 5.66</code> × 1583 站約 90 站，§2.9 卻是 <code>empty_stations: 45</code>，兩者 timestamp 相同。</li>
+      <li><b>Operator 範例的工時算不出來。</b>§2.8 上班 06:00、<code>total_work_minutes: 285</code>，但 <code>current_task.assigned_at</code> 是 08:05；6 個任務 × 45 分鐘也塞不進 2 小時。拿這組 mock 測疲勞管理會誤判。</li>
+      <li><b>steering 仍在示範已淘汰的寫法。</b>§3 的「✅ 正確」範例是 <code>config["trigger"]["空站危險_可借車數"]</code>，但這個 key 已經不存在於 config.yaml。照抄會 KeyError，而且學到的正是想淘汰的做法。</li>
+      <li><b>成效表把未達標打勾。</b>requirements §9「區間覆蓋率 目標 ~80%｜現況 ✅ 78.7%」——78.7 沒過 80，被問到會尷尬。</li>
+      <li><b>Schema 版本落差。</b>api_contract 標題還是「v2 草稿」、日期停在 8/19，但已被 design.md 當成定案引用。</li>
+      <li><b>「時段」長度過去從沒定義。</b>已在這次 config 更新中補成「時段 = 30 分鐘（對齊資料解析度）」，parameter_groups 與 api_contract 尚未同步這個定義。</li>
+    </ol>
+
+    <p class="sec-note" style="margin-top:28px">附帶說明：「LLM 直接做調度決策」這條核心約束，在文字層面七份文件都守住了，沒找到明確違反。最接近失守的是原本 config 的觸發註解只講點估計（已在這次更新修掉）——那類問題不會報錯，只會讓系統安靜地變差。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>顏色與呈現</h2>
+    <p class="sec-note">你特別問到對比，這是原圖最直接影響可讀性的部分。</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>原圖做法</th><th>問題</th><th>改法</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>分區底色與內部方塊同一色值<br><span class="mono">l2bg #e1d5e7 ＋ predictor #e1d5e7</span></td>
+            <td>方塊在底色上幾乎隱形，只剩 1px 邊框在區隔，縮圖或投影時直接糊成一片</td>
+            <td>分區改白底 ＋ 2px 分工色邊框，方塊維持分工色填滿，對比一次拉開</td>
+          </tr>
+          <tr>
+            <td>圖例用 🟦🟪🟩 emoji 表示分工</td>
+            <td>emoji 的飽和藍紫綠和圖上的淡色系對不起來，等於要讀者自己換算；且各平台 emoji 顏色不同</td>
+            <td>圖例改用實際色塊樣本，看到什麼色就是什麼色</td>
+          </tr>
+          <tr>
+            <td>紅字 <span class="mono">#b85450</span> 直接壓在灰底層上</td>
+            <td>紅字沒有容器、飄在資料源層右上角，和下方的紅框資安帶重複表達同一件事</td>
+            <td>入向、出向各給一個明確容器：出向併入資料源層底部，入向維持 API 前的紅色橫帶</td>
+          </tr>
+          <tr>
+            <td>資料源層 <span class="mono">#f5f5f5</span>、儲存列 <span class="mono">#f0f0f0</span></td>
+            <td>語義完全不同的兩層卻用幾乎相同的灰，讀者會以為是同一類東西</td>
+            <td>資料源＝中性灰、儲存＝暖褐，兩者分開；儲存另外移到右側欄</td>
+          </tr>
+          <tr>
+            <td>橘色「機關系統」浮在前端層外側</td>
+            <td>沒有容器歸屬，看不出它是系統邊界之外的第三方</td>
+            <td>保留橘色（外部）但明確放在主欄之外，並讓 webhook 線從 alert_service 一路拉過去</td>
+          </tr>
+          <tr>
+            <td>未指定 <span class="mono">fontColor</span></td>
+            <td>draw.io 深色模式下文字會被翻成淺色，壓在淺色填滿上直接看不見</td>
+            <td>每個方塊都明寫深色 fontColor，兩種模式都安全</td>
+          </tr>
+          <tr>
+            <td>webhook 線硬編轉折點 <span class="mono">x=1600</span>、頁面 1700×1300 但內容只到 985</td>
+            <td>轉折點落在內容區外，稍微移動方塊就錯位；下方一大片空白</td>
+            <td>改用 source/target ＋ exit/entry 錨點，讓 draw.io 自動繞線；頁面尺寸貼合內容</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>原圖已經對的部分</h2>
+    <p class="sec-note">這些不用改，v2 完整保留。</p>
+    <ul class="plain">
+      <li><b>五層切分</b>與 <code>design.md §1.1</code> 一字不差，執行平面／控制平面的無狀態 vs 有狀態區分也正確。</li>
+      <li><b>A / B / C 三色分工</b>對應 <code>§3</code> 的模組歸屬正確：core + api + data 給 A、prediction 給 B、frontend 給 C。</li>
+      <li><b>三條資料流</b>的文字敘述和 <code>§4</code> 完全一致，內容沒問題，只是沒有畫成線。</li>
+      <li><b>API 端點分組</b>九組對得上 <code>design.md §2</code> 的 <code>api/</code> 目錄（v2 補了 simulation）。</li>
+      <li><b>資安雙向</b>（入向邊界 + 出向第三方回應不可信）有畫，這點在架構圖裡少見，是加分項。</li>
+      <li><b>熱溫冷保留策略</b>與 <code>§5</code>、<code>FR-12</code> 一致。</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><b>已產出（都在專案根目錄）：</b><code>design_dataflow_v2.drawio</code> 修正版架構圖 · <code>config.yaml</code> 動態判斷版（取自 design.md §7）· <code>rule_engine.py</code> 已遷移成動態觸發並實跑驗證 · <code>design.md</code> §7 補上 <code>調度車數量</code> / <code>響應時間_分鐘</code> 與「時段 = 30 分鐘」· 舊版原封保留為 <code>config.poc_v1.yaml</code> 與 <code>rule_engine.poc_v1.py</code>。</p>
+    <p><b>建議的下一步順序：</b>① 先補 <code>api_contract.md</code> 與 <code>requirements.md</code>（8/19 那兩份），39 項裡超過一半會一起消失；② 處理 C-01 緊急度尺度、C-02 覆寫進不了緊急度、C-05 target_level 單位——這三項不修，W3 對接當天一定會撞上；③ C-08 至少加一層最簡身分驗證，否則人在迴圈的閘門是假的；④ v2 圖確認後，把 <code>design.md §9</code> 的圖說更新成 v2 內容。</p>
+  </div>
+</footer>

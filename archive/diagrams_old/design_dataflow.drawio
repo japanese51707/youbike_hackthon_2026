@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-08-31T00:00:00.000Z" agent="Kiro" version="21.0.0">
+  <diagram id="youbike-dataflow" name="資料流與架構">
+    <mxGraphModel dx="1400" dy="850" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="YouBike 智慧調度系統 — 資料流與架構（Design）" style="text;html=1;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="480" y="15" width="740" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- Legend 分工顏色 -->
+        <mxCell id="legend" value="分工：　🟦 A（PM：API+控制平面+整合）　　🟪 B（空間工程師：預測+參數）　　🟩 C（品質工程師：前端）　　⬜ 共用/資料源" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fillColor=#f9f9f9;strokeColor=#cccccc;" vertex="1" parent="1">
+          <mxGeometry x="120" y="58" width="1150" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- ===== L1 資料源層 ===== -->
+        <mxCell id="l1bg" value="① 資料源層（data_source 介面可抽換）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;dashed=1;verticalAlign=top;fontSize=13;fontStyle=1;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="120" y="100" width="1460" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ds-hist" value="歷史 Parquet&#xa;(S3/Athena)&#xa;溫資料" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="150" y="135" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ds-tdx" value="TDX 即時 API&#xa;或 YouBike 官方源&#xa;（現場可換）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="320" y="135" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ds-weather" value="氣象 API&#xa;活動/行事曆" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="500" y="135" width="130" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ds-geo" value="高程 DEM / POI&#xa;政府分區&#xa;（批次一次算）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="660" y="135" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ds-mock" value="Mock 假資料&#xa;（給 C 開發）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="830" y="135" width="130" height="60" as="geometry" />
+        </mxCell>
+        <!-- 出向資安標示 -->
+        <mxCell id="sec-out" value="🔒 出向資安：第三方回應當不可信輸入驗證、憑證不外洩、超時重試" style="text;html=1;align=left;fontSize=10;fontColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="150" width="560" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ===== L2 執行平面（B） ===== -->
+        <mxCell id="l2bg" value="② 執行平面（無狀態、可平行）— 🟪 B 主責" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;dashed=1;verticalAlign=top;fontSize=13;fontStyle=1;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="120" y="240" width="1460" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="predictor" value="predictor&#xa;預測(含區間)&#xa;LightGBM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="160" y="275" width="140" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="urgency" value="urgency&#xa;緊急度 0~100&#xa;(校準吻合歷史)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="330" y="275" width="140" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="detector" value="rebalance_detector&#xa;調度介入辨識&#xa;(MAD+時段+鄰近)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="500" y="275" width="160" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="optimizer" value="param_optimizer&#xa;②AI 每日最適化&#xa;(排除異常+幅度上限)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="690" y="275" width="170" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="geobatch" value="geo_batch&#xa;地理參數批次換算&#xa;(terrain/area_type)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="890" y="275" width="160" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- ===== L3 控制平面（A） ===== -->
+        <mxCell id="l3bg" value="③ 控制平面（有狀態、管決策）— 🟦 A 主責　【預覽→確認→執行→驗證 閘門】" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;verticalAlign=top;fontSize=13;fontStyle=1;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="120" y="390" width="1460" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="ruleengine" value="rule_engine&#xa;吃區間下界&#xa;判斷觸發+原因" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="150" y="425" width="140" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="dispatcher" value="dispatcher&#xa;優先級排序+位置導向&#xa;+動態轉派" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="310" y="425" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="taskmgr" value="task_manager&#xa;任務狀態機&#xa;可續跑" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="490" y="425" width="130" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="alertsvc" value="alert_service&#xa;警示產生+推播&#xa;+webhook" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="425" width="140" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="override" value="override_service&#xa;③即時覆寫&#xa;時效恢復" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="800" y="425" width="140" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="auditc" value="audit&#xa;稽核留痕" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="960" y="425" width="110" height="70" as="geometry" />
+        </mxCell>
+        <!-- 參數三層 -->
+        <mxCell id="params3" value="params 三層&#xa;①基礎 ②AI ③覆寫&#xa;+版本回溯" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="425" width="140" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ===== L4 API 層（A） ===== -->
+        <mxCell id="l4bg" value="④ API 層（FastAPI）— 🟦 A 主責　薄層：驗證輸入→呼叫core→轉JSON" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;fontSize=13;fontStyle=1;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="120" y="550" width="1460" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="api-endpoints" value="stations │ dispatch │ operators │ alerts │ optimization │ kpi │ events │ audit │ weather" style="text;html=1;align=center;fontSize=12;fillColor=#dae8fc;strokeColor=#6c8ebf;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="150" y="580" width="1400" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- 資安邊界 -->
+        <mxCell id="sec-boundary" value="🔒 入向資安邊界：CORS白名單 · 權限驗證(後端) · Rate limit · 輸入驗證 · 錯誤不外洩內部" style="text;html=1;align=center;fontSize=11;fontColor=#b85450;fontStyle=1;fillColor=#fff2f0;strokeColor=#b85450;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="632" width="1460" height="28" as="geometry" />
+        </mxCell>
+
+        <!-- ===== L5 前端（C） ===== -->
+        <mxCell id="l5bg" value="⑤ 前端層（React+Vite）— 🟩 C 主責　只透過 API 存取，不碰 DB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;verticalAlign=top;fontSize=13;fontStyle=1;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="120" y="678" width="1460" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-dash" value="Dashboard&#xa;後台調派員&#xa;地圖+建議+KPI+警示" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="170" y="713" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-op" value="OperatorApp&#xa;調度員&#xa;任務佇列+導航+回報" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="470" y="713" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-ov" value="Overview&#xa;長官&#xa;全域調度總覽" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="770" y="713" width="180" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="fe-alert" value="警示接收&#xa;（SSE 即時串流）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="713" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- 機關 webhook -->
+        <mxCell id="agency" value="機關系統&#xa;（訂閱警示 webhook）&#xa;★現行沒有的功能" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1320" y="713" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 垂直資料流箭頭 ===== -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#666666;strokeWidth=2;" edge="1" parent="1" source="l1bg" target="l2bg">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="850" y="215" as="sourcePoint"/><mxPoint x="850" y="240" as="targetPoint"/></mxGeometry>
+        </mxCell>
+        <mxCell id="e2" value="預測結果(含區間)+緊急度" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#9673a6;strokeWidth=2;fontSize=10;fontColor=#9673a6;" edge="1" parent="1" source="l2bg" target="l3bg">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="850" y="365" as="sourcePoint"/><mxPoint x="850" y="390" as="targetPoint"/></mxGeometry>
+        </mxCell>
+        <mxCell id="e3" value="決策結果" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;strokeWidth=2;fontSize=10;fontColor=#6c8ebf;" edge="1" parent="1" source="l3bg" target="l4bg">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="850" y="525" as="sourcePoint"/><mxPoint x="850" y="550" as="targetPoint"/></mxGeometry>
+        </mxCell>
+        <mxCell id="e4" value="HTTP + JSON" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#82b366;strokeWidth=2;fontSize=10;fontColor=#82b366;" edge="1" parent="1" source="l4bg" target="l5bg">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="850" y="620" as="sourcePoint"/><mxPoint x="850" y="678" as="targetPoint"/></mxGeometry>
+        </mxCell>
+        <!-- webhook 出向 -->
+        <mxCell id="e5" value="POST 警示" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d79b00;strokeWidth=2;fontSize=10;fontColor=#d79b00;dashed=1;" edge="1" parent="1" source="alertsvc" target="agency">
+          <mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1600" y="460"/><mxPoint x="1600" y="748"/></Array></mxGeometry>
+        </mxCell>
+
+        <!-- ===== 三條資料流說明 ===== -->
+        <mxCell id="flows" value="三條主要資料流：&#xa;　路徑1 監控→警示→調度：取站況 → predictor預測 → urgency → alert_service推警示 / rule_engine判斷 → dispatcher排序 →【人工確認閘門】→ task_manager派發&#xa;　路徑2 任務循環：調度員接任務 → 逐站回報(含位置) → task_manager驗證 → dispatcher依位置重算下一任務 → 未執行緊急任務可動態轉派&#xa;　路徑3 每日最適化：param_optimizer讀近N天(排除異常) → 逐站微調 → 產摘要 →【人工確認】approve/reject → 套用" style="text;html=1;align=left;verticalAlign=top;fontSize=11;fillColor=#fffde7;strokeColor=#d6b656;spacingLeft=8;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="120" y="820" width="1460" height="120" as="geometry" />
+        </mxCell>
+
+        <!-- 儲存層 -->
+        <mxCell id="storage" value="儲存：熱(記憶體/快取 1~2週) · 溫(S3 Parquet 1~3月) · 冷(歸檔/刪除) · SQLite(tasks/audit/station_params) · config.yaml(閾值權重)" style="text;html=1;align=center;fontSize=11;fillColor=#f0f0f0;strokeColor=#999999;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="120" y="955" width="1460" height="30" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
