@@ -1,0 +1,503 @@
+<title>YouBike 調度系統白話版</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Outfit:wght@600;700&display=swap">
+<style>
+:root{
+  --bg:#EDF1F4; --surface:#FFFFFF; --surface-2:#E2E9EF;
+  --ink:#16202B; --ink-2:#33465A; --muted:#5F7185; --line:#D2DBE3;
+  --blue:#1E6FA8; --blue-bg:#DBEAF6;
+  --amber:#C87708; --amber-bg:#FAEAD2;
+  --purple:#7040A8; --purple-bg:#EBDFF8;
+  --red:#BC423A; --red-bg:#F8DEDB;
+  --green:#257354; --green-bg:#D8EEE4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D141A; --surface:#151F29; --surface-2:#1C2833;
+    --ink:#E6EDF3; --ink-2:#C1CEDA; --muted:#8DA0B2; --line:#25323E;
+    --blue:#74B4E2; --blue-bg:#17303F;
+    --amber:#EDA64C; --amber-bg:#3A2A11;
+    --purple:#B48DDE; --purple-bg:#2B1E3C;
+    --red:#E9857C; --red-bg:#3A1D1A;
+    --green:#61BF95; --green-bg:#123026;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D141A; --surface:#151F29; --surface-2:#1C2833;
+  --ink:#E6EDF3; --ink-2:#C1CEDA; --muted:#8DA0B2; --line:#25323E;
+  --blue:#74B4E2; --blue-bg:#17303F;
+  --amber:#EDA64C; --amber-bg:#3A2A11;
+  --purple:#B48DDE; --purple-bg:#2B1E3C;
+  --red:#E9857C; --red-bg:#3A1D1A;
+  --green:#61BF95; --green-bg:#123026;
+}
+
+*{box-sizing:border-box}
+body{margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Figtree","Noto Sans TC",system-ui,-apple-system,"PingFang TC",sans-serif;
+  font-size:17px; line-height:1.85; -webkit-font-smoothing:antialiased}
+.wrap{max-width:940px; margin:0 auto; padding:0 24px}
+h1,h2,h3{font-family:"Outfit","Noto Sans TC",sans-serif; margin:0; text-wrap:balance}
+code{font-family:"IBM Plex Mono",monospace; font-size:.85em; background:var(--surface-2);
+  padding:.12em .4em; border-radius:4px}
+
+header{padding:64px 0 40px}
+.kicker{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--blue); margin-bottom:16px}
+h1{font-size:clamp(32px,5vw,50px); line-height:1.15; font-weight:700; letter-spacing:-.02em}
+.lede{font-size:19px; color:var(--ink-2); margin:22px 0 0; max-width:34em}
+.who{margin-top:26px; padding:16px 20px; background:var(--surface); border-radius:12px;
+  border:1px solid var(--line); font-size:15px; color:var(--muted); max-width:34em}
+.who b{color:var(--ink-2)}
+
+.chap{padding:48px 0 8px}
+.chap-num{font-family:"IBM Plex Mono",monospace; font-size:13px; color:var(--muted);
+  letter-spacing:.14em; margin-bottom:10px}
+h2{font-size:clamp(23px,3.2vw,31px); line-height:1.3; font-weight:600; letter-spacing:-.01em}
+.chap p{color:var(--ink-2); margin:18px 0 0; max-width:34em}
+.chap p b{color:var(--ink); font-weight:600}
+
+figure{margin:30px 0 0; background:var(--surface); border:1px solid var(--line);
+  border-radius:16px; padding:24px 20px 18px}
+.scroller{overflow-x:auto}
+svg.fig{display:block; width:100%; min-width:760px; height:auto}
+figcaption{margin-top:14px; padding-top:14px; border-top:1px solid var(--line);
+  font-size:14.5px; color:var(--muted)}
+
+.punch{margin:26px 0 0; padding:20px 24px; border-radius:12px; background:var(--purple-bg);
+  font-size:18px; color:var(--ink); max-width:34em}
+.punch b{color:var(--purple)}
+
+.jargon{margin-top:20px; border:1px solid var(--line); border-radius:14px; overflow:hidden;
+  background:var(--surface)}
+.jargon .row{display:grid; grid-template-columns:minmax(150px,220px) 1fr; gap:0;
+  border-bottom:1px solid var(--line)}
+.jargon .row:last-child{border-bottom:none}
+.jargon .t{padding:14px 18px; background:var(--surface-2); font-family:"IBM Plex Mono",monospace;
+  font-size:13.5px; color:var(--ink-2); display:flex; align-items:center}
+.jargon .d{padding:14px 18px; font-size:15px; color:var(--ink-2)}
+
+.todo{display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); margin-top:24px}
+.tcard{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px}
+.tcard .n{font-family:"Outfit",sans-serif; font-size:19px; font-weight:600; margin-bottom:4px}
+.tcard.a .n{color:var(--blue)} .tcard.b .n{color:var(--purple)} .tcard.c .n{color:var(--green)}
+.tcard ul{margin:10px 0 0; padding-left:19px}
+.tcard li{font-size:15px; color:var(--ink-2); margin-bottom:7px; line-height:1.65}
+
+footer{padding:40px 0 72px; margin-top:44px; border-top:1px solid var(--line);
+  color:var(--muted); font-size:15px}
+footer b{color:var(--ink-2)}
+footer ul{padding-left:20px} footer li{margin-bottom:6px}
+
+/* ---------- SVG ---------- */
+svg.fig text{font-family:"Figtree","Noto Sans TC",sans-serif; fill:var(--ink)}
+svg.fig .ftitle{font-family:"Outfit","Noto Sans TC",sans-serif; font-size:19px; font-weight:600}
+svg.fig .fsub{font-size:14px; fill:var(--muted)}
+svg.fig .lbl{font-size:15px; font-weight:500}
+svg.fig .sm{font-size:13px; fill:var(--muted)}
+svg.fig .mono{font-family:"IBM Plex Mono",monospace; font-size:13px}
+svg.fig .card{fill:var(--surface-2); stroke:var(--line); stroke-width:1.5}
+svg.fig .bl{fill:var(--blue-bg); stroke:var(--blue); stroke-width:1.5}
+svg.fig .am{fill:var(--amber-bg); stroke:var(--amber); stroke-width:1.5}
+svg.fig .pu{fill:var(--purple-bg); stroke:var(--purple); stroke-width:2.5}
+svg.fig .rd{fill:var(--red-bg); stroke:var(--red); stroke-width:1.5}
+svg.fig .gn{fill:var(--green-bg); stroke:var(--green); stroke-width:1.5}
+svg.fig .t-blue{fill:var(--blue)} svg.fig .t-amber{fill:var(--amber)}
+svg.fig .t-purple{fill:var(--purple)} svg.fig .t-red{fill:var(--red)}
+svg.fig .t-green{fill:var(--green)} svg.fig .t-mut{fill:var(--muted)}
+svg.fig .track{fill:var(--surface); stroke:var(--line); stroke-width:1.5}
+svg.fig .fill-a{fill:var(--amber)}
+svg.fig .ln{fill:none; stroke-width:2.5}
+svg.fig .ln-blue{stroke:var(--blue)} svg.fig .ln-amber{stroke:var(--amber)}
+svg.fig .ln-red{stroke:var(--red)} svg.fig .ln-mut{stroke:var(--muted)}
+svg.fig .ln-pu{stroke:var(--purple)}
+svg.fig .dash{stroke-dasharray:7 5}
+svg.fig .axis{stroke:var(--line); stroke-width:2; fill:none}
+svg.fig .dot-mut{fill:var(--muted)}
+</style>
+
+<header>
+  <div class="wrap">
+    <div class="kicker">新北市黑客松 · 9/12</div>
+    <h1>YouBike 調度系統<br>白話版</h1>
+    <p class="lede">我們要做的東西，用五張圖講完。看完你會知道：這系統在解決什麼問題、它怎麼運作、還有你負責哪一塊、跟別人怎麼接。</p>
+    <div class="who"><b>給誰看：</b>隊友 B（空間工程師）、隊友 C（品質工程師），以及任何要在三分鐘內搞懂我們在做什麼的人。<br><b>不用先讀 spec。</b>讀完這頁再去看 <code>.kiro/specs/</code> 會順很多。</div>
+  </div>
+</header>
+
+<section class="chap">
+  <div class="wrap">
+    <div class="chap-num">01 — 問題</div>
+    <h2>車子每天都會自己跑到同一邊</h2>
+    <p>YouBike 最常被罵的兩件事：<b>要借的時候沒車</b>、<b>要還的時候沒位</b>。這不是車不夠，是車在錯的地方。</p>
+
+    <figure>
+      <div class="scroller">
+<svg class="fig" viewBox="0 0 1000 400" role="img" aria-label="早上七點到九點，住宅區的站從 20 台掉到 1 台變成借不到車，捷運站從 4 台變成 40 台滿站還不了車，晚上再反過來一次。">
+  <text class="ftitle" x="20" y="34">一天之內，車子會自己跑到同一邊</text>
+
+  <rect class="card" x="30" y="70" width="340" height="250" rx="14"/>
+  <text class="lbl" x="52" y="104">住宅區的站</text>
+  <text class="sm" x="52" y="126">早上大家從這裡騎走</text>
+  <text class="mono t-mut" x="52" y="172">7:00</text>
+  <rect class="track" x="110" y="156" width="180" height="20" rx="10"/>
+  <rect class="fill-a" x="110" y="156" width="150" height="20" rx="10"/>
+  <text class="sm" x="348" y="172" text-anchor="end">20 台</text>
+  <text class="mono t-mut" x="52" y="217">9:00</text>
+  <rect class="track" x="110" y="201" width="180" height="20" rx="10"/>
+  <rect class="fill-a" x="110" y="201" width="12" height="20" rx="6"/>
+  <text class="sm" x="348" y="217" text-anchor="end">1 台</text>
+  <rect class="rd" x="52" y="245" width="170" height="34" rx="17"/>
+  <text class="lbl t-red" x="137" y="268" text-anchor="middle">借不到車</text>
+
+  <rect class="card" x="630" y="70" width="340" height="250" rx="14"/>
+  <text class="lbl" x="652" y="104">捷運站旁邊的站</text>
+  <text class="sm" x="652" y="126">大家騎到這裡就停著</text>
+  <text class="mono t-mut" x="652" y="172">7:00</text>
+  <rect class="track" x="710" y="156" width="180" height="20" rx="10"/>
+  <rect class="fill-a" x="710" y="156" width="20" height="20" rx="10"/>
+  <text class="sm" x="948" y="172" text-anchor="end">4 台</text>
+  <text class="mono t-mut" x="652" y="217">9:00</text>
+  <rect class="track" x="710" y="201" width="180" height="20" rx="10"/>
+  <rect class="fill-a" x="710" y="201" width="180" height="20" rx="10"/>
+  <text class="sm" x="948" y="217" text-anchor="end">40 台（滿）</text>
+  <rect class="rd" x="652" y="245" width="170" height="34" rx="17"/>
+  <text class="lbl t-red" x="737" y="268" text-anchor="middle">還不了車</text>
+
+  <defs>
+    <marker id="e5-am" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--amber)"/></marker>
+    <marker id="e5-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker>
+  </defs>
+  <text class="lbl t-amber" x="500" y="152" text-anchor="middle">早上 7–9 點</text>
+  <path class="ln ln-amber" style="stroke-width:5" d="M385 180H605" marker-end="url(#e5-am)"/>
+  <text class="sm" x="500" y="206" text-anchor="middle">車子單向流動</text>
+  <path class="ln ln-mut dash" style="stroke-width:2" d="M605 248H385" marker-end="url(#e5-mut)"/>
+  <text class="sm" x="500" y="274" text-anchor="middle">晚上再反過來一次</text>
+
+  <rect class="card" x="30" y="342" width="940" height="46" rx="10"/>
+  <text class="lbl" x="500" y="371" text-anchor="middle">全新北 1,583 站每天都這樣 —— 所以要開車去搬。難的是：搬哪一站？何時搬？搬幾台？</text>
+</svg>
+      </div>
+      <figcaption>現在的做法是靠調度員的經驗和回報，等到站空了才知道。我們要做的是「在空掉之前就知道」。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="chap">
+  <div class="wrap">
+    <div class="chap-num">02 — 系統在做什麼</div>
+    <h2>提早發現 → 請人確認 → 派人去搬</h2>
+    <p>整個系統從頭到尾就這一條線。中間有一個地方特別重要：<b>系統永遠只給建議，真正要出車一定要有人按確認。</b></p>
+
+    <figure>
+      <div class="scroller">
+<svg class="fig" viewBox="0 0 1000 400" role="img" aria-label="流程：每三十分鐘一張全市快照，預測三十分鐘後剩幾台，規則引擎判斷是否低於安全線，產出建議清單，人按確認，調度員出車搬運，回報後系統重算下一站。">
+  <text class="ftitle" x="20" y="34">一條線走完</text>
+
+  <defs>
+    <marker id="e2-bl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--blue)"/></marker>
+    <marker id="e2-pu" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--purple)"/></marker>
+    <marker id="e2-am" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--amber)"/></marker>
+  </defs>
+
+  <rect class="bl" x="20" y="112" width="132" height="76" rx="10"/>
+  <text class="lbl" x="86" y="144" text-anchor="middle">每 30 分鐘</text>
+  <text class="sm" x="86" y="166" text-anchor="middle">一張全市快照</text>
+
+  <rect class="bl" x="176" y="112" width="132" height="76" rx="10"/>
+  <text class="lbl" x="242" y="144" text-anchor="middle">預測</text>
+  <text class="sm" x="242" y="166" text-anchor="middle">等一下剩幾台</text>
+
+  <rect class="bl" x="332" y="112" width="146" height="76" rx="10"/>
+  <text class="lbl" x="405" y="144" text-anchor="middle">規則判斷</text>
+  <text class="sm" x="405" y="166" text-anchor="middle">會低於安全線嗎</text>
+
+  <rect class="bl" x="502" y="112" width="146" height="76" rx="10"/>
+  <text class="lbl" x="575" y="144" text-anchor="middle">建議清單</text>
+  <text class="sm" x="575" y="166" text-anchor="middle">哪站·幾台·為什麼</text>
+
+  <rect class="pu" x="672" y="112" width="132" height="76" rx="10"/>
+  <text class="lbl t-purple" x="738" y="144" text-anchor="middle">人按確認</text>
+  <text class="sm" x="738" y="166" text-anchor="middle">調派員點頭</text>
+  <text class="sm t-purple" x="738" y="98" text-anchor="middle">只有人能按這一步</text>
+
+  <rect class="am" x="828" y="112" width="152" height="76" rx="10"/>
+  <text class="lbl" x="904" y="144" text-anchor="middle">調度員出車</text>
+  <text class="sm" x="904" y="166" text-anchor="middle">去搬</text>
+
+  <path class="ln ln-blue" d="M152 150H172" marker-end="url(#e2-bl)"/>
+  <path class="ln ln-blue" d="M308 150H328" marker-end="url(#e2-bl)"/>
+  <path class="ln ln-blue" d="M478 150H498" marker-end="url(#e2-bl)"/>
+  <path class="ln ln-pu" d="M648 150H668" marker-end="url(#e2-pu)"/>
+  <path class="ln ln-pu" d="M804 150H824" marker-end="url(#e2-pu)"/>
+
+  <path class="ln ln-amber dash" d="M904 192V246H242V192" marker-end="url(#e2-am)"/>
+  <text class="sm" x="573" y="268" text-anchor="middle">搬完回報位置 → 系統重算「你下一站該去哪」</text>
+
+  <rect class="pu" style="stroke-width:1.5" x="20" y="300" width="960" height="82" rx="12"/>
+  <text class="lbl" x="500" y="334" text-anchor="middle">AI 只負責「猜」——猜等一下這站會剩幾台。</text>
+  <text class="lbl" x="500" y="362" text-anchor="middle">「要不要出車」是寫死的規則在判斷，「真的出車」一定要人點頭。</text>
+</svg>
+      </div>
+      <figcaption>這條紅線不能跨：AI 不做決定。原因很現實——出車要花油錢和人力，決策必須說得出理由、事後查得到是誰按的。</figcaption>
+    </figure>
+
+    <div class="punch"><b>記住這句就好：</b>AI 猜、規則判、人決定、調度員做。</div>
+  </div>
+</section>
+
+<section class="chap">
+  <div class="wrap">
+    <div class="chap-num">03 — 關鍵觀念一</div>
+    <h2>我們看「最壞的情況」，不看「最可能的情況」</h2>
+    <p>預測不會只吐一個數字，它會吐一個<b>範圍</b>：最好會剩幾台、最可能剩幾台、最壞剩幾台。我們永遠拿<b>最壞的那個</b>去判斷要不要出車。</p>
+
+    <figure>
+      <div class="scroller">
+<svg class="fig" viewBox="0 0 1000 490" role="img" aria-label="預測區間圖：現在有 12 台，30 分鐘後最好剩 10 台、最可能剩 6 台、最壞剩 2 台。安全線是 2 台。看最可能的 6 台會判斷不用出車，看最壞的 2 台會判斷現在就要出車。">
+  <text class="ftitle" x="20" y="34">同一個預測，看法不同，結論相反</text>
+
+  <defs>
+    <marker id="e3-dot" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5"><circle cx="5" cy="5" r="4" fill="var(--blue)"/></marker>
+  </defs>
+
+  <path class="axis" d="M140 76V330H830"/>
+  <text class="mono t-mut" x="128" y="82" text-anchor="end">24 台</text>
+  <text class="mono t-mut" x="128" y="216" text-anchor="end">12 台</text>
+  <text class="mono t-mut" x="128" y="336" text-anchor="end">0 台</text>
+  <text class="sm" x="140" y="358" text-anchor="middle">現在</text>
+  <text class="sm" x="760" y="358" text-anchor="middle">30 分鐘後</text>
+
+  <path d="M140 210L760 230L760 310Z" fill="var(--blue-bg)" stroke="none"/>
+  <path class="ln ln-mut dash" style="stroke-width:1.5" d="M140 210L760 230"/>
+  <path class="ln ln-blue" d="M140 210L760 270"/>
+  <path class="ln ln-red" d="M140 210L760 310"/>
+  <path class="ln ln-red dash" style="stroke-width:2" d="M140 310H820"/>
+
+  <circle cx="140" cy="210" r="7" fill="var(--amber)"/>
+  <text class="lbl" x="152" y="196">現在有 12 台</text>
+  <circle cx="760" cy="230" r="5" fill="var(--muted)"/>
+  <text class="sm" x="776" y="228">最好：10 台</text>
+  <circle cx="760" cy="270" r="6" fill="var(--blue)"/>
+  <text class="lbl t-blue" x="776" y="268">最可能：6 台</text>
+  <circle cx="760" cy="310" r="6" fill="var(--red)"/>
+  <text class="lbl t-red" x="776" y="306">最壞：2 台</text>
+  <text class="sm t-red" x="152" y="330">安全線：低於這條就要出車</text>
+
+  <rect class="card" x="20" y="382" width="466" height="94" rx="12"/>
+  <text class="mono t-mut" x="42" y="410">常見做法</text>
+  <text class="lbl" x="42" y="438">看「最可能的 6 台」→ 還好，不出車</text>
+  <text class="sm t-red" x="42" y="462">結果 30 分鐘後真的空了，民眾撲空</text>
+
+  <rect class="gn" x="514" y="382" width="466" height="94" rx="12"/>
+  <text class="mono t-green" x="536" y="410">我們的做法</text>
+  <text class="lbl" x="536" y="438">看「最壞的 2 台」→ 已經碰到安全線</text>
+  <text class="sm t-green" x="536" y="462">現在就派車，來得及</text>
+</svg>
+      </div>
+      <figcaption>代價是偶爾會白跑一趟。但白跑一趟的成本，遠低於讓一整站的人借不到車。</figcaption>
+    </figure>
+
+    <p>還有一個細節：安全線<b>不是固定數字</b>。每一站、每個時段的流失速度都不一樣——早上八點的學區站可能十分鐘就空，半夜的河濱站放兩台都夠。所以我們是拿「預測的最壞值」比對「安全緩衝」，不是寫死「少於 3 台就出車」。</p>
+  </div>
+</section>
+
+<section class="chap">
+  <div class="wrap">
+    <div class="chap-num">04 — 關鍵觀念二</div>
+    <h2>一個模型，一千五百多組參數</h2>
+    <p>每站狀況都不同，但我們<b>不做 1,583 個模型</b>——那沒人維護得動，也沒辦法一起升級。做法是：一個共用的模型，每站掛一組自己的「條件參數」。</p>
+
+    <figure>
+      <div class="scroller">
+<svg class="fig" viewBox="0 0 1000 510" role="img" aria-label="一個共用模型加上每站一組參數；同一站的參數有三層，由下往上是建置時的基礎值、AI 每天微調（要人同意）、現場緊急覆寫（最優先，兩小時後自動失效），上層蓋下層。">
+  <text class="ftitle" x="20" y="34">不是 1,583 個模型，是 1 個模型 + 每站一組參數</text>
+
+  <defs>
+    <marker id="e4-bl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--blue)"/></marker>
+    <marker id="e4-pu" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--purple)"/></marker>
+  </defs>
+
+  <text class="sm" x="34" y="76">1,583 個站，每站條件不同</text>
+  <g class="dot-mut">
+    <circle cx="42" cy="98" r="4"/><circle cx="64" cy="98" r="4"/><circle cx="86" cy="98" r="4"/><circle cx="108" cy="98" r="4"/><circle cx="130" cy="98" r="4"/><circle cx="152" cy="98" r="4"/><circle cx="174" cy="98" r="4"/><circle cx="196" cy="98" r="4"/><circle cx="218" cy="98" r="4"/><circle cx="240" cy="98" r="4"/>
+    <circle cx="42" cy="122" r="4"/><circle cx="64" cy="122" r="4"/><circle cx="86" cy="122" r="4"/><circle cx="108" cy="122" r="4"/><circle cx="130" cy="122" r="4"/><circle cx="152" cy="122" r="4"/><circle cx="174" cy="122" r="4"/><circle cx="196" cy="122" r="4"/><circle cx="218" cy="122" r="4"/><circle cx="240" cy="122" r="4"/>
+    <circle cx="42" cy="146" r="4"/><circle cx="64" cy="146" r="4"/><circle cx="86" cy="146" r="4"/><circle cx="108" cy="146" r="4"/><circle cx="130" cy="146" r="4"/><circle cx="152" cy="146" r="4"/><circle cx="174" cy="146" r="4"/><circle cx="196" cy="146" r="4"/><circle cx="218" cy="146" r="4"/><circle cx="240" cy="146" r="4"/>
+    <circle cx="42" cy="170" r="4"/><circle cx="64" cy="170" r="4"/><circle cx="86" cy="170" r="4"/><circle cx="108" cy="170" r="4"/><circle cx="130" cy="170" r="4"/><circle cx="152" cy="170" r="4"/><circle cx="174" cy="170" r="4"/><circle cx="196" cy="170" r="4"/><circle cx="218" cy="170" r="4"/><circle cx="240" cy="170" r="4"/>
+  </g>
+
+  <path class="ln ln-blue" d="M268 134H316" marker-end="url(#e4-bl)"/>
+
+  <rect class="bl" x="330" y="96" width="190" height="76" rx="12"/>
+  <text class="lbl" x="425" y="128" text-anchor="middle">一個模型</text>
+  <text class="sm" x="425" y="150" text-anchor="middle">全市共用</text>
+
+  <path class="ln ln-blue" d="M534 134H582" marker-end="url(#e4-bl)"/>
+
+  <text class="sm" x="596" y="76">每站掛自己的一組參數</text>
+  <rect class="am" x="596" y="96" width="120" height="76" rx="10"/>
+  <text class="lbl" x="656" y="126" text-anchor="middle">站 A</text>
+  <text class="sm" x="656" y="148" text-anchor="middle">坡地 · 學區</text>
+  <rect class="am" x="728" y="96" width="120" height="76" rx="10"/>
+  <text class="lbl" x="788" y="126" text-anchor="middle">站 B</text>
+  <text class="sm" x="788" y="148" text-anchor="middle">平地 · 商業</text>
+  <rect class="am" x="860" y="96" width="120" height="76" rx="10"/>
+  <text class="lbl" x="920" y="126" text-anchor="middle">站 C</text>
+  <text class="sm" x="920" y="148" text-anchor="middle">河濱 · 住宅</text>
+
+  <text class="sm" x="500" y="212" text-anchor="middle">改模型 = 全市一起升級　·　新增一站 = 給它一組參數就好，不用重新訓練</text>
+
+  <text class="lbl" x="262" y="266">同一站的參數，有三層 —— 上面蓋下面</text>
+
+  <rect class="pu" style="stroke-width:1.5" x="262" y="284" width="480" height="62" rx="10"/>
+  <text class="lbl t-purple" x="284" y="312">③ 現場緊急覆寫</text>
+  <text class="sm" x="284" y="334">臨時狀況，人直接拉到最優先</text>
+  <text class="sm t-purple" x="720" y="322" text-anchor="end">2 小時後自動失效</text>
+
+  <rect class="bl" x="262" y="356" width="480" height="62" rx="10"/>
+  <text class="lbl t-blue" x="284" y="384">② AI 每天微調</text>
+  <text class="sm" x="284" y="406">看昨天猜得準不準，小幅修正</text>
+  <text class="sm t-blue" x="720" y="394" text-anchor="end">要有人按同意才生效</text>
+
+  <rect class="card" x="262" y="428" width="480" height="62" rx="10"/>
+  <text class="lbl" x="284" y="456">① 建置時設定的基礎值</text>
+  <text class="sm" x="284" y="478">地形、區域、容量、平常的潮汐習性</text>
+  <text class="sm" x="720" y="466" text-anchor="end">很少動</text>
+
+  <path class="ln ln-pu" style="stroke-width:3" d="M240 470V300" marker-end="url(#e4-pu)"/>
+  <text class="sm t-purple" x="222" y="385" text-anchor="middle" transform="rotate(-90 222 385)">上面蓋下面</text>
+
+  <text class="sm" x="770" y="452">③ 消失後回到 ②，</text>
+  <text class="sm" x="770" y="474">② 沒人按就停在 ①。</text>
+</svg>
+      </div>
+      <figcaption>這個設計最大的好處是「新增站別」很便宜：新站冷啟動時直接借用鄰近類似站的參數，累積幾天資料後 AI 再慢慢校準成它自己的。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="chap">
+  <div class="wrap">
+    <div class="chap-num">05 — 分工</div>
+    <h2>三個人怎麼不互相踩到</h2>
+    <p>規則只有一條：<b>你交出去的東西，格式不能變。</b>格式不變的前提下，裡面怎麼寫都是你家的事——想換演算法、想重寫元件，都不用問別人。</p>
+
+    <figure>
+      <div class="scroller">
+<svg class="fig" viewBox="0 0 1000 450" role="img" aria-label="三人分工：A 負責決策邏輯、API 與資料源；B 負責預測、緊急度與地形參數；C 負責三個前端畫面。A 與 B 之間的約定是 predict 回傳預測與區間，A 與 C 之間的約定是 HTTP JSON。">
+  <text class="ftitle" x="20" y="34">三個人怎麼不互相踩到</text>
+  <text class="fsub" x="20" y="58">每個人只要顧好「自己交出去的東西長什麼樣」</text>
+
+  <rect class="bl" x="20" y="92" width="290" height="256" rx="14"/>
+  <text class="lbl t-blue" x="44" y="126">A — 你（PM）</text>
+  <text class="sm" x="44" y="162">· 定介面、管整合</text>
+  <text class="sm" x="44" y="192">· 什麼時候該出車的判斷</text>
+  <text class="sm" x="44" y="222">· 排順序、派任務、警示</text>
+  <text class="sm" x="44" y="252">· API：前端要什麼給什麼</text>
+  <text class="sm" x="44" y="282">· 資料源：換來源不影響別人</text>
+  <text class="sm" x="44" y="318">· 稽核：誰在何時做了什麼</text>
+
+  <rect class="pu" style="stroke-width:1.5" x="355" y="92" width="290" height="256" rx="14"/>
+  <text class="lbl t-purple" x="379" y="126">B — 空間工程師</text>
+  <text class="sm" x="379" y="162">· 預測：等一下剩幾台</text>
+  <text class="sm" x="379" y="192">· 而且要給出範圍，不只一個數</text>
+  <text class="sm" x="379" y="222">· 緊急度：哪一站最急</text>
+  <text class="sm" x="379" y="252">· 地形、區域參數怎麼換算</text>
+  <text class="sm" x="379" y="282">· AI 每天微調參數</text>
+  <text class="sm t-purple" x="379" y="318">· 演算法你自己決定</text>
+
+  <rect class="gn" x="690" y="92" width="290" height="256" rx="14"/>
+  <text class="lbl t-green" x="714" y="126">C — 品質工程師</text>
+  <text class="sm" x="714" y="162">· 後台調派員的畫面</text>
+  <text class="sm" x="714" y="192">· 調度員手上的任務畫面</text>
+  <text class="sm" x="714" y="222">· 長官看的總覽</text>
+  <text class="sm" x="714" y="252">· 地圖、時間軸、任務卡</text>
+  <text class="sm" x="714" y="282">· 只跟 API 講話</text>
+  <text class="sm t-green" x="714" y="318">· 不直接碰資料庫</text>
+
+  <path class="ln ln-mut dash" style="stroke-width:2" d="M332 100V340"/>
+  <path class="ln ln-mut dash" style="stroke-width:2" d="M667 100V340"/>
+  <text class="mono t-mut" x="326" y="220" text-anchor="middle" transform="rotate(-90 326 220)">predict() → 預測 + 範圍</text>
+  <text class="mono t-mut" x="661" y="220" text-anchor="middle" transform="rotate(-90 661 220)">HTTP + JSON</text>
+  <text class="sm t-mut" x="332" y="84" text-anchor="middle">約定好的介面</text>
+  <text class="sm t-mut" x="667" y="84" text-anchor="middle">約定好的介面</text>
+
+  <rect class="card" x="20" y="374" width="960" height="60" rx="12"/>
+  <text class="lbl" x="500" y="402" text-anchor="middle">門口固定，門內自由。</text>
+  <text class="sm" x="500" y="424" text-anchor="middle">B 換模型不用通知 C；C 改畫面不用動 A 的程式。踩到別人的唯一方式，是偷偷改了交出去的格式。</text>
+</svg>
+      </div>
+      <figcaption>開發順序：A 先給出假資料和 API 骨架，B、C 就能同時開工，不用等對方。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="chap">
+  <div class="wrap">
+    <div class="chap-num">附錄</div>
+    <h2>你會在文件裡看到的詞</h2>
+    <p>spec 裡有些詞聽起來很硬，其實意思很簡單。</p>
+
+    <div class="jargon">
+      <div class="row"><div class="t">執行平面</div><div class="d">負責「算」的那一堆程式。算完就忘，不記任何狀態，所以可以同時跑很多份。</div></div>
+      <div class="row"><div class="t">控制平面</div><div class="d">負責「決定和記帳」的那一堆。任務派給誰、做到哪一步、誰按了確認，都在這裡。</div></div>
+      <div class="row"><div class="t">區間下界</div><div class="d">預測範圍的最低那一端，也就是「最壞情況」。我們判斷要不要出車只看它。</div></div>
+      <div class="row"><div class="t">安全緩衝</div><div class="d">一站至少要留幾台才不算危險。預測的最壞值低於它就出車。</div></div>
+      <div class="row"><div class="t">人在迴圈</div><div class="d">系統不會自己動手，中間一定卡一個「等人按確認」的步驟。</div></div>
+      <div class="row"><div class="t">閘門</div><div class="d">就是那個要人按的按鈕。預覽 → 確認 → 執行 → 驗證，四步不能跳。</div></div>
+      <div class="row"><div class="t">降級</div><div class="d">即時資料抓不到時，改用歷史上同一時段的數字先頂著，而且畫面上要明講「這是舊資料」。</div></div>
+      <div class="row"><div class="t">三層參數</div><div class="d">基礎值、AI 每天微調、現場緊急覆寫。上層蓋下層，緊急那層過期就自己消失。</div></div>
+      <div class="row"><div class="t">熱／溫／冷資料</div><div class="d">最近兩週的放記憶體（要快）、三個月內的放 S3（拿來重訓練）、更久的歸檔或刪掉。</div></div>
+      <div class="row"><div class="t">可抽換資料源</div><div class="d">現場要接哪個即時資料還沒定。所以我們把入口統一，到時候換一個檔案就好，其他全都不用改。</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="chap">
+  <div class="wrap">
+    <div class="chap-num">接下來</div>
+    <h2>你各自從哪裡開始</h2>
+
+    <div class="todo">
+      <div class="tcard a">
+        <div class="n">A（PM）</div>
+        <ul>
+          <li>先把資料格式定下來，產一份假資料</li>
+          <li>API 骨架先回假資料 —— 這一步不做完，B 和 C 都動不了</li>
+          <li>然後才是決策邏輯和整合</li>
+        </ul>
+      </div>
+      <div class="tcard b">
+        <div class="n">B（空間）</div>
+        <ul>
+          <li>先讓 <code>predict()</code> 能跑、格式對，準不準之後再說</li>
+          <li>記得回傳<b>範圍</b>，不是一個數字</li>
+          <li>目前全站預測還沒接上，系統跑的是降級路徑 —— 這是你的第一個里程碑</li>
+        </ul>
+      </div>
+      <div class="tcard c">
+        <div class="n">C（品質）</div>
+        <ul>
+          <li>拿 A 的假資料先把三個畫面刻出來</li>
+          <li>畫面上要看得出「這是舊資料」和「這是預測不是現況」</li>
+          <li>確認按鈕不能只是前端藏起來，權限要後端擋</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><b>想看更細的，依這個順序讀：</b></p>
+    <ul>
+      <li><code>design_dataflow_v2.drawio</code> — 完整架構圖，這頁的圖是它的白話版</li>
+      <li><code>.kiro/specs/youbike-dispatch-system/design.md</code> — 每個模組負責什麼、不負責什麼</li>
+      <li><code>.kiro/specs/youbike-dispatch-system/api_contract.md</code> — 你要交出去的東西長什麼樣</li>
+      <li><code>config.yaml</code> — 所有可以調的數字都在這裡，改這裡不用改程式</li>
+      <li><code>review_architecture_v2.md</code> — 目前已知文件互相打架的地方，動手前先掃一眼</li>
+    </ul>
+    <p style="margin-top:22px"><b>唯一不能違反的一條：</b>AI 只做估計，決定調度的永遠是規則引擎加上人。這條寫在 <code>AGENTS.md</code> 裡，寫程式和用 AI 寫程式都適用。</p>
+  </div>
+</footer>
