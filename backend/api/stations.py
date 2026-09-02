@@ -3,9 +3,11 @@
 薄層：A0 回 mock。注意路由順序 — 靜態路徑(heatmap/timeline)先於動態路徑(/{id})。
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from mock_store import get_mock
 from core.data import get_data_source, get_stations_with_degradation
+from auth import require_role
+from models_schema.params_ops import ParamsRollbackRequest
 
 router = APIRouter(prefix="/api/v1", tags=["stations"])
 
@@ -73,8 +75,38 @@ def _with_target_usage_rate(params: dict | None) -> dict | None:
 
 @router.get("/stations/{station_id}/params")
 def station_params(station_id: str):
-    """3.12 站點參數（後台檢視）。附 target_usage_rate（0~100%）供與 usage_rate 同尺度比較。"""
+    """3.12 站點參數（後台檢視）。優先回 DB 的生效版本（三層疊加），無則回 mock。
+
+    附 target_usage_rate（0~100%）供與 usage_rate 同尺度比較。
+    """
+    from params import get_current
+    current = get_current(station_id)
+    if current is not None:
+        return _with_target_usage_rate(current)
+    # DB 尚無此站參數 → 回 mock 範例（開發階段）
     return _with_target_usage_rate(get_mock()["station_detail"]["params"])
+
+
+@router.get("/stations/{station_id}/params/history")
+def station_params_history(station_id: str):
+    """3.12 站點參數版本歷史（回溯檢視，I-10）。新到舊，含每版來源與原因。"""
+    from params import get_history
+    return get_history(station_id)
+
+
+@router.post("/stations/{station_id}/params/rollback")
+def station_params_rollback(
+    station_id: str,
+    body: ParamsRollbackRequest,
+    operator: dict = Depends(require_role("maintainer")),
+):
+    """3.12 回溯站點參數到指定版本（I-10，需 maintainer）。"""
+    from params import rollback
+    result = rollback(station_id, body.version, operator["operator_id"])
+    if result is None:
+        raise HTTPException(status_code=404,
+                            detail=f"站點 {station_id} 無版本 {body.version}")
+    return {"message": f"已回溯到版本 {body.version}", "params": _with_target_usage_rate(result)}
 
 
 @router.post("/stations")

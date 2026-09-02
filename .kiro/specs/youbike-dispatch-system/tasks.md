@@ -113,11 +113,11 @@ A4 加固清單（已完成 ✅ 已驗證）：
 - 出向 webhook（推給機關）：SSRF 檢查到位；實際送出加固待現場
 - SSE `/alerts/stream`：現為佇列骨架；正式改 EventSource 時，串流連線要驗證訂閱者身分（A5 帳號後）
 
-### A5 — params 三層 + SQLite + 帳號系統（進行中）
+### A5 — params 三層 + SQLite + 帳號系統 ✅
 - [x] **建 SQLite 七張表**（design §8）：`db/schema.sql` + `db/connection.py`（連線/初始化，支援 :memory: 測試）
 - [x] **帳號系統**：`core/security.py`（bcrypt 雜湊，不存原文）、`db/operators_repo.py`（CRUD+登入驗證）、`auth.py` 改查表、`api/accounts.py`（登入/建帳號/停用，建帳號需 maintainer 不開放自助註冊）
-- [ ] `params/station_params.py`、`param_layers.py`（①②③覆寫序）、`versioning.py`
-- [ ] I-10 兩端點：`GET /stations/{id}/params/history`、`POST /stations/{id}/params/rollback`
+- [x] `params/param_layers.py`（①②③疊加，③只給 override_active 狀態不寫參數）、`versioning.py`（版本+回溯）、`station_params.py`（對外介面）
+- [x] I-10 兩端點：`GET /stations/{id}/params/history`、`POST /stations/{id}/params/rollback`（需 maintainer）
 - [x] 記憶體狀態搬 SQLite：alert/override/audit/task 的 store 換 DB backend（一次搬乾淨）✅ 已驗證重啟後覆寫/稽核仍在
 - **驗收**：讀當前生效參數；②最適化 approve 後才存版本；可回溯
 - **依賴**：A0
@@ -127,7 +127,11 @@ A4 加固清單（已完成 ✅ 已驗證）：
   - 停用取代刪除（保留稽核關聯）；停用後 get_role 回 None → auth 視為無效
   - 建/停用帳號都記稽核；35 測試全綠（含 4 個帳號測試）
   - lifespan 啟動時 init_db + seed 3 預設帳號（OP-001/002/003）
-- **待續（本回合未做）**：三層參數 + 版本 + I-10 端點；alert/override/audit/task 記憶體狀態搬 SQLite
+- **三層參數 + review 4 注意點全數落實**：
+  - ③覆寫不做兩套：param_layers 只讀 override_service 狀態當 override_active 旗標，排序留 dispatcher（review #1）
+  - param_source 只有 base/ai_optimized，覆寫用 override_active bool（review #2，已驗證覆寫時 param_source 仍 base）
+  - 記憶體狀態一次搬乾淨（review #3）；覆寫到期任務規則（review #4，前輪完成）
+  - ②approve 才存版本、reason 必填、可回溯；43 測試全綠
 
 ### A6 — 整合 + 模擬重放
 - [ ] `simulation/replay.py`（重構原型，對接正式模組）
