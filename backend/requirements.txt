@@ -1,0 +1,18 @@
+# YouBike 後端依賴（版本釘選，對齊開發環境實際安裝）
+# 換環境/建 Docker 時 pip install -r requirements.txt 即可完整跑起 A0~A4（含 historical 模式）
+
+# ── Web 框架 ──
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.5
+
+# ── 設定 ──
+pyyaml==6.0.3
+
+# ── 資料源層（A1：historical 讀 S3 Parquet）──
+boto3==1.43.72         # 讀 S3（historical 模式）
+pyarrow==25.0.1        # 讀 Parquet
+pandas==3.0.5          # historical 欄位處理
+
+# ── HTTP 客戶端（webhook 出向 / TestClient）──
+httpx==0.28.1
