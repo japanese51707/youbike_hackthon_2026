@@ -507,6 +507,7 @@ A 把三方對接、整合到 Git
 - `target_level`：目標借用率，**0~1 比例**（0.5 = 50%）。
 - `usage_rate`（在 StationStatus / HistoryPoint）：**0~100 百分比**（18.75 = 18.75%）。
 - **對比規則**：前端算「目標 vs 現況」時，`target_level × 100` 才能和 `usage_rate` 同尺度比較（0.5×100=50% vs 18.75%）。兩者尺度不同是刻意的：target_level 是模型參數（習慣 0~1），usage_rate 是顯示值（習慣 %）。程式對接時務必換算，不可直接比 0.5 vs 18.75。
+- **`target_usage_rate`（後端已換算好的便利欄位，0~100%）**：`GET /stations/{id}` 與 `GET /stations/{id}/params` 回傳會在 params 外層附上 `target_usage_rate = target_level × 100`，前端可直接與 `usage_rate` 比大小，不必自己換算（避免 I-3 的誤判）。此為顯示便利值，內層 `target_level` 維持 0~1 不變。
 - config.yaml 的 `target.預設借用率百分比: 50` = target_level 0.5 的人類可讀版。
 - `outflow_rate` / `inflow_rate`：流出/流入率係數
 - `buffer_level`：站群緩衝水位（0~1），該站在站群中應保留的緩衝比例
@@ -793,7 +794,11 @@ Body: {
 效果：該站在 **dispatcher 排序時被當「最前綴」排到最優先**（不竄改 urgency 分數，見 model_architecture ③ C-02）；任務完成或時效到期後自動恢復。
 系統記錄稽核痕跡（誰、何時、原因）。
 
-**覆寫到期 vs 任務衝突**：覆寫到期時，該站尚未開始的任務一併降級/取消；執行中的任務不受影響。
+**覆寫到期 vs 任務衝突（規則已定案）**：覆寫「到期」或「被手動取消」時，由該覆寫產生、且仍在 `pending`/`assigned`（未開始）的任務**一併取消**（狀態轉 `cancelled`）；`in_progress`（執行中）的任務**不受影響**（保護正在路上的調度員）。
+- 依據：任務帶 `source_override_station_id` 欄位，標記「由哪個覆寫產生」，作為連動取消的判斷依據。
+- 為什麼要取消：否則會出現「系統已不認為這站緊急，調度員手上卻還有一張因它產生的任務」的矛盾。
+- 稽核：覆寫本身記 `emergency_override`（設定/到期/取消），連動取消的任務另記 `task_transfer`（記錄流向與原因），整個處理過程完整留痕。
+- 實作：`override_service` 於到期(`_purge_expired`)/取消(`cancel`)時呼叫 `task_manager.cancel_by_override_source()`。`in_progress` 因狀態機不允許 `→cancelled` 而自然被保護。
 
 **取消/查詢即時覆寫：**
 ```

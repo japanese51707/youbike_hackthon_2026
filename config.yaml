@@ -14,9 +14,14 @@
 # ── 資料源（NFR-7 可抽換）──
 data_source:
   mode: "mock"              # mock / historical / tdx / youbike_official（現場改這裡切換）
-  tdx_api_key: ""           # 若用 TDX，正式環境填
+  tdx_api_key: ""           # 若用 TDX，正式環境填（勿寫進版控，用環境變數）
   youbike_official_url: ""  # 若現場用 YouBike 公司自己的即時源，填這裡
   refresh_interval_sec: 60  # 多久抓一次即時資料
+  stale_after_sec: 180      # 即時資料超過幾秒視為過期（觸發降級標記）
+  # 歷史資料源（S3 Parquet，A1）
+  s3_bucket: "youbike-hackathon-2026"
+  s3_prefix: "youbike_data"           # 分區：youbike_data/year_month=YYYY-MM/data.parquet
+  historical_default_month: "2026-06" # 未指定月份時的預設分區
 
 # ── 資料保留（FR-12 熱溫冷）──
 retention:
@@ -45,6 +50,11 @@ trigger:
 # ── 目標水位（可被②AI 動態調整覆寫）──
 target:
   預設借用率百分比: 50       # 合理預設
+
+# ── 優先級分級門檻（dispatcher 用，緊急度分數 0~100 → high/medium/low）──
+priority_band:
+  high_min: 70              # 分數 ≥ 70 為 high
+  medium_min: 40            # 分數 ≥ 40 為 medium，其餘 low
 
 # ── 緊急度權重（urgency 用）──
 # 規則：所有權重範圍 [0, 1]，最大 1、最小 0。初始值待 B 優化。
@@ -139,5 +149,9 @@ travel:
 
 # ── 資安（main.py 用）──
 security:
-  allowed_origins: ["http://localhost:5173"]  # CORS 白名單
-  rate_limit_per_min: 120
+  allowed_origins: ["http://localhost:5173"]  # CORS 白名單（正式改前端網域）
+  # CORS 收斂：只開實際用到的方法/標頭，不用 *（NFR-8）
+  allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+  allowed_headers: ["Content-Type", "X-Operator-Id"]
+  rate_limit_per_min: 120         # 每 IP 每分鐘請求上限（入向 DoS 防護）
+  rate_limit_exempt_paths: ["/health"]  # 健康檢查不限流

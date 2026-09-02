@@ -493,11 +493,20 @@ travel:
   平均車速_公里每小時: 20
   每站搬運_分鐘: 5
 
-# ── 資安（main.py 用）──
+# ── 資安（main.py + middleware 用，A4）──
 security:
-  allowed_origins: ["http://localhost:5173"]  # CORS 白名單
-  rate_limit_per_min: 120
+  allowed_origins: ["http://localhost:5173"]  # CORS 白名單（正式改前端網域）
+  allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]  # CORS 收斂，不用 *
+  allowed_headers: ["Content-Type", "X-Operator-Id"]           # CORS 收斂，不用 *
+  rate_limit_per_min: 120         # 每 IP 每分鐘請求上限（入向 DoS 防護）
+  rate_limit_exempt_paths: ["/health"]  # 健康檢查不限流
 ```
+
+> **A1~A4 新增設定（實作階段補入，此處與 config.yaml 同步）**
+>
+> - **`data_source`（A1 資料源層）**：`mode`（mock/historical/tdx/youbike_official，換源只改這裡）、`stale_after_sec: 180`（即時資料超過幾秒視為過期，觸發降級標記）、`s3_bucket`/`s3_prefix`（historical 讀 S3 Parquet 分區位置）、`historical_default_month: "2026-06"`（未指定月份時的預設分區）、`tdx_api_key`/`youbike_official_url`（即時源憑證，勿進版控）、`refresh_interval_sec: 60`。
+> - **`priority_band`（A2 dispatcher 分級）**：`high_min: 70` / `medium_min: 40`，把緊急度分數 0~100 對照成 high/medium/low。**與 `alert` 段的 `warning_urgency`/`critical_urgency` 用途不同**：`priority_band` 用於調度建議清單分級，`alert` 門檻用於警示分級；兩者未來若要一致化由 A3/A2 協調。
+> - **`security` 收斂（A4）**：`allowed_methods` / `allowed_headers` 從 `*` 收斂為明確白名單；`rate_limit_exempt_paths` 讓健康檢查豁免限流。
 
 ---
 
