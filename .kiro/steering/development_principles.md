@@ -208,7 +208,14 @@ feature/C-xxx   # C 的功能分支
 - 範例：`feat(prediction): add quantile interval to predictor`
 
 ### 12.4 架構決策記錄（ADR）
-團隊在文件標為「待決策」的選項中做出選擇時，在 `docs/decisions/` 記錄一份 ADR（決策、理由、替代方案）。避免決策只存在某人腦中。
+
+完整治理規則見 `.kiro/steering/decision_governance.md`（每次必讀），決策索引在 `docs/decisions/README.md`。
+
+- 不只「待決策」項目：架構、API、Schema、資料庫、資料源、模型、AWS／部署、資安、重要依賴與跨模組慣例的選擇都要判斷是否需要 ADR
+- 每個實作計畫先寫明「沿用 ADR／不需 ADR 的理由／需要 proposed ADR」三者之一
+- 新決策先標 `proposed`；只有 owner／授權決策者明確核准後才能改為 `accepted`
+- 改變 accepted 決策時建立新 ADR 取代舊 ADR，不改寫歷史
+- 新增、接受、否決或取代 ADR 時同步更新索引；`commit-decision-map.md` 只在實作 commit 已存在時更新，`proposed` 階段不建立虛構對應
 
 ---
 
