@@ -118,7 +118,7 @@ A4 加固清單（已完成 ✅ 已驗證）：
 - [x] **帳號系統**：`core/security.py`（bcrypt 雜湊，不存原文）、`db/operators_repo.py`（CRUD+登入驗證）、`auth.py` 改查表、`api/accounts.py`（登入/建帳號/停用，建帳號需 maintainer 不開放自助註冊）
 - [ ] `params/station_params.py`、`param_layers.py`（①②③覆寫序）、`versioning.py`
 - [ ] I-10 兩端點：`GET /stations/{id}/params/history`、`POST /stations/{id}/params/rollback`
-- [ ] 記憶體狀態搬 SQLite：alert/override/audit/task 的 store 換 DB backend（一次搬乾淨）
+- [x] 記憶體狀態搬 SQLite：alert/override/audit/task 的 store 換 DB backend（一次搬乾淨）✅ 已驗證重啟後覆寫/稽核仍在
 - **驗收**：讀當前生效參數；②最適化 approve 後才存版本；可回溯
 - **依賴**：A0
 - **已完成重點**：

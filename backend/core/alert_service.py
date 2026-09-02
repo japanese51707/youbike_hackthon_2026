@@ -82,10 +82,11 @@ def _is_safe_callback_url(url: str) -> tuple[bool, str]:
 
 class AlertService:
     def __init__(self, audit=None):
-        self._alerts: dict[str, dict] = {}       # alert_id -> alert
-        self._subscriptions: list[dict] = []     # webhook 訂閱
-        self._sse_queue: list[dict] = []         # SSE 待推送佇列
-        self._seq = 0
+        # alerts / subscriptions 存 SQLite（db.alerts_repo）；
+        # SSE 佇列留記憶體（短暫推送緩衝，重啟消失無妨，前端會重連）
+        self._sse_queue: list[dict] = []
+        import uuid
+        self._uuid = uuid
         if audit is None:
             from .audit import get_audit_service
             audit = get_audit_service()
@@ -98,12 +99,10 @@ class AlertService:
         recommendations: Optional[list[dict]] = None,
     ) -> list[dict]:
         """掃描站點，產生警示清單。recommendations 供分級與建議動作。"""
+        from db import alerts_repo
         rec_by_id = {r["station_id"]: r for r in (recommendations or [])}
         # 已有「未讀」警示的站，不重複產生（去重：同站同等級一次就好）
-        existing = {
-            (a["station_id"], a["level"])
-            for a in self._alerts.values() if not a["acknowledged"]
-        }
+        existing = alerts_repo.unacked_station_levels()
         new_alerts = []
         for st in stations:
             rec = rec_by_id.get(st.get("station_id"))
@@ -116,8 +115,9 @@ class AlertService:
         return new_alerts
 
     def _create_alert(self, station: dict, level: str, rec: Optional[dict]) -> dict:
-        self._seq += 1
+        from db import alerts_repo
         ts = _now_iso()
+        suffix = self._uuid.uuid4().hex[:8]
         name = station.get("station_name", "")
         status = station.get("status")
         if status == "empty":
@@ -129,7 +129,7 @@ class AlertService:
         else:
             msg = f"{name}狀態需注意"
         alert = {
-            "alert_id": f"ALERT-{ts.replace(':', '').replace('-', '')}-{self._seq:04d}",
+            "alert_id": f"ALERT-{ts.replace(':', '').replace('-', '')}-{suffix}",
             "level": level,
             "station_id": station.get("station_id", ""),
             "station_name": name,
@@ -139,44 +139,37 @@ class AlertService:
             "suggested_action": (f"{rec['action']} {rec['quantity']} 台" if rec else None),
             "acknowledged": False,
         }
-        self._alerts[alert["alert_id"]] = alert
-        self._sse_queue.append(alert)          # 排入 SSE 佇列
+        alerts_repo.insert_alert(alert)
+        self._sse_queue.append(alert)          # 排入 SSE 佇列（記憶體）
         self._dispatch_webhooks(alert)          # 主動推播給機關
         return alert
 
     # ── 查詢 / 確認 ──
     def list_alerts(self, level: Optional[str] = None,
                     acknowledged: Optional[bool] = None) -> list[dict]:
-        alerts = list(self._alerts.values())
-        if level:
-            wanted = set(level.split(","))
-            alerts = [a for a in alerts if a["level"] in wanted]
-        if acknowledged is not None:
-            alerts = [a for a in alerts if a["acknowledged"] == acknowledged]
-        return alerts
+        from db import alerts_repo
+        return alerts_repo.list_alerts(level=level, acknowledged=acknowledged)
 
     def acknowledge(self, alert_id: str) -> Optional[dict]:
-        a = self._alerts.get(alert_id)
-        if a is None:
-            return None
-        a["acknowledged"] = True
-        return a
+        from db import alerts_repo
+        return alerts_repo.acknowledge(alert_id)
 
     # ── webhook 訂閱（出向資安）──
     def subscribe(self, callback_url: str, levels: list[str],
                   districts: list[str], token: Optional[str] = None) -> dict:
         """機關登記 webhook。callback_url 先過 SSRF 檢查，不安全就拒絕。"""
+        from db import alerts_repo
         safe, why = _is_safe_callback_url(callback_url)
         if not safe:
             raise ValueError(f"callback_url 未通過出向安全檢查：{why}")
         sub = {
-            "subscription_id": f"SUB-{len(self._subscriptions) + 1:04d}",
+            "subscription_id": f"SUB-{alerts_repo.count_subscriptions() + 1:04d}",
             "callback_url": callback_url,
             "levels": levels,
             "districts": districts,
             "token": token,
         }
-        self._subscriptions.append(sub)
+        alerts_repo.insert_subscription(sub)
         return sub
 
     def _dispatch_webhooks(self, alert: dict) -> None:
@@ -185,7 +178,8 @@ class AlertService:
         真正送出時要：帶 token、設超時、限制重試、payload 不含內部細節。
         A3 骨架先做「挑對象 + 記錄」，實際 httpx.post 待正式串接（現場才有真 URL）。
         """
-        for sub in self._subscriptions:
+        from db import alerts_repo
+        for sub in alerts_repo.list_subscriptions():
             if alert["level"] not in sub["levels"]:
                 continue
             if sub["districts"] and alert["district"] not in sub["districts"]:

@@ -50,34 +50,28 @@ class IllegalTransition(Exception):
 class TaskManager:
     """任務狀態機。任務以 dict 表示（對齊 DispatchTask schema）。
 
-    store 為外部注入的持久層；預設用記憶體 dict，A5 換 SQLite。
+    儲存：SQLite（db.tasks_repo）。重啟後未完成任務仍在，可續跑。
     """
-
-    def __init__(self, store: Optional[dict] = None):
-        # store: {task_id: task_dict}
-        self._store: dict[str, dict] = store if store is not None else {}
 
     # ── 查詢 ──
     def get(self, task_id: str) -> Optional[dict]:
-        return self._store.get(task_id)
+        from db import tasks_repo
+        return tasks_repo.get(task_id)
 
     def list_tasks(self, status: Optional[str] = None,
                    operator: Optional[str] = None) -> list[dict]:
-        tasks = list(self._store.values())
-        if status:
-            tasks = [t for t in tasks if t.get("task_status") == status]
-        if operator:
-            tasks = [t for t in tasks if t.get("assigned_operator") == operator]
-        return tasks
+        from db import tasks_repo
+        return tasks_repo.list_tasks(status=status, operator=operator)
 
     def pending_or_active(self) -> list[dict]:
         """未完成任務（可續跑的目標）。重啟後用來恢復進度。"""
-        done = {"completed"}
-        return [t for t in self._store.values() if t.get("task_status") not in done]
+        from db import tasks_repo
+        return tasks_repo.not_completed()
 
     # ── 狀態轉換核心 ──
     def _transition(self, task_id: str, to_status: str) -> dict:
-        task = self._store.get(task_id)
+        from db import tasks_repo
+        task = tasks_repo.get(task_id)
         if task is None:
             raise KeyError(f"找不到任務 {task_id}")
         cur = task.get("task_status", "pending")
@@ -87,27 +81,32 @@ class TaskManager:
                 f"（合法：{sorted(_TRANSITIONS.get(cur, set())) or '無（終態）'}）"
             )
         task["task_status"] = to_status
+        tasks_repo.update(task)
         return task
 
     # ── 生命週期操作 ──
     def create(self, task: dict) -> dict:
         """建立任務（pending）。task 需含 task_id、task_type。"""
+        from db import tasks_repo
         tid = task["task_id"]
-        if tid in self._store:
+        if tasks_repo.exists(tid):
             raise ValueError(f"任務 {tid} 已存在")
         task.setdefault("task_status", "pending")
-        self._store[tid] = task
-        return task
+        tasks_repo.insert(task)
+        return tasks_repo.get(tid)
 
     def assign(self, task_id: str, operator_id: str) -> dict:
         """指派給調度員（pending→assigned）。"""
+        from db import tasks_repo
         task = self._transition(task_id, "assigned")
         task["assigned_operator"] = operator_id
+        tasks_repo.update(task)
         return task
 
     def reassign(self, task_id: str, new_operator_id: str) -> dict:
         """動態轉派（assigned→assigned，換人）。僅 emergency 型、未開始前可轉。"""
-        task = self._store.get(task_id)
+        from db import tasks_repo
+        task = tasks_repo.get(task_id)
         if task is None:
             raise KeyError(f"找不到任務 {task_id}")
         if task.get("task_status") != "assigned":
@@ -120,8 +119,8 @@ class TaskManager:
                 f"任務 {task_id} 為 '{task.get('task_type')}' 型，"
                 f"只有 emergency 型可動態轉派（normal 綁定調度員）"
             )
-        task = self._transition(task_id, "assigned")   # 合法（assigned→assigned）
         task["assigned_operator"] = new_operator_id
+        tasks_repo.update(task)   # assigned→assigned，狀態不變只換人
         return task
 
     def start(self, task_id: str) -> dict:
@@ -145,9 +144,11 @@ class TaskManager:
 
         記錄取消原因到任務本身，供稽核與前端顯示。
         """
+        from db import tasks_repo
         task = self._transition(task_id, "cancelled")   # in_progress 會在此被擋
         task["cancel_reason"] = reason
         task["cancelled_by"] = operator
+        tasks_repo.update(task)
         return task
 
     def cancel_by_override_source(
@@ -159,15 +160,11 @@ class TaskManager:
         in_progress 執行中的不受影響，見 spec / api_contract 3.20）。
         回傳被取消的任務清單。
         """
-        affected = [
-            t for t in self._store.values()
-            if t.get("source_override_station_id") == station_id
-            and t.get("task_status") in ("pending", "assigned")
-        ]
+        from db import tasks_repo
+        affected = tasks_repo.find_by_override_source(station_id, ["pending", "assigned"])
         cancelled = []
         for t in affected:
-            self.cancel(t["task_id"], reason=reason, operator=operator)
-            cancelled.append(t)
+            cancelled.append(self.cancel(t["task_id"], reason=reason, operator=operator))
         return cancelled
 
 

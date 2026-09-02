@@ -26,8 +26,13 @@ _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 _memory_conn: Optional[sqlite3.Connection] = None
 
 
+# 專案根（backend/ 的上一層），用來把 config 的相對路徑解析成絕對路徑，
+# 避免因啟動工作目錄不同（專案根 vs backend/）而疊出 backend/backend/data。
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
+
+
 def _db_path() -> str:
-    """DB 路徑：環境變數 > config.database.path > 預設 backend/data/youbike.db。"""
+    """DB 路徑：環境變數 > config.database.path（相對於專案根）> 預設 backend/data/youbike.db。"""
     env = os.environ.get("YOUBIKE_DB_PATH")
     if env:
         return env
@@ -35,7 +40,10 @@ def _db_path() -> str:
         from config_loader import get_config
         p = get_config().get("database", {}).get("path")
         if p:
-            return p
+            if p == ":memory:" or os.path.isabs(p):
+                return p
+            # 相對路徑一律相對於專案根，不受啟動工作目錄影響
+            return str(_PROJECT_ROOT / p)
     except Exception:
         pass
     return str(Path(__file__).parent.parent / "data" / "youbike.db")

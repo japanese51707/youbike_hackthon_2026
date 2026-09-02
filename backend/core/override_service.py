@@ -20,7 +20,7 @@
   實作：注入 task_manager（set_task_manager），在 _purge_expired / cancel 時呼叫 _cascade_cancel_tasks。
   任務用 source_override_station_id 標記「由哪個覆寫產生」，作為連動取消的依據。
 
-儲存：記憶體版，A5 接 SQLite。
+儲存：SQLite（db.overrides_repo）。重啟後生效中的覆寫仍在。
 """
 
 from __future__ import annotations
@@ -36,9 +36,8 @@ def _now() -> _dt.datetime:
 
 
 class OverrideService:
-    def __init__(self, store: Optional[dict] = None, audit=None, task_manager=None):
-        # store: {station_id: {reason, operator, applied_at, expire_at}}
-        self._store: dict[str, dict] = store if store is not None else {}
+    def __init__(self, audit=None, task_manager=None):
+        # 覆寫狀態存 SQLite（db.overrides_repo），不再用記憶體 dict
         self._audit = audit or get_audit_service()
         # 可選：注入 task_manager，覆寫到期/取消時連動取消未開始的任務。
         # 不注入時退化為「只管覆寫狀態」（測試或無任務情境）。
@@ -91,7 +90,8 @@ class OverrideService:
             "expire_at": expire_at.isoformat(timespec="seconds"),
             "expire_minutes": minutes,
         }
-        self._store[station_id] = entry
+        from db import overrides_repo
+        overrides_repo.upsert(entry)
         # 稽核留痕
         self._audit.record(
             type="emergency_override",
@@ -105,43 +105,47 @@ class OverrideService:
 
     def _purge_expired(self) -> None:
         """惰性清理：把已過期的覆寫移除，並記一筆自動恢復稽核。"""
+        from db import overrides_repo
         now = _now()
-        expired = [
-            sid for sid, e in self._store.items()
-            if _dt.datetime.fromisoformat(e["expire_at"]) <= now
-        ]
-        for sid in expired:
-            e = self._store.pop(sid)
-            self._audit.record(
-                type="emergency_override",
-                operator="system",
-                action="緊急覆寫時效到期，自動恢復",
-                station_id=sid,
-                reason=f"原因：{e.get('reason')}（由 {e.get('operator')} 設定）",
-            )
-            # 連動：到期時取消該覆寫產生且仍未開始的任務（in_progress 不受影響）
-            self._cascade_cancel_tasks(sid, cause="到期")
+        for e in overrides_repo.all_active():
+            if _dt.datetime.fromisoformat(e["expire_at"]) <= now:
+                sid = e["station_id"]
+                overrides_repo.delete(sid)
+                self._audit.record(
+                    type="emergency_override",
+                    operator="system",
+                    action="緊急覆寫時效到期，自動恢復",
+                    station_id=sid,
+                    reason=f"原因：{e.get('reason')}（由 {e.get('operator')} 設定）",
+                )
+                # 連動：到期時取消該覆寫產生且仍未開始的任務（in_progress 不受影響）
+                self._cascade_cancel_tasks(sid, cause="到期")
 
     def active_overrides(self) -> list[dict]:
         """目前生效中的覆寫（已過期的自動清掉）。給 3.20 GET /overrides/active。"""
         self._purge_expired()
-        return list(self._store.values())
+        from db import overrides_repo
+        return overrides_repo.all_active()
 
     def active_station_ids(self) -> set[str]:
         """生效中的覆寫站集合，給 dispatcher 當最前綴。"""
         self._purge_expired()
-        return set(self._store.keys())
+        from db import overrides_repo
+        return {e["station_id"] for e in overrides_repo.all_active()}
 
     def is_active(self, station_id: str) -> bool:
         self._purge_expired()
-        return station_id in self._store
+        from db import overrides_repo
+        return overrides_repo.get(station_id) is not None
 
     def cancel(self, station_id: str, operator: str = "system") -> bool:
         """手動取消覆寫。回傳是否有取消到東西。"""
         self._purge_expired()
-        entry = self._store.pop(station_id, None)
+        from db import overrides_repo
+        entry = overrides_repo.get(station_id)
         if entry is None:
             return False
+        overrides_repo.delete(station_id)
         self._audit.record(
             type="emergency_override",
             operator=operator,

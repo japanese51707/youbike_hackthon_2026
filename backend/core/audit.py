@@ -33,11 +33,11 @@ def _now_iso() -> str:
 
 
 class AuditService:
-    """append-only 稽核留痕。不可修改、不可刪除既有紀錄（稽核完整性）。"""
+    """append-only 稽核留痕（SQLite backend）。不可修改、不可刪除既有紀錄（稽核完整性）。"""
 
-    def __init__(self, store: Optional[list] = None):
-        self._logs: list[dict] = store if store is not None else []
-        self._seq = 0
+    def __init__(self):
+        import uuid
+        self._uuid = uuid
 
     def record(
         self,
@@ -49,15 +49,16 @@ class AuditService:
         expired_at: Optional[str] = None,
         task_duration_minutes: Optional[int] = None,
     ) -> dict:
-        """寫一筆稽核。type 非法直接 raise（失敗要看得見）。"""
+        """寫一筆稽核（存 SQLite）。type 非法直接 raise（失敗要看得見）。"""
         if type not in _VALID_TYPES:
             raise ValueError(
                 f"未知的稽核類型 '{type}'（合法：{sorted(_VALID_TYPES)}）"
             )
-        self._seq += 1
         ts = _now_iso()
+        # log_id 用時間戳 + 短 uuid，避免同秒多筆碰撞
+        suffix = self._uuid.uuid4().hex[:8]
         log = {
-            "log_id": f"LOG-{ts.replace(':', '').replace('-', '')}-{self._seq:04d}",
+            "log_id": f"LOG-{ts.replace(':', '').replace('-', '')}-{suffix}",
             "type": type,
             "station_id": station_id,
             "operator": operator,
@@ -67,7 +68,8 @@ class AuditService:
             "expired_at": expired_at,
             "task_duration_minutes": task_duration_minutes,
         }
-        self._logs.append(log)
+        from db import audit_repo
+        audit_repo.insert(log)
         return log
 
     def query(
@@ -76,17 +78,12 @@ class AuditService:
         station_id: Optional[str] = None,
         operator: Optional[str] = None,
     ) -> list[dict]:
-        logs = self._logs
-        if type:
-            logs = [x for x in logs if x["type"] == type]
-        if station_id:
-            logs = [x for x in logs if x.get("station_id") == station_id]
-        if operator:
-            logs = [x for x in logs if x.get("operator") == operator]
-        return list(logs)
+        from db import audit_repo
+        return audit_repo.query(type=type, station_id=station_id, operator=operator)
 
     def all(self) -> list[dict]:
-        return list(self._logs)
+        from db import audit_repo
+        return audit_repo.all_logs()
 
 
 # ── 模組級單例（跨模組共用同一份留痕）──
