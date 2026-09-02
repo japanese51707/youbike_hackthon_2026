@@ -147,6 +147,10 @@ travel:
   平均車速_公里每小時: 20    # 市區調度車平均速度，用於距離→時間換算
   每站搬運_分鐘: 5           # 每站取/送車的平均作業時間
 
+# ── 資料庫（A5 SQLite 持久層）──
+database:
+  path: "backend/data/youbike.db"  # SQLite 檔案路徑；測試可設 ":memory:"，或用環境變數 YOUBIKE_DB_PATH 覆寫
+
 # ── 資安（main.py 用）──
 security:
   allowed_origins: ["http://localhost:5173"]  # CORS 白名單（正式改前端網域）

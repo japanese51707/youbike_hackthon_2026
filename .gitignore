@@ -16,6 +16,12 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 
+# === SQLite 資料庫（執行期產物，不進 Git）===
+*.db
+*.db-journal
+*.sqlite
+backend/data/
+
 # === 大型資料（放 S3，不進 Git；見 README 資料存放說明）===
 youbike資料集/
 output/

@@ -12,19 +12,19 @@ A0 階段先做骨架（角色對照用記憶體 dict）；A4/A5 接 SQLite oper
 
 from fastapi import Depends, Header, HTTPException
 
-# A0 骨架：先寫死幾個測試帳號。A4/A5 改為查 SQLite operators 表。
-_OPERATOR_ROLES = {
-    "OP-001": "operator",
-    "OP-002": "dispatcher",
-    "OP-003": "maintainer",
-}
-
 
 def get_operator(x_operator_id: str | None = Header(default=None)) -> dict:
-    """驗證 X-Operator-Id，回傳 {operator_id, role}。缺或無效則 401。"""
-    if not x_operator_id or x_operator_id not in _OPERATOR_ROLES:
+    """驗證 X-Operator-Id，回傳 {operator_id, role}。缺或無效（含停用）則 401。
+
+    A5 起改查 SQLite operators 表（原本寫死 3 帳號）。停用帳號 get_role 回 None → 視為無效。
+    """
+    if not x_operator_id:
         raise HTTPException(status_code=401, detail="缺少或無效的 X-Operator-Id")
-    return {"operator_id": x_operator_id, "role": _OPERATOR_ROLES[x_operator_id]}
+    from db.operators_repo import get_role
+    role = get_role(x_operator_id)
+    if role is None:
+        raise HTTPException(status_code=401, detail="缺少或無效的 X-Operator-Id")
+    return {"operator_id": x_operator_id, "role": role}
 
 
 def require_role(*allowed_roles: str):

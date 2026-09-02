@@ -43,3 +43,41 @@ def test_readonly_endpoints_no_auth(client):
     """唯讀端點不需身分。"""
     for path in ["/api/v1/stations", "/api/v1/alerts", "/health"]:
         assert client.get(path).status_code == 200
+
+
+# ── A5 帳號系統 ──
+
+def test_login_success(client):
+    """正確帳密登入 → 200，回帳號不含密碼雜湊。"""
+    r = client.post("/api/v1/auth/login",
+                    json={"operator_id": "OP-002", "password": "youbike-dp"})
+    assert r.status_code == 200
+    assert "password_hash" not in r.json()["operator"]
+
+
+def test_login_wrong_password(client):
+    """密碼錯 → 401。"""
+    r = client.post("/api/v1/auth/login",
+                    json={"operator_id": "OP-002", "password": "wrong"})
+    assert r.status_code == 401
+
+
+def test_create_account_requires_maintainer(client):
+    """建帳號：dispatcher 越權 403、maintainer 成功 200。"""
+    body = {"operator_id": "OP-NEW", "name": "新人", "role": "operator", "password": "pw12345"}
+    assert client.post("/api/v1/accounts", json=body, headers=OP_DISPATCHER).status_code == 403
+    assert client.post("/api/v1/accounts", json=body, headers=OP_MAINTAINER).status_code == 200
+
+
+def test_deactivate_account_blocks_login(client):
+    """停用帳號後，該帳號無法登入、也無法通過 auth。"""
+    body = {"operator_id": "OP-TMP", "name": "臨時", "role": "operator", "password": "pw12345"}
+    client.post("/api/v1/accounts", json=body, headers=OP_MAINTAINER)
+    # 停用前能登入
+    assert client.post("/api/v1/auth/login",
+                       json={"operator_id": "OP-TMP", "password": "pw12345"}).status_code == 200
+    # 停用
+    assert client.delete("/api/v1/accounts/OP-TMP", headers=OP_MAINTAINER).status_code == 200
+    # 停用後登入失敗
+    assert client.post("/api/v1/auth/login",
+                       json={"operator_id": "OP-TMP", "password": "pw12345"}).status_code == 401

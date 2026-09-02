@@ -9,6 +9,8 @@ A0 階段所有端點回 mock，之後 A1~A5 逐步接真實邏輯。
 文件：http://127.0.0.1:8000/docs
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -19,16 +21,28 @@ from config_loader import get_config
 from middleware import RateLimitMiddleware
 from api import (
     stations, dispatch, operators, alerts,
-    optimization, overrides, kpi, events, audit, weather,
+    optimization, overrides, kpi, events, audit, weather, accounts,
 )
 
 cfg = get_config()
 _sec = cfg.get("security", {})
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """啟動時初始化 SQLite schema 並種入預設帳號（A5）。"""
+    from db import init_db
+    from db.operators_repo import seed_default_operators
+    init_db()
+    seed_default_operators()
+    yield
+
+
 app = FastAPI(
     title="YouBike 智慧調度系統 API",
     version="0.1.0-A0",
     description="A0 骨架：所有端點回 mock 資料。核心約束：AI 只估計、規則引擎決策。",
+    lifespan=lifespan,
 )
 
 # Rate limit（入向 DoS 防護，NFR-8）。先掛（外層），CORS 後掛（內層先跑）。
@@ -81,7 +95,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 # 掛載所有路由
 for module in (stations, dispatch, operators, alerts,
-               optimization, overrides, kpi, events, audit, weather):
+               optimization, overrides, kpi, events, audit, weather, accounts):
     app.include_router(module.router)
 
 
