@@ -1,0 +1,93 @@
+{
+  "_說明": "假的成品資料，給 C 開發前端用。格式對齊 api_contract §2，數字為範例（非真實）。站名/座標用真實新北市站點讓地圖擬真。後端 A1 完成後會用真實資料取代。",
+
+  "stations": [
+    {"station_id": "500101001", "station_name": "捷運南勢角站(4號出口)", "district": "中和區", "lat": 24.99348, "lng": 121.48758, "total_docks": 64, "available_bikes": 2, "available_docks": 62, "usage_rate": 3.1, "status": "low", "service_available": true, "area_type": "transit", "terrain": "gentle_down", "timestamp": "2026-06-02T08:00:00", "source_timestamp": "2026-06-02T07:59:40", "data_freshness": "live"},
+    {"station_id": "500101002", "station_name": "捷運景安站", "district": "中和區", "lat": 24.99420, "lng": 121.50490, "total_docks": 40, "available_bikes": 0, "available_docks": 40, "usage_rate": 0.0, "status": "empty", "service_available": true, "area_type": "transit", "terrain": "flat", "timestamp": "2026-06-02T08:00:00", "source_timestamp": "2026-06-02T07:59:40", "data_freshness": "live"},
+    {"station_id": "500102010", "station_name": "板橋車站", "district": "板橋區", "lat": 25.01427, "lng": 121.46256, "total_docks": 80, "available_bikes": 45, "available_docks": 35, "usage_rate": 56.3, "status": "normal", "service_available": true, "area_type": "transit", "terrain": "flat", "timestamp": "2026-06-02T08:00:00", "source_timestamp": "2026-06-02T07:59:40", "data_freshness": "live"},
+    {"station_id": "500103005", "station_name": "三重國小", "district": "三重區", "lat": 25.06868, "lng": 121.48071, "total_docks": 77, "available_bikes": 77, "available_docks": 0, "usage_rate": 100.0, "status": "full", "service_available": true, "area_type": "school", "terrain": "flat", "timestamp": "2026-06-02T08:00:00", "source_timestamp": "2026-06-02T07:59:40", "data_freshness": "live"},
+    {"station_id": "500104020", "station_name": "新莊運動中心", "district": "新莊區", "lat": 25.03600, "lng": 121.45030, "total_docks": 50, "available_bikes": 42, "available_docks": 8, "usage_rate": 84.0, "status": "high", "service_available": true, "area_type": "leisure", "terrain": "flat", "timestamp": "2026-06-02T08:00:00", "source_timestamp": "2026-06-02T07:59:40", "data_freshness": "live"},
+    {"station_id": "500105011", "station_name": "蘆洲國民運動中心", "district": "蘆洲區", "lat": 25.09150, "lng": 121.47340, "total_docks": 46, "available_bikes": 5, "available_docks": 41, "usage_rate": 10.9, "status": "low", "service_available": true, "area_type": "leisure", "terrain": "flat", "timestamp": "2026-06-02T08:00:00", "source_timestamp": "2026-06-02T07:59:40", "data_freshness": "live"},
+    {"station_id": "500106003", "station_name": "永和國小", "district": "永和區", "lat": 25.00780, "lng": 121.51420, "total_docks": 38, "available_bikes": 20, "available_docks": 18, "usage_rate": 52.6, "status": "normal", "service_available": true, "area_type": "school", "terrain": "flat", "timestamp": "2026-06-02T08:00:00", "source_timestamp": "2026-06-02T07:59:40", "data_freshness": "live"},
+    {"station_id": "500107008", "station_name": "土城醫院", "district": "土城區", "lat": 24.97230, "lng": 121.44680, "total_docks": 60, "available_bikes": 30, "available_docks": 30, "usage_rate": 50.0, "status": "normal", "service_available": false, "area_type": "mixed", "terrain": "gentle_up", "timestamp": "2026-06-02T08:00:00", "source_timestamp": "2026-06-02T07:55:00", "data_freshness": "stale"},
+    {"station_id": "500108002", "station_name": "林口三井Outlet", "district": "林口區", "lat": 25.07158, "lng": 121.36629, "total_docks": 63, "available_bikes": 48, "available_docks": 15, "usage_rate": 76.2, "status": "high", "service_available": true, "area_type": "commercial", "terrain": "moderate_up", "timestamp": "2026-06-02T08:00:00", "source_timestamp": "2026-06-02T07:59:40", "data_freshness": "live"},
+    {"station_id": "500109014", "station_name": "新店大坪林站", "district": "新店區", "lat": 24.98280, "lng": 121.54140, "total_docks": 42, "available_bikes": 8, "available_docks": 34, "usage_rate": 19.0, "status": "low", "service_available": true, "area_type": "transit", "terrain": "gentle_down", "timestamp": "2026-06-02T08:00:00", "source_timestamp": "2026-06-02T07:59:40", "data_freshness": "live"}
+  ],
+
+  "station_detail": {
+    "current": {"station_id": "500101001", "station_name": "捷運南勢角站(4號出口)", "district": "中和區", "lat": 24.99348, "lng": 121.48758, "total_docks": 64, "available_bikes": 2, "available_docks": 62, "usage_rate": 3.1, "status": "low", "service_available": true, "area_type": "transit", "terrain": "gentle_down", "timestamp": "2026-06-02T08:00:00", "source_timestamp": "2026-06-02T07:59:40", "data_freshness": "live"},
+    "prediction": {"station_id": "500101001", "predict_from": "2026-06-02T08:00:00", "predict_target_time": "2026-06-02T08:35:00", "horizon_minutes": 35, "horizon_source": "dispatch", "predicted_available": 1.0, "lower_bound": 0.0, "upper_bound": 4.0},
+    "params": {"station_id": "500101001", "params": {"outflow_rate": 1.3, "inflow_rate": 0.9, "target_level": 0.5, "buffer_level": 0.5, "nearby_stations": ["500101002"], "capacity_class": 3}, "param_source": "ai_optimized", "override_active": false, "conditions": [{"param": "outflow_rate", "value": 1.3, "reason": "捷運轉乘站 + 鄰近學區"}], "last_optimized": "2026-06-01T03:00:00"},
+    "history": [
+      {"timestamp": "2026-06-02T07:00:00", "available_bikes": 20, "available_docks": 44, "usage_rate": 31.3, "urgency_score": 25, "status": "normal", "anomaly_tags": []},
+      {"timestamp": "2026-06-02T07:30:00", "available_bikes": 10, "available_docks": 54, "usage_rate": 15.6, "urgency_score": 55, "status": "low", "anomaly_tags": []},
+      {"timestamp": "2026-06-02T08:00:00", "available_bikes": 2, "available_docks": 62, "usage_rate": 3.1, "urgency_score": 88, "status": "low", "anomaly_tags": []}
+    ]
+  },
+
+  "heatmap": {
+    "dimension": "area_type",
+    "groups": {
+      "transit": {"count": 4, "avg_usage": 34.6, "empty_count": 1},
+      "school": {"count": 2, "avg_usage": 76.3, "empty_count": 0},
+      "leisure": {"count": 2, "avg_usage": 47.5, "empty_count": 0},
+      "commercial": {"count": 1, "avg_usage": 76.2, "empty_count": 0},
+      "mixed": {"count": 1, "avg_usage": 50.0, "empty_count": 0}
+    }
+  },
+
+  "timeline": {
+    "district": "中和區",
+    "date": "2026-06-02",
+    "frames": [
+      {"time": "07:00", "stations": [{"station_id": "500101001", "available_bikes": 20, "available_docks": 44, "usage_rate": 31.3, "urgency_score": 25, "status": "normal"}, {"station_id": "500101002", "available_bikes": 15, "available_docks": 25, "usage_rate": 37.5, "urgency_score": 20, "status": "normal"}]},
+      {"time": "07:30", "stations": [{"station_id": "500101001", "available_bikes": 10, "available_docks": 54, "usage_rate": 15.6, "urgency_score": 55, "status": "low"}, {"station_id": "500101002", "available_bikes": 6, "available_docks": 34, "usage_rate": 15.0, "urgency_score": 50, "status": "low"}]},
+      {"time": "08:00", "stations": [{"station_id": "500101001", "available_bikes": 2, "available_docks": 62, "usage_rate": 3.1, "urgency_score": 88, "status": "low"}, {"station_id": "500101002", "available_bikes": 0, "available_docks": 40, "usage_rate": 0.0, "urgency_score": 95, "status": "empty"}]}
+    ]
+  },
+
+  "recommendations": [
+    {"recommendation_id": "REC-20260602-0800-001", "station_id": "500101002", "station_name": "捷運景安站", "district": "中和區", "action": "補車", "quantity": 20, "priority_score": 95.0, "priority_level": "high", "reason": "已空站（可借0台），預測30分鐘內持續無車", "current_available": 0, "predicted_at_arrival": 0, "lat": 24.99420, "lng": 121.50490},
+    {"recommendation_id": "REC-20260602-0800-002", "station_id": "500101001", "station_name": "捷運南勢角站(4號出口)", "district": "中和區", "action": "補車", "quantity": 30, "priority_score": 88.0, "priority_level": "high", "reason": "預測調度員到達時(35分後)僅剩0台，將空站", "current_available": 2, "predicted_at_arrival": 0, "lat": 24.99348, "lng": 121.48758},
+    {"recommendation_id": "REC-20260602-0800-003", "station_id": "500103005", "station_name": "三重國小", "district": "三重區", "action": "取車", "quantity": 30, "priority_score": 72.0, "priority_level": "medium", "reason": "已滿站（可還0位），使用者無法還車", "current_available": 77, "predicted_at_arrival": 77, "lat": 25.06868, "lng": 121.48071}
+  ],
+
+  "tasks": [
+    {"task_id": "TASK-20260602-0800-001", "task_type": "emergency", "assigned_operator": "OP-001", "task_status": "assigned", "route": [{"seq": 1, "station_id": "500102010", "station_name": "板橋車站", "action": "取車", "quantity": 20, "lat": 25.01427, "lng": 121.46256, "stop_status": "pending"}, {"seq": 2, "station_id": "500101002", "station_name": "捷運景安站", "action": "補車", "quantity": 20, "lat": 24.99420, "lng": 121.50490, "stop_status": "pending"}], "estimated_travel_minutes": 18, "estimated_work_minutes": 10, "estimated_total_minutes": 28, "estimated_distance_km": 5.2, "estimated_fuel_cost": 26, "route_map_url": "https://www.google.com/maps/dir/?api=1&origin=25.01427,121.46256&destination=24.99420,121.50490&travelmode=driving", "assigned_at": "2026-06-02T08:05:00"}
+  ],
+
+  "kpi": {"empty_rate": 5.66, "full_rate": 1.93, "avg_usage_rate": 45.2, "total_stations": 1583, "stations_need_dispatch": 15, "timestamp": "2026-06-02T08:00:00"},
+
+  "simulation_replay": {
+    "指標": ["尖峰空站率(%)", "全日空站率(%)", "全日滿站率(%)"],
+    "實際歷史": [7.19, 5.66, 1.93],
+    "本系統模擬": [5.45, 4.13, 0.28]
+  },
+
+  "alerts": [
+    {"alert_id": "ALERT-20260602-0800-001", "level": "critical", "station_id": "500101002", "station_name": "捷運景安站", "district": "中和區", "message": "捷運景安站已空站，建議立即補車", "triggered_at": "2026-06-02T08:00:00", "suggested_action": "補車 20 台", "acknowledged": false},
+    {"alert_id": "ALERT-20260602-0800-002", "level": "warning", "station_id": "500101001", "station_name": "捷運南勢角站(4號出口)", "district": "中和區", "message": "捷運南勢角站預測30分鐘內將空站", "triggered_at": "2026-06-02T08:00:00", "suggested_action": "補車 30 台", "acknowledged": false}
+  ],
+
+  "operators": [
+    {"operator_id": "OP-001", "name": "王小明", "role": "operator", "status": "busy", "current_location": {"lat": 25.014, "lng": 121.462}, "current_task_id": "TASK-20260602-0800-001", "task_queue": ["TASK-20260602-0800-001"], "today_stats": {"completed_tasks": 6, "total_bikes_moved": 142, "total_work_minutes": 285, "on_duty_since": "2026-06-02T06:00:00"}},
+    {"operator_id": "OP-002", "name": "李主任", "role": "dispatcher", "status": "on_duty", "current_location": {"lat": 25.010, "lng": 121.470}, "current_task_id": null, "task_queue": [], "today_stats": {"completed_tasks": 0, "total_bikes_moved": 0, "total_work_minutes": 120, "on_duty_since": "2026-06-02T06:00:00"}}
+  ],
+
+  "dispatch_overview": {
+    "timestamp": "2026-06-02T08:00:00",
+    "operators": {"on_duty": 12, "busy": 9, "resting": 2, "off_duty": 1},
+    "today_totals": {"completed_tasks": 48, "pending_tasks": 15, "emergency_tasks": 3, "total_bikes_moved": 1120, "total_distance_km": 210, "estimated_fuel_cost": 1050},
+    "station_summary": {"empty_stations": 45, "full_stations": 12, "need_dispatch": 15}
+  },
+
+  "weather": {"district": "中和區", "condition": "rain", "temperature": 24.5, "rain_probability": 80, "description": "陣雨，建議留意站點需求下降", "timestamp": "2026-06-02T08:00:00"},
+
+  "events": [
+    {"event_id": "EVT-20261231-001", "event_name": "新北歡樂耶誕城", "location": {"lat": 25.01200, "lng": 121.46500}, "expected_attendance": 30000, "event_type": "festival", "start_time": "2026-12-01T18:00:00", "end_time": "2026-12-31T22:00:00", "dispatch_requested": true, "influence_radius_km": 1.5, "affected_stations": [{"station_id": "500102010", "distance_km": 0.3, "influence_factor": 2.5}]}
+  ],
+
+  "audit_logs": [
+    {"log_id": "LOG-20260602-0800-001", "type": "emergency_override", "station_id": "500101002", "operator": "李主任", "action": "緊急覆寫：拉高優先級", "reason": "站前突發活動", "timestamp": "2026-06-02T08:00:00", "expired_at": "2026-06-02T10:00:00", "task_duration_minutes": null}
+  ]
+}
