@@ -4,9 +4,47 @@
 
 ---
 
-## 目前階段：✅ 完成 A4，尚未進入 A5
+## 目前階段：✅ 完成 A5，尚未進入 A6
 
-後端 A0~A4 已完成並通過測試，程式碼已進版控。下一步為 A5（SQLite 持久層 + 三層參數 + 帳號系統）。
+後端 A0~A5 已完成並通過測試（43 測試全綠），程式碼已進版控。
+下一步為 A6（整合 + 模擬重放），需 B 的模型與 C 的前端就緒才能全面串接。
+
+---
+
+## [A5 完成] — 2026-09-02
+
+### 相較 A4 版的主要更新
+
+A4 版狀態：後端 A0~A4，狀態全在記憶體、無資料庫、帳號寫死 3 個。
+
+本版新增（A5 = SQLite 持久層 + 帳號系統 + 三層參數）：
+
+**SQLite 持久層**
+- `db/`：七張表（operators/tasks/audit_logs/station_params/alerts/alert_subscriptions/events）+ overrides 輔助表
+- 連線層支援 `:memory:`（測試用）；config 加 `database.path`
+
+**帳號系統（資安強化）**
+- 密碼 bcrypt 雜湊，DB 只存亂碼，絕不存原文（直接用 bcrypt，passlib 已過時）
+- `auth.py` 從寫死 3 帳號改成查 SQLite；停用帳號自動失效
+- 帳號管理端點：登入、建帳號（需 maintainer，不開放自助註冊）、停用
+- 登入失敗統一訊息防帳號枚舉；停用取代刪除保留稽核關聯
+
+**記憶體狀態全搬 SQLite（一次搬乾淨）**
+- audit/override/task/alert 四個 service 改 DB backend
+- 驗證：重啟後端後覆寫/稽核/參數版本都還在（解決 A4 版重啟即消失的問題）
+
+**三層參數 + 版本管理**
+- `params/`：①基礎 ②AI最適化 ③覆寫狀態 的疊加；③不寫參數只給 override_active 旗標
+- 版本控制：②approve 才存版本、reason 必填、可一鍵回溯
+- I-10 兩端點：`GET /params/history`、`POST /params/rollback`（需 maintainer）
+- param_source 只有 base/ai_optimized（覆寫時仍為 base，非 emergency_override）
+
+**測試**：43 個全綠（新增帳號 4 + 參數 8）
+
+### 尚未處理（留待 A6 或現場）
+- A6：整合 B 模型 + C 前端 + 模擬重放
+- I-7：根目錄 PoC 腳本歸檔
+- I-9：webhook 實際送出、SSE 改真正 EventSource
 
 ---
 
