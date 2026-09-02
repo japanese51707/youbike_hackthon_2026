@@ -113,11 +113,21 @@ A4 加固清單（已完成 ✅ 已驗證）：
 - 出向 webhook（推給機關）：SSRF 檢查到位；實際送出加固待現場
 - SSE `/alerts/stream`：現為佇列骨架；正式改 EventSource 時，串流連線要驗證訂閱者身分（A5 帳號後）
 
-### A5 — params 三層 + SQLite
+### A5 — params 三層 + SQLite + 帳號系統（進行中）
+- [x] **建 SQLite 七張表**（design §8）：`db/schema.sql` + `db/connection.py`（連線/初始化，支援 :memory: 測試）
+- [x] **帳號系統**：`core/security.py`（bcrypt 雜湊，不存原文）、`db/operators_repo.py`（CRUD+登入驗證）、`auth.py` 改查表、`api/accounts.py`（登入/建帳號/停用，建帳號需 maintainer 不開放自助註冊）
 - [ ] `params/station_params.py`、`param_layers.py`（①②③覆寫序）、`versioning.py`
-- [ ] 建 SQLite 七張表（design §8）
+- [ ] I-10 兩端點：`GET /stations/{id}/params/history`、`POST /stations/{id}/params/rollback`
+- [ ] 記憶體狀態搬 SQLite：alert/override/audit/task 的 store 換 DB backend（一次搬乾淨）
 - **驗收**：讀當前生效參數；②最適化 approve 後才存版本；可回溯
 - **依賴**：A0
+- **已完成重點**：
+  - bcrypt 直接用（不透過 passlib，passlib 已過時且與 bcrypt 5.x 不相容）；測試用 BCRYPT_ROUNDS=4 加速
+  - 密碼絕不存原文、對外回傳不含 password_hash、登入失敗統一訊息防帳號枚舉
+  - 停用取代刪除（保留稽核關聯）；停用後 get_role 回 None → auth 視為無效
+  - 建/停用帳號都記稽核；35 測試全綠（含 4 個帳號測試）
+  - lifespan 啟動時 init_db + seed 3 預設帳號（OP-001/002/003）
+- **待續（本回合未做）**：三層參數 + 版本 + I-10 端點；alert/override/audit/task 記憶體狀態搬 SQLite
 
 ### A6 — 整合 + 模擬重放
 - [ ] `simulation/replay.py`（重構原型，對接正式模組）

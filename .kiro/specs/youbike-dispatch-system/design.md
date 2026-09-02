@@ -597,6 +597,8 @@ security:
 | operator_id | TEXT PK | 調度員 ID |
 | name | TEXT | 姓名 |
 | role | TEXT | operator/dispatcher/maintainer（C-08 權限用） |
+| password_hash | TEXT | bcrypt 密碼雜湊（絕不存原文；NULL=未設密碼）（A5） |
+| is_active | INTEGER | 1=啟用 0=停用（停用取代刪除，保留稽核關聯）（A5） |
 | status | TEXT | on_duty/busy/resting/off_duty |
 | current_lat / current_lng | REAL | 當前位置 |
 | current_task_id | TEXT | 當前任務 |
