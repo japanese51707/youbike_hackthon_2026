@@ -5,10 +5,18 @@
 ## 專案脈絡
 - 動架構或實作決策前，先讀 `.kiro/specs/youbike-dispatch-system/` 的四份 Spec + `design.md`
 - 讀 `.kiro/steering/development_principles.md`（開發規範）
+- **必讀** `.kiro/steering/decision_governance.md` 與 `docs/decisions/README.md`
 - 標為「待決策 / 待團隊定義」的選項視為未定，**不要靜默鎖定**某個框架/AWS 服務/部署方式
-- 團隊選定架構時，在 `docs/decisions/` 記錄 ADR
 - **LLM/AI 只做估計，確定性規則引擎才能做調度決策**（核心約束，不可違反）
 - 所有站點資料應可追溯來源（TDX / YouBike 官方源）
+
+## 架構決策治理（強制）
+- 任何實作計畫都要先判斷並寫明：沿用哪份 ADR、為何不需要 ADR，或需要先新增／取代 ADR
+- 架構、API、Schema、資料庫、資料源、模型、AWS／部署、資安、重要依賴與跨模組慣例的選擇，都必須記錄於 `docs/decisions/`
+- 新決策先建立 `proposed` ADR；只有 owner／授權決策者明確核准後才能改為 `accepted` 並據此實作
+- 不得自行覆寫 accepted 決策；改方向時以新 ADR supersede 舊 ADR，並同步更新索引
+- 歷史缺漏可追溯補記，但必須以 commit／Spec／程式為證據，標示 `retrospective: true`，不可捏造理由
+- 完整門檻、狀態與流程以 `.kiro/steering/decision_governance.md` 為準
 
 ## 安全（本 repo 若公開）
 - 絕不加入真實憑證、PII、私人使用者資料
