@@ -63,8 +63,8 @@ export default function StationDrawer({ open, onClose, detail, loading, error })
             <Alert
               type="warning"
               showIcon
-              message={`到達時預測 ${detail.prediction.predicted_available} 台`}
-              description={`不確定區間 ${detail.prediction.lower_bound}–${detail.prediction.upper_bound} 台；決策應由規則引擎依區間下界判斷。`}
+              message={`Dispatch ETA（${detail.prediction.horizon_minutes} 分鐘）預測 ${detail.prediction.predicted_available} 台`}
+              description={`這是既有動態到達時間預測，不是固定 +30／+60 展示。不確定區間 ${detail.prediction.lower_bound}–${detail.prediction.upper_bound} 台；決策應由規則引擎依區間下界判斷。`}
             />
           ) : (
             <Alert type="info" showIcon message="此站目前沒有 Mock 預測明細" />

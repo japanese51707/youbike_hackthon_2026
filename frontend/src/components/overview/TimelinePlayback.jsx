@@ -1,6 +1,7 @@
-import { Card, Slider, Space, Tag, Typography } from "antd";
-import { useMemo, useState } from "react";
-import { CircleMarker, MapContainer, Popup, TileLayer } from "react-leaflet";
+import { Card, Empty, Slider, Tag, Typography } from "antd";
+import { useCallback, useMemo, useState } from "react";
+import SharedMap from "../map/SharedMap.jsx";
+import { createStationLayer } from "../map/layers/stationLayers.js";
 import presentationConfig from "../../config/presentation.json";
 import { stationStatusLabels } from "../../utils/formatters.js";
 import { stationStatusColors } from "../../utils/mapPresentation.js";
@@ -8,11 +9,40 @@ import { stationStatusColors } from "../../utils/mapPresentation.js";
 export default function TimelinePlayback({ timeline, stations }) {
   const [frameIndex, setFrameIndex] = useState(0);
   const frame = timeline.frames[frameIndex];
-  const stationNames = useMemo(
-    () => Object.fromEntries(stations.map((item) => [item.station_id, item.station_name])),
-    [stations],
+  const frameStations = useMemo(
+    () =>
+      (frame?.stations ?? [])
+        .map((station) => {
+          const source = stations.find(
+            (item) => item.station_id === station.station_id,
+          );
+          return source ? { ...source, ...station } : null;
+        })
+        .filter(Boolean),
+    [frame, stations],
   );
-  const mapSettings = presentationConfig.maps.timeline;
+  const layers = useMemo(
+    () => [
+      createStationLayer({
+        id: `timeline-stations-${frameIndex}`,
+        data: frameStations,
+        getColor: (station) =>
+          stationStatusColors[station.status] ?? presentationConfig.fallbackColor,
+        radiusPixels: presentationConfig.markers.timelineRadiusPixels,
+      }),
+    ],
+    [frameIndex, frameStations],
+  );
+  const getTooltip = useCallback(({ object }) => {
+    if (!object) return null;
+    return {
+      text: `${object.station_name}\n${stationStatusLabels[object.status] ?? object.status}｜可借 ${object.available_bikes} 台｜緊急度 ${object.urgency_score}`,
+    };
+  }, []);
+
+  if (!timeline.frames.length) {
+    return <Card><Empty description="目前沒有時間軸資料" /></Card>;
+  }
 
   return (
     <Card title={`${timeline.district} 站點壓力時間軸`} extra={<Tag>{timeline.date}</Tag>}>
@@ -28,38 +58,13 @@ export default function TimelinePlayback({ timeline, stations }) {
           onChange={setFrameIndex}
         />
       </div>
-      <MapContainer center={mapSettings.center} zoom={mapSettings.zoom} className="timeline-map">
-        <TileLayer
-          attribution={presentationConfig.tileLayer.attribution}
-          url={presentationConfig.tileLayer.url}
-        />
-        {frame.stations.map((station) => {
-          const source = stations.find((item) => item.station_id === station.station_id);
-          if (!source) return null;
-          const color = stationStatusColors[station.status] || presentationConfig.fallbackColor;
-          return (
-            <CircleMarker
-              key={station.station_id}
-              center={[source.lat, source.lng]}
-              radius={presentationConfig.markers.timelineRadius}
-              pathOptions={{
-                color,
-                fillColor: color,
-                fillOpacity: presentationConfig.markers.fillOpacity,
-              }}
-            >
-              <Popup>
-                <Space direction="vertical" size={2}>
-                  <Typography.Text strong>{stationNames[station.station_id]}</Typography.Text>
-                  <Tag color={color}>{stationStatusLabels[station.status] || station.status}</Tag>
-                  <Typography.Text>可借 {station.available_bikes} 台</Typography.Text>
-                  <Typography.Text>緊急度 {station.urgency_score}</Typography.Text>
-                </Space>
-              </Popup>
-            </CircleMarker>
-          );
-        })}
-      </MapContainer>
+      <SharedMap
+        ariaLabel="站點壓力歷史時間軸地圖"
+        className="timeline-map"
+        initialViewState={presentationConfig.maps.timeline}
+        layers={layers}
+        getTooltip={getTooltip}
+      />
     </Card>
   );
 }

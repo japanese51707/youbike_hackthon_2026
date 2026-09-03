@@ -7,6 +7,7 @@ import AlertPanel from "../components/dashboard/AlertPanel.jsx";
 import RecommendationPanel from "../components/dashboard/RecommendationPanel.jsx";
 import StationDrawer from "../components/dashboard/StationDrawer.jsx";
 import StationMap from "../components/dashboard/StationMap.jsx";
+import TemporalPanel from "../components/temporal/TemporalPanel.jsx";
 import useDashboardData from "../hooks/useDashboardData.js";
 
 const statusOptions = [
@@ -106,6 +107,8 @@ export default function DashboardPage() {
             dimension={mapDimension}
             onSelectStation={openStation}
           />
+
+          <TemporalPanel />
 
           <div className="two-column-grid">
             <RecommendationPanel

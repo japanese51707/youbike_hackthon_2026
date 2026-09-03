@@ -13,6 +13,7 @@ import {
 } from "antd";
 import AsyncState from "../components/common/AsyncState.jsx";
 import MetricCard from "../components/common/MetricCard.jsx";
+import TemporalPanel from "../components/temporal/TemporalPanel.jsx";
 import RouteMap from "../components/operator/RouteMap.jsx";
 import TaskQueue from "../components/operator/TaskQueue.jsx";
 import useOperatorData from "../hooks/useOperatorData.js";
@@ -154,6 +155,8 @@ export default function OperatorPage() {
           </div>
 
           {task ? <RouteMap route={task.route} /> : null}
+
+          <TemporalPanel />
         </div>
       ) : null}
     </AsyncState>

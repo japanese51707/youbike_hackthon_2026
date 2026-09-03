@@ -2,6 +2,7 @@ import { CalendarOutlined, FileSearchOutlined } from "@ant-design/icons";
 import { Card, List, Space, Tag, Typography } from "antd";
 import AsyncState from "../components/common/AsyncState.jsx";
 import MetricCard from "../components/common/MetricCard.jsx";
+import TemporalPanel from "../components/temporal/TemporalPanel.jsx";
 import OverviewCharts from "../components/overview/OverviewCharts.jsx";
 import TimelinePlayback from "../components/overview/TimelinePlayback.jsx";
 import useOverviewData from "../hooks/useOverviewData.js";
@@ -53,6 +54,8 @@ export default function OverviewPage() {
             timeline={operations.data.timeline}
             stations={operations.data.stations}
           />
+
+          <TemporalPanel />
 
           <div className="two-column-grid">
             <Card title="活動影響" extra={<CalendarOutlined />}>
