@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded
 date: 2026-09-02
 decision-makers:
   - project-owner
@@ -10,11 +10,14 @@ scope:
   - dependencies
   - outbound-security
   - availability
-related-commits: []
+related-commits:
+  - d1fdb16
 retrospective: false
 supersedes: ADR-011
-superseded-by:
+superseded-by: ADR-014
 ---
+
+> **取代註記（2026-09-04）**：本 ADR 的地圖架構已於 commit `d1fdb16` 實作。底圖 style 來源決策（固定載入遠端 liberty）已由 ADR-014 取代為「自帶暗色 style JSON、資料仍鎖 OpenFreeMap 同源」；其餘決策（MapLibre／Deck.gl、無 key／零計費、no-basemap 降級、attribution、出向信任邊界、承接自 ADR-011 的決策）由 ADR-014 完整承接。保留本文件為歷史，不改寫。
 
 # ADR-012：MapLibre／Deck.gl／OpenFreeMap 地圖架構
 

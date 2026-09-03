@@ -29,8 +29,9 @@
 | [ADR-009](ADR-009-SQLite持久化與Repository分層.md) | 黑客松階段使用 SQLite＋Repository | accepted（追溯） | database, backend | 單實例適用；多實例前需重評估 |
 | [ADR-010](ADR-010-Demo帳號與後端角色驗證.md) | Demo 本地帳號＋後端角色驗證 | accepted（追溯） | authentication, authorization, security | 無 token/session，只限受控 Demo |
 | [ADR-011](ADR-011-React-Vite-Mock-first前端架構.md) | React／Vite Mock-first 前端＋Leaflet 歷史基線 | superseded（由 ADR-012） | frontend, dependencies, data-adapter | `98d3e8e` 已完成 Mock-only 三頁與 Leaflet 基線；保留歷史，不再作為現行地圖選型 |
-| [ADR-012](ADR-012-MapLibre-DeckGL-OpenFreeMap地圖架構.md) | MapLibre／Deck.gl／OpenFreeMap 三頁地圖架構 | accepted | frontend, map-architecture, outbound-security | 文件決策已定；新前端地圖、OpenFreeMap 與 no-basemap 尚未實作，既有 Leaflet 基線仍待遷移 |
+| [ADR-012](ADR-012-MapLibre-DeckGL-OpenFreeMap地圖架構.md) | MapLibre／Deck.gl／OpenFreeMap 三頁地圖架構 | superseded（由 ADR-014） | frontend, map-architecture, outbound-security | 地圖遷移、OpenFreeMap 與 no-basemap 已於 `d1fdb16` 實作；底圖 style 來源條款由 ADR-014 取代，其餘決策由 ADR-014 承接 |
 | [ADR-013](ADR-013-Past-Live-Predict時序契約.md) | Past／Live／Predict 前端呈現與 Mock-first | accepted | frontend, temporal-presentation, mock-data | 前端 UI／Mock 決策已定；API／Schema／prediction／Alert／fallback／dispatch 契約仍待 owner／團隊決策，不可作為 A／B 實作依據 |
+| [ADR-014](ADR-014-數位孿生戰情室設計語言與暗色底圖.md) | 數位孿生戰情室設計語言＋自帶暗色底圖 | accepted | frontend, map-architecture, design-language, dependencies | 取代 ADR-012 底圖 style 來源、承接其餘決策；新增暗色 style 與 ArcLayer／Hexagon／Voronoi 視覺層，尚待實作 |
 
 ## 新決策流程
 
