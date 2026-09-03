@@ -8,7 +8,7 @@ export function createNoBasemapStyle() {
       {
         id: "no-basemap-background",
         type: "background",
-        paint: { "background-color": "#dfe8e3" },
+        paint: { "background-color": "#0B0F19" },
       },
     ],
   };

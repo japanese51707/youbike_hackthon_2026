@@ -1,6 +1,8 @@
-// 共用地圖遠端邊界：只允許 ADR-012 核准的 OpenFreeMap style 與其同源資源。
+// 共用地圖遠端邊界：底圖 style 改為自帶暗色 style（ADR-014），
+// 但所有 tile／glyph／sprite 仍鎖 OpenFreeMap 同源；此處集中出向 allowlist 與 attribution。
 export const mapConfig = Object.freeze({
-  styleUrl: "https://tiles.openfreemap.org/styles/liberty",
+  // 僅作為 origin allowlist 與相對 URL 解析的基準；實際 style 由 createDarkBasemapStyle() 提供。
+  styleBaseUrl: "https://tiles.openfreemap.org/",
   allowedOrigins: Object.freeze(["https://tiles.openfreemap.org"]),
   styleLoadTimeoutMs: 15000,
   resourceLoadTimeoutMs: 30000,
@@ -20,7 +22,7 @@ export const mapConfig = Object.freeze({
 
 export function isAllowedBasemapRequest(url) {
   try {
-    const requestUrl = new URL(url, mapConfig.styleUrl);
+    const requestUrl = new URL(url, mapConfig.styleBaseUrl);
     return (
       requestUrl.protocol === "https:" &&
       mapConfig.allowedOrigins.includes(requestUrl.origin)

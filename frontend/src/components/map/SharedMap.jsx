@@ -5,6 +5,7 @@ import {
   isAllowedBasemapRequest,
   mapConfig,
 } from "../../config/mapConfig.js";
+import { createDarkBasemapStyle } from "../../config/darkBasemapStyle.js";
 import { createNoBasemapStyle } from "../../config/noBasemapStyle.js";
 import BasemapStatus from "./BasemapStatus.jsx";
 
@@ -86,7 +87,7 @@ export default function SharedMap({
     try {
       map = new maplibregl.Map({
         container: containerRef.current,
-        style: startsOffline ? createNoBasemapStyle() : mapConfig.styleUrl,
+        style: startsOffline ? createNoBasemapStyle() : createDarkBasemapStyle(),
         center: [initialViewState.longitude, initialViewState.latitude],
         zoom: initialViewState.zoom,
         bearing: initialViewState.bearing ?? 0,
