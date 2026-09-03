@@ -79,65 +79,66 @@ def main():
     df = load_data(args.sample)
     print(f"      列數 {len(df):,}｜站數 {df['場站名稱'].nunique()}", flush=True)
 
-    print("[2/5] 組裝特徵（防洩漏：窗口限訓練期、forward fill、截斷標記）...", flush=True)
+    print("[2/4] 組裝特徵（防洩漏：窗口限訓練期、forward fill、截斷標記）...", flush=True)
+    from prediction.feature_pipeline import HORIZON_STEPS
     frame, feat_cols = build_training_frame(df, TRAIN_END)
-    frame = frame.dropna(subset=["target_delta"])   # 最後一格無目標
 
-    train = frame[frame["is_train"] == 1].copy()
-    valid = frame[frame["is_train"] == 0].copy()
-    # 截斷樣本訓練時排除（ADR-015）
-    train_clean = train[train["is_censored"] == 0]
-    print(f"      訓練 {len(train):,}（排除截斷 {len(train)-len(train_clean):,} → {len(train_clean):,}）｜驗證 {len(valid):,}", flush=True)
-
-    print("[3/5] seasonal naive baseline ...", flush=True)
-    table, gmed = fit_seasonal_naive(train_clean)
-    base_pred = predict_seasonal_naive(valid, table, gmed).values
-    base_mae = mae(valid["target_delta"].values, base_pred)
-    print(f"      baseline MAE = {base_mae:.3f}", flush=True)
-
-    print("[4/5] LightGBM quantile (P10/P50/P90) ...", flush=True)
     import lightgbm as lgb
-    Xtr = train_clean[feat_cols].astype(float)
-    ytr = train_clean["target_delta"].astype(float)
-    Xva = valid[feat_cols].astype(float)
-    yva = valid["target_delta"].astype(float).values
+    # ⚠️ 超參數為「未調參的起始預設值」（審查 F-07 rolling CV 選參尚未做）。
+    #   objective/alpha 有依據（ADR-002/004）；n_estimators/lr/num_leaves 是常見起始值,非調校結果。
+    #   分位數 alpha 未依營運成本(newsvendor,審查6.2)校準。
 
-    # ⚠️ 超參數為「未調參的起始預設值」，尚未做超參數優化（審查 F-07 rolling CV 選參尚未做）。
-    #   objective/alpha 有依據（ADR-002/004：quantile 出區間、規則引擎吃下界）；
-    #   但 n_estimators/learning_rate/num_leaves/min_child_samples 是常見起始值，非調校結果。
-    #   分位數 alpha=0.1/0.9 目前是拍的，審查 6.2 指出應由營運成本(漏報vs誤報)用 newsvendor 決定。
-    #   → 「模型贏不了 baseline」有一部分可能來自未調參，不全是資料問題。待後續優化並記 ADR。
-    preds = {}
-    for q, alpha in [("p10", 0.10), ("p50", 0.50), ("p90", 0.90)]:
-        m = lgb.LGBMRegressor(objective="quantile", alpha=alpha,
-                              n_estimators=300, learning_rate=0.05,   # ← 未調參的預設值
-                              num_leaves=31, min_child_samples=50, verbose=-1)
-        m.fit(Xtr, ytr)
-        preds[q] = m.predict(Xva)
+    print(f"[3/4] 逐視野訓練 4 個 horizon {list(HORIZON_STEPS.values())} 分鐘 ...", flush=True)
+    results = []
+    for h, mins in HORIZON_STEPS.items():
+        tgt = f"target_delta_{mins}"
+        sub = frame.dropna(subset=[tgt])
+        train = sub[sub["is_train"] == 1]
+        valid = sub[sub["is_train"] == 0]
+        # 截斷樣本訓練時排除（ADR-015）
+        train_clean = train[train["is_censored"] == 0]
 
-    lgb_mae = mae(yva, preds["p50"])
-    print(f"      LightGBM P50 MAE = {lgb_mae:.3f}", flush=True)
+        # baseline：seasonal naive（該視野目標的站×day_type×時段中位數）
+        table, gmed = fit_seasonal_naive(train_clean, target_col=tgt)
+        base_pred = predict_seasonal_naive(valid, table, gmed).values
+        yva = valid[tgt].astype(float).values
+        base_mae = mae(yva, base_pred)
 
-    # 區間覆蓋率（P10~P90 名目 80%）+ 分位數交叉檢查
-    lo = np.minimum(preds["p10"], preds["p90"])
-    hi = np.maximum(preds["p10"], preds["p90"])
-    coverage = float(np.mean((yva >= lo) & (yva <= hi)))
-    crossing = float(np.mean(preds["p10"] > preds["p90"]))
+        # LightGBM quantile（每視野獨立對累積 Δ 訓練，非單步相加 F-05）
+        Xtr = train_clean[feat_cols].astype(float)
+        ytr = train_clean[tgt].astype(float)
+        Xva = valid[feat_cols].astype(float)
+        preds = {}
+        for q, alpha in [("p10", 0.10), ("p50", 0.50), ("p90", 0.90)]:
+            m = lgb.LGBMRegressor(objective="quantile", alpha=alpha,
+                                  n_estimators=300, learning_rate=0.05,  # ← 未調參預設值
+                                  num_leaves=31, min_child_samples=50, verbose=-1)
+            m.fit(Xtr, ytr)
+            preds[q] = m.predict(Xva)
+        lgb_mae = mae(yva, preds["p50"])
+        lo = np.minimum(preds["p10"], preds["p90"])
+        hi = np.maximum(preds["p10"], preds["p90"])
+        coverage = float(np.mean((yva >= lo) & (yva <= hi)))
+        crossing = float(np.mean(preds["p10"] > preds["p90"]))
+        results.append((mins, base_mae, lgb_mae, coverage, crossing,
+                        evaluate_by_zone(valid, yva, preds["p50"], base_pred)))
+        print(f"      h={mins:>3}分: baseline {base_mae:.3f} / LightGBM {lgb_mae:.3f} "
+              f"| 覆蓋 {coverage*100:.0f}%", flush=True)
 
-    print("[5/5] 結果", flush=True)
-    print("=" * 56, flush=True)
-    print(f"baseline(seasonal naive) MAE : {base_mae:.3f}", flush=True)
-    print(f"LightGBM P50             MAE : {lgb_mae:.3f}", flush=True)
-    improve = (base_mae - lgb_mae) / base_mae * 100 if base_mae else 0
-    print(f"改善                          : {improve:+.1f}%", flush=True)
-    print(f"區間覆蓋率(P10~P90,名目80%)   : {coverage*100:.1f}%", flush=True)
-    print(f"分位數交叉率(應接近0)         : {crossing*100:.2f}%", flush=True)
-    print("-" * 56, flush=True)
-    print("分區間 MAE（baseline / LightGBM）：", flush=True)
-    for name, n, bm, lm in evaluate_by_zone(valid, yva, preds["p50"], base_pred):
-        print(f"  {name:14} n={n:>8,}  {bm:>7.3f} / {lm:>7.3f}", flush=True)
-    print("=" * 56, flush=True)
-    print("註：截斷樣本已排除訓練；分區間看『已空』區才是關鍵（系統存在理由）", flush=True)
+    print("[4/4] 結果（多視野 ADR-017）", flush=True)
+    print("=" * 64, flush=True)
+    print(f"{'視野':>6} {'baseline':>10} {'LightGBM':>10} {'改善':>8} {'覆蓋率':>8} {'交叉':>6}", flush=True)
+    for mins, bm, lm, cov, cross, _ in results:
+        imp = (bm - lm) / bm * 100 if bm else 0
+        print(f"{mins:>4}分 {bm:>10.3f} {lm:>10.3f} {imp:>+7.1f}% {cov*100:>7.1f}% {cross*100:>5.1f}%", flush=True)
+    print("-" * 64, flush=True)
+    print("分區間 MAE（各視野的 已空/接近空/健康，baseline / LightGBM）：", flush=True)
+    for mins, bm, lm, cov, cross, zones in results:
+        print(f"  [{mins}分]", flush=True)
+        for name, n, zbm, zlm in zones:
+            print(f"    {name:12} n={n:>8,}  {zbm:>7.3f} / {zlm:>7.3f}", flush=True)
+    print("=" * 64, flush=True)
+    print("註：各視野直接對累積Δ訓練(分位數不可加F-05);截斷樣本排除;超參數未調", flush=True)
 
 
 if __name__ == "__main__":
