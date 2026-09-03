@@ -29,6 +29,9 @@ import pandas as pd
 # 每 30 分一格
 LAG_SLOTS = {"lag_30min": 1, "lag_1hr": 2, "lag_2hr": 4, "lag_1day": 48, "lag_1week": 336}
 
+# 多視野（ADR-017）：格數 → 分鐘數。每 30 分一格，故 h 格 = h*30 分。
+HORIZON_STEPS = {1: 30, 2: 60, 3: 90, 4: 120}
+
 
 def _forward_fill_grid(g: pd.DataFrame) -> pd.DataFrame:
     """單站：補齊 30 分鐘時間格，缺值只 forward fill（禁 interpolate，防洩漏）。"""
@@ -52,15 +55,16 @@ def _add_lag_and_target(g: pd.DataFrame) -> pd.DataFrame:
     g["change_1hr"] = ab - ab.shift(2)     # 近1小時變化（過去）
     g["change_2hr"] = ab - ab.shift(4)
 
-    # 目標：下一時段淨變化（未來一步）——這是要預測的 y
-    g["target_delta"] = ab.shift(-1) - ab
+    # 多視野目標（ADR-017）：h 格後的「累積淨變化」= available(t+h) − available(t)
+    #   每 30 分一格：h=1/2/3/4 對應 30/60/90/120 分鐘。直接對累積 Δ 訓練（分位數不可加）。
+    for h, mins in HORIZON_STEPS.items():
+        g[f"target_delta_{mins}"] = ab.shift(-h) - ab
 
-    # 截斷標記（ADR-015）：目標窗口內若空/滿站，Δ 被物理邊界壓抑
-    # 判定用「當前時點」是否空/滿（可借=0 或 可還=0）且 Δ=0
-    # 注意 target_delta 末格為 NaN（shift(-1)），fillna(False) 讓其不算截斷（之後 dropna 會移除）
+    # 截斷標記（ADR-015）：以「30分視野目標」判定（可借=0 或 可還=0 且 Δ=0）
+    # 注意 target_delta_30 末格為 NaN（shift(-1)），fillna(False) 讓其不算截斷（之後 dropna 會移除）
     at_empty = (g["available_bikes"] <= 0)
     at_full = (g["available_docks"] <= 0)
-    censored = (g["target_delta"] == 0) & (at_empty | at_full)
+    censored = (g["target_delta_30"] == 0) & (at_empty | at_full)
     g["is_censored"] = censored.fillna(False).astype(int)
 
     return g
@@ -108,7 +112,7 @@ def build_training_frame(
     # ★只用訓練期算，避免洩漏（ADR-013/014 窗口約束）
     train_part = frame[frame["is_train"] == 1].copy()
     train_part["dtype"] = train_part["is_weekend"]
-    profile = (train_part.groupby(["場站名稱", "dtype", "time_slot"])["target_delta"]
+    profile = (train_part.groupby(["場站名稱", "dtype", "time_slot"])["target_delta_30"]
                .median().rename("station_slot_p50").reset_index())
     frame["dtype"] = frame["is_weekend"]
     frame = frame.merge(profile, on=["場站名稱", "dtype", "time_slot"], how="left")
