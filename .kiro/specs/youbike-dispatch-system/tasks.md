@@ -179,7 +179,9 @@ A4 加固清單（已完成 ✅ 已驗證）：
 
 ## C 的任務（品質工程師 — 前端）
 
-> 用 A 提供的 mock_data.json 先開發，不等後端。React + Vite + Leaflet + ECharts + Ant Design。
+> 用 A 提供的 mock_data.json 先開發，不等後端。React + Vite + MapLibre GL JS + Deck.gl + OpenFreeMap + ECharts + Ant Design。
+>
+> **本輪邊界**：C 可新增 frontend-local view model／Mock 與 UI；不得要求 A／B 修改 API、Schema、prediction、Alert、fallback 或 dispatch 契約。未來正式 API 若不同，由前端 adapter 明確 mapping。
 
 ### C0 — 前端骨架 + API 層
 - [ ] `frontend/` Vite 專案、`api/http.js`（fetch 封裝）+ 各 `api/*.js`
@@ -188,11 +190,11 @@ A4 加固清單（已完成 ✅ 已驗證）：
 - **依賴**：A0 的 mock_data.json + api_contract
 
 ### C1 — 後台調派員儀表板（Dashboard）
-- [ ] 即時熱點地圖（Leaflet，顏色分級）
+- [ ] 即時熱點資料層（MapLibre + Deck.gl，顏色分級）
 - [ ] 多維度切換（status/area_type/terrain/district）
-- [ ] 調度建議清單 + 確認按鈕（走閘門）
+- [ ] 調度建議清單 + 確認按鈕（走既有閘門）
 - [ ] KPI 看板、警示面板（SSE）
-- **驗收**：地圖顯示 1583 站狀態；切維度變色；按確認派發呼叫 API
+- **驗收**：地圖顯示站點狀態；切維度變色；按確認派發只使用既有 API
 - **依賴**：C0
 
 ### C2 — 調度員任務介面（OperatorApp）
@@ -206,6 +208,25 @@ A4 加固清單（已完成 ✅ 已驗證）：
 - [ ] 時間軸播放（拖曳看歷史熱點流動）
 - **驗收**：總覽數字正確；時間軸拖曳顯示各時間點狀態
 - **依賴**：C0
+
+### C4 — 三頁共用地圖遷移（ADR-012）
+- [ ] 建立共用 MapLibre／Deck.gl map module，三頁不得各自管理 OpenFreeMap lifecycle
+- [ ] 將既有 Leaflet 站點、熱點與路線呈現遷移為 Deck.gl data layers
+- [ ] 遠端底圖只使用 OpenFreeMap；保留 attribution，不加入帳務、信用卡、API key 或計費 API
+- [ ] style／tile／glyph／sprite 失敗或斷網時切換 local empty style／`no-basemap`
+- [ ] 底圖不可用時顯示錯誤，資料 layers、清單、控制面板與非地圖操作繼續可用
+- **驗收**：三頁共用同一 map module；無 Leaflet runtime；斷網 smoke test 證明 no-basemap 與業務資料仍可用
+- **依賴**：C0、ADR-012
+
+### C5 — Past／Live／Predict frontend-local Mock（ADR-013）
+- [ ] 建立只屬於 frontend 的 temporal view model／Mock adapter，呈現 Past／Live／Predict
+- [ ] Predict 固定顯示 `+30`、`+60`；與既有 dynamic ETA 使用不同欄位與 UI 標籤
+- [ ] 缺值顯示不可用，不插值、不複製其他點、不以 dynamic ETA 補洞
+- [ ] 固定展示資料不得進入確認派發、任務建立或其他操作 payload
+- [ ] Mock 模式持續顯示 `Mock Demo`；可用 `Asia/Taipei`／`+08:00` 建立可重現 fixture
+- **驗收**：不啟動 backend／prediction 也能展示三段時序；network／payload 檢查證明固定展示值未送入派遣；未宣稱 local shape 是共同 API contract
+- **依賴**：C0、ADR-013
+- **不包含**：新增 A／B 任務、修改 API／Schema／prediction／Alert／fallback／dispatch 契約
 
 ---
 

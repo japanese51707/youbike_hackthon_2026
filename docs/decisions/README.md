@@ -28,7 +28,9 @@
 | [ADR-008](ADR-008-依賴釘選與關鍵行為測試.md) | 精確釘選依賴＋優先測決策關鍵行為 | accepted（追溯） | backend, testing, dependencies | Python 3.12 為容器基線；CI 尚未建立 |
 | [ADR-009](ADR-009-SQLite持久化與Repository分層.md) | 黑客松階段使用 SQLite＋Repository | accepted（追溯） | database, backend | 單實例適用；多實例前需重評估 |
 | [ADR-010](ADR-010-Demo帳號與後端角色驗證.md) | Demo 本地帳號＋後端角色驗證 | accepted（追溯） | authentication, authorization, security | 無 token/session，只限受控 Demo |
-| [ADR-011](ADR-011-React-Vite-Mock-first前端架構.md) | React／Vite Mock-first 前端＋可替換 adapter | accepted | frontend, dependencies, data-adapter | Mock-only 三頁面與 adapter 已實作；FastAPI、正式認證與部署尚未整合 |
+| [ADR-011](ADR-011-React-Vite-Mock-first前端架構.md) | React／Vite Mock-first 前端＋Leaflet 歷史基線 | superseded（由 ADR-012） | frontend, dependencies, data-adapter | `98d3e8e` 已完成 Mock-only 三頁與 Leaflet 基線；保留歷史，不再作為現行地圖選型 |
+| [ADR-012](ADR-012-MapLibre-DeckGL-OpenFreeMap地圖架構.md) | MapLibre／Deck.gl／OpenFreeMap 三頁地圖架構 | accepted | frontend, map-architecture, outbound-security | 文件決策已定；新前端地圖、OpenFreeMap 與 no-basemap 尚未實作，既有 Leaflet 基線仍待遷移 |
+| [ADR-013](ADR-013-Past-Live-Predict時序契約.md) | Past／Live／Predict 前端呈現與 Mock-first | accepted | frontend, temporal-presentation, mock-data | 前端 UI／Mock 決策已定；API／Schema／prediction／Alert／fallback／dispatch 契約仍待 owner／團隊決策，不可作為 A／B 實作依據 |
 
 ## 新決策流程
 

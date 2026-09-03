@@ -135,7 +135,7 @@ youbike-dispatch/
 │   │   │   ├── OperatorApp.jsx    # 調度員（任務佇列+導航+回報）
 │   │   │   └── Overview.jsx       # 長官（全域總覽）
 │   │   ├── components/
-│   │   │   ├── HeatMap.jsx        # 熱點地圖（Leaflet）
+│   │   │   ├── HeatMap.jsx        # 熱點資料層（待依 ADR-012 遷移至共用 MapLibre/Deck.gl 模組）
 │   │   │   ├── DimensionSwitch.jsx# 維度切換
 │   │   │   ├── Timeline.jsx       # 時間軸播放
 │   │   │   ├── TaskCard.jsx       # 任務框
@@ -277,7 +277,6 @@ data_source 取最新站況
   → reject 則：丟棄建議，維持原參數（不留版本）
 ```
 > 防堆積（釐清項）：`daily-review` 帶 `review_id`；若上一筆尚未審批，新排程 skip（不重複產生待審）。versioning 一定在 approve **之後**，避免未採用的建議污染版本歷史。
-```
 
 ---
 
@@ -649,3 +648,37 @@ Demo：AWS EC2 跑 docker-compose（主）+ 本機（備案）
    - C：前端接 mock 資料把三個頁面畫出來
 3. **對接**：A 把 data_source 從 mock 換 historical / tdx，串 B 的模型
 4. **收尾**：模擬重放、KPI、資安檢查、Demo 演練
+
+
+---
+
+## 12. 前端已核准增量設計（ADR-012／ADR-013）
+
+### 12.1 共用地圖模組
+
+- `/dashboard`、`/operator`、`/overview` 共用 MapLibre GL JS 地圖容器；Deck.gl 專責站點、熱點與路線等資料圖層。
+- 底圖來源集中在單一 map module，只允許 OpenFreeMap；頁面與資料圖層不得直接依賴 provider response shape。
+- map module 對頁面提供 viewport、選取事件、資料 layers 與 basemap 狀態；三頁不得各自建立遠端底圖生命週期。
+- style／tile／glyph／sprite 失敗或斷網時切換 local empty style／`no-basemap`，同時顯示明確狀態；Deck.gl layers、清單、控制面板與非地圖操作保持可用。
+- Google Maps 只使用公開座標組成 plain navigation URL，不載入 SDK、不使用 API key 或計費 API，也不附帶 operator、task 或 prediction 資料。
+
+### 12.2 Past／Live／Predict 前端呈現
+
+```text
+frontend-local Mock
+  → frontend adapter（正規化成 local view model）
+  → temporal presentation hook
+  ├─ Past：歷史觀測顯示
+  ├─ Live：最新站況顯示
+  └─ Predict：Mock 固定 +30／+60 展示
+```
+
+- temporal presentation 只負責前端顯示，不負責模型推論、Alert 判斷、調度決策或 fallback 選擇。
+- 固定 +30／+60 與既有 dynamic ETA 分離；UI 不得將固定展示值放入派遣確認或任務建立 payload。
+- frontend-local Mock 是 view model，不是共同 API contract。未來正式 API shape 定案後，由 adapter 明確 mapping；不得假設只更換 transport 就必然相容。
+- 缺值顯示不可用，不插值、不複製其他 horizon、不以 dynamic ETA 補洞；共同 error Schema 尚待 owner／團隊決策。
+- Demo Mock 可用 `Asia/Taipei`／`+08:00` 建立固定測試資料，但不因此修改 backend timestamp 契約。
+
+### 12.3 邊界與未決項目
+
+本增量不修改 backend tree、Pydantic Schema、B 的 `predict()`／`calc_urgency()`、Alert flow、fallback、dispatch context 或 SQLite schema。這些跨人契約集中列於 ADR-013「待決策」，在核准前不得轉成 A／B 任務。
