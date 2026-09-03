@@ -1,0 +1,16 @@
+{
+  "_說明": "事件資料表（活動/路跑/馬拉松），ADR-012 選項A：介面先行、資料事後補。初期空表，範例格式見 _範例。可用 event_impact.add_event() 新增，或現場手動填。",
+  "_範例": {
+    "event_id": "EVT-20261231-001",
+    "name": "新北歡樂耶誕城",
+    "type": "活動",
+    "date": "2026-12-31",
+    "start_time": "18:00",
+    "end_time": "23:00",
+    "lat": 25.012,
+    "lng": 121.465,
+    "expected_attendance": 30000,
+    "influence_radius_km": 1.5
+  },
+  "events": []
+}

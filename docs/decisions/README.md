@@ -29,6 +29,7 @@
 | [ADR-009](ADR-009-SQLite持久化與Repository分層.md) | 黑客松階段使用 SQLite＋Repository | accepted（追溯） | database, backend | 單實例適用；多實例前需重評估 |
 | [ADR-010](ADR-010-Demo帳號與後端角色驗證.md) | Demo 本地帳號＋後端角色驗證 | accepted（追溯） | authentication, authorization, security | 無 token/session，只限受控 Demo |
 | [ADR-011](ADR-011-預測特徵因子模組化與資料源.md) | 預測特徵四因子模組化＋公開資料源 | accepted | prediction, features, data | 假日/天氣/地形/學生數各一模組；單因子先行，交叉影響待後續；天氣訓練用歷史、現況預測才接即時 |
+| [ADR-012](ADR-012-擴充特徵時間POI事件特殊天氣.md) | 擴充特徵：時間衍生/POI距離/事件/特殊天氣 | accepted | prediction, features, data | 承接 ADR-011；POI 用 OSM、區域類型自動推導、事件介面先行、特殊天氣異常日標籤 |
 
 ## 新決策流程
 
