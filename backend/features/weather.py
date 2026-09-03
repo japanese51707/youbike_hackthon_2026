@@ -124,6 +124,7 @@ def get_weather_feature(lat: float, lng: float, timestamp: str) -> dict:
         "distance_km": st["distance_km"],
         "temperature": None, "humidity": None,
         "precipitation": None, "wind_speed": None,
+        "temp_comfort": None,   # 溫度舒適度（倒U，見下）
     }
     try:
         df = _load_station_year(st["station_id"], year)
@@ -140,4 +141,20 @@ def get_weather_feature(lat: float, lng: float, timestamp: str) -> dict:
                         feature[col] = round(float(val), 1)
     except Exception:
         pass  # 拿不到資料 → 保持 None（NFR-5 明確缺值）
+
+    # 溫度舒適度（倒 U 型，ADR-013）：騎乘意願在「最適溫」最高，太熱太冷都降。
+    # 用高斯型：comfort = exp(-((T - 最適)/寬度)^2)，值域 0~1。
+    if feature["temperature"] is not None:
+        feature["temp_comfort"] = round(_temp_comfort(feature["temperature"]), 3)
     return feature
+
+
+# 溫度舒適度參數（可 config 覆寫）：最適約 24°C、標準差寬度約 8°C
+_TEMP_OPTIMAL = 24.0
+_TEMP_WIDTH = 8.0
+
+
+def _temp_comfort(temp: float) -> float:
+    """溫度 → 騎乘舒適度（0~1，倒U型）。24°C 最舒適，太熱太冷遞減。"""
+    import math
+    return math.exp(-((temp - _TEMP_OPTIMAL) / _TEMP_WIDTH) ** 2)
