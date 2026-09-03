@@ -85,6 +85,13 @@ def compute_station_stats(series_before) -> dict:
 
     series_before：pandas DataFrame，含 available_bikes/available_docks/total_docks。
     回傳：歷史空站頻率、滿站頻率、波動度(P90-P10)、日均周轉量。
+
+    ★★★ 資料洩漏警告（ADR-013 補記 F-01）★★★
+    參數名 series_before 表示「應只含目標期之前的資料」，但本函式**不強制檢查**。
+    呼叫者（特徵組裝 pipeline）必須確保傳入的是訓練期/expanding window 資料，
+    絕不可含驗證/預測期，否則統計量洩漏未來、驗證虛高且不報錯。
+    此約束須在 pipeline 層級強制（見 ADR-013 補記待辦）。
+    另：缺失值填補只能 forward fill，禁止 interpolate（會用到未來值）。
     """
     import pandas as pd
 
