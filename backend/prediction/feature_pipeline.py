@@ -42,6 +42,10 @@ def _forward_fill_grid(g: pd.DataFrame) -> pd.DataFrame:
     for col in ["available_bikes", "available_docks", "total_docks"]:
         g[col] = g[col].ffill()
     g["場站名稱"] = g["場站名稱"].ffill()
+    # 保留座標欄（天氣因子對照最近測站要用）——reindex 會產生 NaN，ffill 補回
+    for col in ["經度", "緯度", "lat", "lng"]:
+        if col in g.columns:
+            g[col] = g[col].ffill().bfill()
     return g.reset_index(names="dt")
 
 
@@ -70,10 +74,85 @@ def _add_lag_and_target(g: pd.DataFrame) -> pd.DataFrame:
     return g
 
 
+def _rain_level(precp: float) -> int:
+    """雨量(mm/時) → 分級。資料無日照無法分晴/陰，故用雨量當天氣型態（對騎乘影響更直接）。
+    0=無雨(晴到多雲) 1=小雨(<5) 2=中雨(5-15) 3=大雨(>=15)。缺測(-90以下)當無雨。"""
+    if precp is None or precp <= -90 or precp < 0:
+        return 0
+    if precp == 0:
+        return 0
+    if precp < 5:
+        return 1
+    if precp < 15:
+        return 2
+    return 3
+
+
+def attach_weather(frame: pd.DataFrame) -> pd.DataFrame:
+    """全站批次併入天氣特徵（你的原則：外部全站取得，不逐站設參數）。
+
+    每個 YouBike 站 → 最近氣象測站（weather.nearest_station，已建對照），
+    取該測站逐時的 溫度/濕度/雨量/風速，對齊到 30 分格（逐時值填該小時兩個半時）。
+    加衍生：溫度舒適度(倒U)、雨量分級(天氣型態)。缺值 forward fill（不用未來）。
+    """
+    import sys as _sys
+    from pathlib import Path as _P
+    _sys.path.insert(0, str(_P(__file__).parent.parent))
+    from features.weather import nearest_station, _load_station_year, _temp_comfort
+
+    # 1. 全站 → 最近測站（一次算好，站數有限）
+    stations = frame[["場站名稱"]].drop_duplicates()
+    # 用每站第一筆座標查最近測站
+    coords = frame.groupby("場站名稱").first().reset_index()
+    st_map = {}
+    for _, r in coords.iterrows():
+        lat = r.get("緯度") or r.get("lat")
+        lng = r.get("經度") or r.get("lng")
+        if lat and lng:
+            st_map[r["場站名稱"]] = nearest_station(float(lat), float(lng))["station_id"]
+
+    # 2. 逐測站讀天氣（快取），向量化組成查表（不逐列 append，避免慢）
+    year = int(str(frame["dt"].iloc[0])[:4])
+    wcols = ["temperature", "humidity", "precipitation", "wind_speed"]
+    parts = []
+    for sid in set(st_map.values()):
+        try:
+            wdf = _load_station_year(sid, year).reset_index()  # index 是 hourkey 字串 'YYYY-MM-DD HH'
+        except Exception:
+            continue
+        keep = ["_hourkey"] + [c for c in wcols if c in wdf.columns]
+        w = wdf[keep].copy()
+        # 同小時多筆取第一筆
+        w = w.groupby("_hourkey", as_index=False).first()
+        # 缺測值(-90以下)轉 NaN（向量化）
+        for c in wcols:
+            if c in w.columns:
+                w.loc[w[c] <= -90, c] = np.nan
+        w["wsid"] = sid
+        parts.append(w)
+    wtab = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(columns=["_hourkey", "wsid"])
+
+    # 3. frame 加測站 id + 小時鍵，join 天氣
+    frame = frame.copy()
+    frame["wsid"] = frame["場站名稱"].map(st_map)
+    frame["_hourkey"] = frame["dt"].dt.strftime("%Y-%m-%d %H")
+    frame = frame.merge(wtab, on=["wsid", "_hourkey"], how="left")
+
+    # 4. 衍生特徵
+    frame["temp_comfort"] = frame["temperature"].apply(
+        lambda t: _temp_comfort(t) if pd.notna(t) else None)
+    frame["rain_level"] = frame["precipitation"].apply(_rain_level)
+    # 缺值 forward fill（同站時序，不用未來）
+    for col in ["temperature", "humidity", "wind_speed", "temp_comfort"]:
+        frame[col] = frame.groupby("場站名稱")[col].ffill()
+    return frame.drop(columns=["wsid", "_hourkey"])
+
+
 def build_training_frame(
     df: pd.DataFrame,
     train_end: str,
     profile_by_station: dict | None = None,
+    with_weather: bool = False,
 ):
     """組裝訓練特徵表。
 
@@ -123,4 +202,11 @@ def build_training_frame(
         "hour", "weekday", "is_weekend", "month", "time_slot",
         "station_slot_p50",   # F-06 站點識別特徵（最強）
     ]
+
+    # 消融用：可選擇性併入天氣因子（你的原則：全站批次取得）
+    if with_weather:
+        frame = attach_weather(frame)
+        feature_cols += ["temperature", "humidity", "wind_speed",
+                         "temp_comfort", "rain_level"]
+
     return frame, feature_cols

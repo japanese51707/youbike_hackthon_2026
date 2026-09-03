@@ -73,58 +73,81 @@ def evaluate_by_zone(frame, y_true, y_pred_lgb, y_pred_base):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sample", type=int, default=None, help="只取前 N 站快速驗證")
+    ap.add_argument("--weather", action="store_true", help="併入天氣因子（消融對比用）")
     args = ap.parse_args()
 
-    print(f"[1/5] 讀 S3 資料{'(子集 '+str(args.sample)+' 站)' if args.sample else '(全量)'} ...", flush=True)
+    print(f"[1/4] 讀 S3 資料{'(子集 '+str(args.sample)+' 站)' if args.sample else '(全量)'} ...", flush=True)
     df = load_data(args.sample)
     print(f"      列數 {len(df):,}｜站數 {df['場站名稱'].nunique()}", flush=True)
 
-    print("[2/4] 組裝特徵（防洩漏：窗口限訓練期、forward fill、截斷標記）...", flush=True)
     from prediction.feature_pipeline import HORIZON_STEPS
-    frame, feat_cols = build_training_frame(df, TRAIN_END)
 
-    import lightgbm as lgb
-    # ⚠️ 超參數為「未調參的起始預設值」（審查 F-07 rolling CV 選參尚未做）。
-    #   objective/alpha 有依據（ADR-002/004）；n_estimators/lr/num_leaves 是常見起始值,非調校結果。
-    #   分位數 alpha 未依營運成本(newsvendor,審查6.2)校準。
+    def run_group(with_weather: bool):
+        """跑一組（有/無因子），回各視野結果，供消融對比。
 
-    print(f"[3/4] 逐視野訓練 4 個 horizon {list(HORIZON_STEPS.values())} 分鐘 ...", flush=True)
-    results = []
-    for h, mins in HORIZON_STEPS.items():
-        tgt = f"target_delta_{mins}"
-        sub = frame.dropna(subset=[tgt])
-        train = sub[sub["is_train"] == 1]
-        valid = sub[sub["is_train"] == 0]
-        # 截斷樣本訓練時排除（ADR-015）
-        train_clean = train[train["is_censored"] == 0]
+        ★消融探針用 L2 迴歸（objective=regression，學均值），不是分位數。
+          原因（ADR-002 消融評估方法段）：目標 Δ 有 ~78% 為 0（零膨脹重尾），
+          分位數 P50 被 0 主導，任何因子都推不動中位數 → 全部消融都會顯示 +0.00%。
+          L2 學均值對因子敏感，才能公平比較每個因子的邊際貢獻。
+          （上線出區間仍用分位數 P10/P50/P90，見主訓練流程；探針只為量測因子效果。）
+        """
+        frame, feat_cols = build_training_frame(df, TRAIN_END, with_weather=with_weather)
+        import lightgbm as lgb
+        out = []
+        for h, mins in HORIZON_STEPS.items():
+            tgt = f"target_delta_{mins}"
+            sub = frame.dropna(subset=[tgt])
+            train = sub[sub["is_train"] == 1]
+            valid = sub[sub["is_train"] == 0]
+            train_clean = train[train["is_censored"] == 0]   # 截斷排除 ADR-015
 
-        # baseline：seasonal naive（該視野目標的站×day_type×時段中位數）
-        table, gmed = fit_seasonal_naive(train_clean, target_col=tgt)
-        base_pred = predict_seasonal_naive(valid, table, gmed).values
-        yva = valid[tgt].astype(float).values
-        base_mae = mae(yva, base_pred)
+            yva = valid[tgt].astype(float).values
+            Xtr = train_clean[feat_cols].astype(float)
+            ytr = train_clean[tgt].astype(float)
+            Xva = valid[feat_cols].astype(float)
 
-        # LightGBM quantile（每視野獨立對累積 Δ 訓練，非單步相加 F-05）
-        Xtr = train_clean[feat_cols].astype(float)
-        ytr = train_clean[tgt].astype(float)
-        Xva = valid[feat_cols].astype(float)
-        preds = {}
-        for q, alpha in [("p10", 0.10), ("p50", 0.50), ("p90", 0.90)]:
-            m = lgb.LGBMRegressor(objective="quantile", alpha=alpha,
-                                  n_estimators=300, learning_rate=0.05,  # ← 未調參預設值
+            m = lgb.LGBMRegressor(objective="regression",  # L2 探針（學均值，對因子敏感）
+                                  n_estimators=300, learning_rate=0.05,  # 未調參預設值
                                   num_leaves=31, min_child_samples=50, verbose=-1)
             m.fit(Xtr, ytr)
-            preds[q] = m.predict(Xva)
-        lgb_mae = mae(yva, preds["p50"])
-        lo = np.minimum(preds["p10"], preds["p90"])
-        hi = np.maximum(preds["p10"], preds["p90"])
-        coverage = float(np.mean((yva >= lo) & (yva <= hi)))
-        crossing = float(np.mean(preds["p10"] > preds["p90"]))
-        results.append((mins, base_mae, lgb_mae, coverage, crossing,
-                        evaluate_by_zone(valid, yva, preds["p50"], base_pred)))
-        print(f"      h={mins:>3}分: baseline {base_mae:.3f} / LightGBM {lgb_mae:.3f} "
-              f"| 覆蓋 {coverage*100:.0f}%", flush=True)
+            pred = m.predict(Xva)
 
+            full_mae = mae(yva, pred)
+            # 已空區 MAE（系統存在理由的關鍵區）
+            ab = valid["available_bikes"].values
+            empty_mask = ab <= 0
+            empty_mae = mae(yva[empty_mask], pred[empty_mask]) if empty_mask.sum() else None
+            # Δ≠0 樣本 MAE（排除零膨脹稀釋，看真正有變化時的準度）
+            nz_mask = np.abs(yva) > 0
+            nz_mae = mae(yva[nz_mask], pred[nz_mask]) if nz_mask.sum() else None
+            out.append((mins, full_mae, empty_mae, nz_mae))
+        return out
+
+    FACTOR = "天氣"  # 本輪消融的因子名（切換因子時改這裡）
+    print(f"[2/3] 消融對比：基準(無{FACTOR}) vs +{FACTOR} ...", flush=True)
+    print(f"      探針=L2迴歸(學均值,對因子敏感);上線出區間仍用分位數", flush=True)
+    print("      跑基準組...", flush=True)
+    base_group = run_group(with_weather=False)
+    print(f"      跑 +{FACTOR} 組（全站批次併入）...", flush=True)
+    weather_group = run_group(with_weather=True)
+
+    print(f"[3/3] 消融結果：{FACTOR}因子的邊際影響程度", flush=True)
+    print("=" * 92, flush=True)
+    print(f"{'視野':>5} {'基準全':>9} {'+因子全':>9} {'全改善':>8}  "
+          f"{'基準已空':>9} {'+因子已空':>10} {'已空改善':>9}  "
+          f"{'基準Δ≠0':>9} {'+因子Δ≠0':>10} {'Δ≠0改善':>9}", flush=True)
+    for (mins, b_full, b_emp, b_nz), (_, w_full, w_emp, w_nz) in zip(base_group, weather_group):
+        def pct(a, b):
+            return (a - b) / a * 100 if a else 0.0
+        print(f"{mins:>3}分 {b_full:>9.3f} {w_full:>9.3f} {pct(b_full, w_full):>+7.2f}%  "
+              f"{b_emp:>9.3f} {w_emp:>10.3f} {pct(b_emp, w_emp):>+8.2f}%  "
+              f"{b_nz:>9.3f} {w_nz:>10.3f} {pct(b_nz, w_nz):>+8.2f}%", flush=True)
+    print("=" * 92, flush=True)
+    print("解讀：改善>0 = 因子讓模型更準。三個切面——全樣本(被0稀釋)/已空區(系統存在理由)/Δ≠0(真正有變化時)", flush=True)
+    print(f"      本輪因子：{FACTOR}。天氣型態用雨量分級(資料無日照無法分晴/陰)+溫度倒U舒適度", flush=True)
+    return
+
+    # （舊單組輸出保留供參考，上面 return 已結束）
     print("[4/4] 結果（多視野 ADR-017）", flush=True)
     print("=" * 64, flush=True)
     print(f"{'視野':>6} {'baseline':>10} {'LightGBM':>10} {'改善':>8} {'覆蓋率':>8} {'交叉':>6}", flush=True)
