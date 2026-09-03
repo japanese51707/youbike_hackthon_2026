@@ -101,6 +101,28 @@
           <mxGeometry x="420" y="1240" width="320" height="65" as="geometry" />
         </mxCell>
 
+        <!-- ===== 第四批 ADR-014：站點行為指紋（紫）===== -->
+        <mxCell id="g4-box" value="④ 站點行為指紋（ADR-014）行為勝人口" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d1c4e9;strokeColor=#4527a0;fontColor=#311b92;verticalAlign=top;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="800" y="960" width="380" height="360" as="geometry" />
+        </mxCell>
+        <mxCell id="f-profile" value="行為指紋 station_profile.py&#10;日夜比/平假日比/早晚峰方向/峰型&#10;空滿頻率（六個月歷史算，零外部成本）&#10;🟢[日批](各站) 量實際行為(本體)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4527a0;fontColor=#111111;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="820" y="1000" width="340" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="f-density" value="需求密度 = 日活動量 ÷ 柱數&#10;🟢[日批](各站)&#10;⚠️分兩層用途（不可混，見下方紫框）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff9c4;strokeColor=#f57f17;fontColor=#5d4037;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="820" y="1090" width="340" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="f-cluster" value="站型分群（人話標籤）&#10;通勤住宅/辦公商業/轉運/觀光/低流量&#10;與 POI 推導地理類型「兩套對照」" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4527a0;fontColor=#111111;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="820" y="1165" width="340" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="f-coldstart" value="外部因子(學生數/人口)→降級&#10;僅新站冷啟動 fallback + 簡報敘事&#10;（新站無歷史算指紋時才用）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4527a0;fontColor=#111111;fontSize=11;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="820" y="1240" width="340" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- 需求密度分層界線說明 -->
+        <mxCell id="note-density" value="★需求密度分層（ADR-014，不可混）：&#10;📊 規劃層(長期)：記站點欄位 + 產出「建議增/減柱位」清單 → 簡報加分項&#10;🚛 調度層(即時)：需求密度「不進」即時調度觸發。當下要不要調車仍由規則引擎吃預測區間(ADR-004)。現行不能改柱位。" style="text;html=1;fontSize=11;fontColor=#4a148c;align=left;verticalAlign=middle;fillColor=#e1bee7;strokeColor=#6a1b9a;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1220" y="960" width="620" height="80" as="geometry" />
+        </mxCell>
+
         <mxCell id="assemble" value="特徵組裝層 feature builder&#10;&#10;• 對齊 (站點, 時間 t) 合併所有因子&#10;• 時序特徵嚴格用 ≤ t 資料（防資料洩漏，ADR-013）&#10;• 時間切分：1~5月訓練、6月驗證，禁隨機切分（ADR-002）&#10;• 異常日標籤 → 訓練排除/情境預估" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d1c4e9;strokeColor=#4527a0;fontColor=#311b92;fontSize=12;fontStyle=1;verticalAlign=top;align=left;spacing=8;" vertex="1" parent="1">
           <mxGeometry x="820" y="480" width="300" height="240" as="geometry" />
         </mxCell>
@@ -132,6 +154,8 @@
         <mxCell id="e-s3-1" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#1976d2;dashed=1;endArrow=open;" edge="1" parent="1" source="src-s3" target="g3-box"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="e-holiday-1" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#1976d2;dashed=1;endArrow=open;" edge="1" parent="1" source="src-holiday" target="g1-box"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="e-osm-2" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#1976d2;dashed=1;endArrow=open;" edge="1" parent="1" source="src-osm" target="g2-box"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-g4" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#4527a0;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="f-profile" target="assemble"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-s3-4" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#1976d2;dashed=1;endArrow=open;" edge="1" parent="1" source="src-s3" target="g4-box"><mxGeometry relative="1" as="geometry" /></mxCell>
       </root>
     </mxGraphModel>
   </diagram>
