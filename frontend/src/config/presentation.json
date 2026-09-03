@@ -1,0 +1,38 @@
+{
+  "tileLayer": {
+    "url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "attribution": "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a>"
+  },
+  "maps": {
+    "dashboard": { "center": [25.015, 121.49], "zoom": 11 },
+    "route": { "zoom": 12 },
+    "timeline": { "center": [24.994, 121.497], "zoom": 14 }
+  },
+  "markers": {
+    "stationRadius": 9,
+    "routeRadius": 10,
+    "timelineRadius": 12,
+    "fillOpacity": 0.85
+  },
+  "route": {
+    "lineColor": "#087f5b",
+    "lineWeight": 5,
+    "completedColor": "#2b8a3e",
+    "pendingColor": "#f08c00"
+  },
+  "fallbackColor": "#495057",
+  "statusColors": {
+    "empty": "#c92a2a",
+    "low": "#f08c00",
+    "normal": "#2b8a3e",
+    "high": "#1971c2",
+    "full": "#6741d9"
+  },
+  "usageBands": [
+    { "max": 10, "color": "#c92a2a" },
+    { "max": 30, "color": "#f08c00" },
+    { "max": 70, "color": "#2b8a3e" },
+    { "max": 99.9, "color": "#1971c2" },
+    { "max": 100, "color": "#6741d9" }
+  ]
+}

@@ -22,12 +22,13 @@
 | [ADR-002](ADR-002-LightGBM選型.md) | 預測模型採 LightGBM | accepted | prediction | 選型已定；backend 目前仍使用 MockPredictor |
 | [ADR-003](ADR-003-運算層EC2資料層Serverless.md) | 運算層 EC2、資料層 Serverless | accepted | infra, data | S3／Athena 已規劃；Git 歷史尚無 EC2 部署證據 |
 | [ADR-004](ADR-004-AI只估計規則引擎決策.md) | AI 只估計、規則引擎決策 | accepted | core, prediction | 規則與人工閘門為不可違反約束 |
-| [ADR-005](ADR-005-契約先行與Mock並行開發.md) | 契約先行＋符合 Schema 的 Mock 解鎖並行 | accepted（追溯） | api, schemas, collaboration | 後端契約與 Mock 已建立；前端尚未完成 |
+| [ADR-005](ADR-005-契約先行與Mock並行開發.md) | 契約先行＋符合 Schema 的 Mock 解鎖並行 | accepted（追溯） | api, schemas, collaboration | 後端契約與 Mock 已建立；Mock-only 前端已完成，FastAPI 整合尚未完成 |
 | [ADR-006](ADR-006-可抽換資料源與明確降級.md) | 可抽換資料源＋明確 freshness／降級 | accepted（追溯） | data, reliability | Mock／Historical 可用；即時 adapter 未實作，雙重失敗回空與 freshness 枚舉仍有缺口 |
 | [ADR-007](ADR-007-API雙向邊界防護.md) | API 入向與出向都視為信任邊界 | accepted（追溯） | api, security | 應用層防護已建；正式 webhook／TLS 尚待部署 |
 | [ADR-008](ADR-008-依賴釘選與關鍵行為測試.md) | 精確釘選依賴＋優先測決策關鍵行為 | accepted（追溯） | backend, testing, dependencies | Python 3.12 為容器基線；CI 尚未建立 |
 | [ADR-009](ADR-009-SQLite持久化與Repository分層.md) | 黑客松階段使用 SQLite＋Repository | accepted（追溯） | database, backend | 單實例適用；多實例前需重評估 |
 | [ADR-010](ADR-010-Demo帳號與後端角色驗證.md) | Demo 本地帳號＋後端角色驗證 | accepted（追溯） | authentication, authorization, security | 無 token/session，只限受控 Demo |
+| [ADR-011](ADR-011-React-Vite-Mock-first前端架構.md) | React／Vite Mock-first 前端＋可替換 adapter | accepted | frontend, dependencies, data-adapter | Mock-only 三頁面與 adapter 已實作；FastAPI、正式認證與部署尚未整合 |
 
 ## 新決策流程
 
