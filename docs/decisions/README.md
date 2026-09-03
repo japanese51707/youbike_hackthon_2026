@@ -32,6 +32,8 @@
 | [ADR-012](ADR-012-擴充特徵時間POI事件特殊天氣.md) | 擴充特徵：時間衍生/POI距離/事件/特殊天氣 | accepted | prediction, features, data | 承接 ADR-011；POI 用 OSM、區域類型自動推導、事件介面先行、特殊天氣異常日標籤 |
 | [ADR-013](ADR-013-時序自身鄰近連動營運面因子.md) | 站點時序自身/鄰近連動/營運面因子 | accepted | prediction, features, data | lag/歷史空滿頻率/波動度/鄰近連動(距離指數衰減)/日出日落/溫度倒U/故障缺口/level shift；含資料洩漏防範約束 |
 | [ADR-014](ADR-014-站點行為指紋與需求密度分層.md) | 站點行為指紋/需求密度分層/外部因子降級 | accepted | prediction, features, data | 六個月行為指紋(日夜比/平假日比/峰型/需求密度)；需求密度分規劃層(柱位建議)與調度層(不進即時觸發)；站型分群行為vsPOI兩套對照；外部人口因子降為冷啟動fallback |
+| [ADR-015](ADR-015-目標變數定義與截斷樣本處理.md) | 目標變數定義與截斷(censored)樣本處理 | accepted | prediction, features, data | 進訓練前審查F-03；截斷=「Δ=0 且同時空/滿站」才排除/降權(正常站Δ=0保留為真實訊號)+分區間評估；需求插補選配 |
+| [ADR-016](ADR-016-調度標註離線與線上分離.md) | 調度介入辨識：離線清訓練資料/上線只事後標註 | accepted | prediction, features, data | 進訓練前審查§5-2；辨識調度僅為清訓練資料(離線用全期合法)；上線不做即時調度偵測,只做事後異常標註供回查 |
 
 ## 新決策流程
 
