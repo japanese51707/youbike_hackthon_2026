@@ -39,6 +39,12 @@ def compute_profile(series, total_docks: Optional[int] = None) -> dict:
     total_docks：柱位數（算需求密度）；未給則從 series 推。
 
     回傳六指標。活動量 = |相鄰時段 available_bikes 變化| 的總和。
+
+    ★★★ 資料洩漏警告（ADR-013/014 補記 F-01）★★★
+    本函式對「傳入的整個 series」計算，不含任何窗口限制。
+    呼叫者（特徵組裝 pipeline）**必須只傳訓練期資料**（如 1~5 月），
+    絕不可傳含驗證/預測期（如 6 月）的資料，否則指紋會洩漏未來、驗證分數虛高且不報錯。
+    站型分群的 fit 同樣只能用訓練期。此約束須在 pipeline 層級強制。
     """
     import pandas as pd
 
