@@ -8,7 +8,8 @@ scope:
   - frontend
   - dependencies
   - data-adapter
-related-commits: []
+related-commits:
+  - 98d3e8e
 retrospective: false
 supersedes:
 superseded-by:
@@ -115,6 +116,6 @@ superseded-by:
 
 ## 追溯
 
-- 相關 commit：尚未建立；實作 commit 產生後再更新。
+- 相關 commit：`98d3e8e`（React／Vite Mock-first 三頁前端與可替換 adapter 實作）。
 - 相關 Spec：`.kiro/specs/youbike-dispatch-system/design.md`、`.kiro/specs/youbike-dispatch-system/api_contract.md`、`.kiro/specs/youbike-dispatch-system/tasks.md`。
 - 相關 ADR：ADR-005（契約先行與 Mock）、ADR-007（API 邊界）、ADR-008（依賴釘選）、ADR-010（Demo 身分限制）。

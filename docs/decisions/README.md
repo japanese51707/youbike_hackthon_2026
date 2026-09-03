@@ -41,7 +41,7 @@
 
 ## 歷史追溯
 
-- [Commit → Decision 時序追溯](commit-decision-map.md)：涵蓋目前完整 15 筆 Git 歷史，逐筆分類並映射至 ADR。
+- [Commit → Decision 時序追溯](commit-decision-map.md)：涵蓋至 `98d3e8e` 的 18 筆 Git 歷史，逐筆分類並映射至 ADR。
 - ADR-005～010 是依 commit、Spec 與現存程式補記的歷史決策，均標示 `retrospective: true`；沒有證據的當時動機不視為事實。
 
 ## 編號規則
