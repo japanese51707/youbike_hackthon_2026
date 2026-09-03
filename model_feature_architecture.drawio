@@ -1,0 +1,150 @@
+<mxfile host="app.diagrams.net" version="21.0.0">
+  <diagram name="模型特徵架構" id="feature-arch">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2100" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===== 標題 ===== -->
+        <mxCell id="title" value="YouBike 預測模型 — 特徵因子架構（ADR-011/012/013）&#10;單一 LightGBM 模型 + 分層參數｜輸出：下一時段淨流入出量 + 區間下界/上界" style="text;html=1;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="2020" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 圖例（工程三維度）===== -->
+        <mxCell id="legend" value="圖例｜可得性：🟢已知未來確定　🟡已知未來有誤差　🔴僅事後可知（推論時只能用過去值，防資料洩漏）&#10;更新頻率：[靜態] 一次算　[日批] 每日批次　[即時] 即時串流　　涵蓋範圍：(全市) / (分區) / (各站)" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fillColor=#fff8e1;strokeColor=#f9a825;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="2020" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 資料源層（最左）===== -->
+        <mxCell id="src-box" value="資料來源層" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1565c0;verticalAlign=top;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="160" width="300" height="1180" as="geometry" />
+        </mxCell>
+        <mxCell id="src-s3" value="S3 歷史 Parquet&#10;youbike-hackathon-2026&#10;每30分/1576站/6個月&#10;（存量、借用率、柱數）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1565c0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="200" width="260" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="src-holiday" value="新北市開放平台&#10;辦公日曆表 dataset 308DCD75&#10;（2018~2027 放假日）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1565c0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="290" width="260" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="src-weather" value="CODiS 重建歷史逐時&#10;Raingel/historical_weather&#10;新北56測站（溫濕雨風）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1565c0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="370" width="260" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="src-osm" value="OpenStreetMap Overpass API&#10;9類POI座標687筆&#10;（捷運/火車/轉運/學校/商場/&#10;夜市/醫院/公園/展演）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1565c0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="450" width="260" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="src-moe" value="教育部統計處&#10;stats.moe.gov.tw&#10;縣市別各級學生數（粗估）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1565c0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="540" width="260" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="src-elev" value="Open-Elevation API&#10;站點高程 → 坡度" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1565c0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="620" width="260" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="src-astro" value="天文公式（NOAA）&#10;日出日落，無外部資料" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1565c0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="690" width="260" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="src-event" value="事件資料表 events_data.json&#10;（活動/路跑，選項A介面先行）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1565c0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="760" width="260" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="src-suspend" value="停班課日表 typhoon_days.json&#10;（颱風/災害公告，手動維護）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1565c0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="820" width="260" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="src-derived" value="timestamp 衍生 / 站點座標&#10;（無外部資料，直接算）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1565c0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="880" width="260" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="src-ops" value="營運資料表（level shift）&#10;費率/1.0→2.0/鄰站增退（後補）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#1565c0;fontSize=11;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="940" width="260" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 第一批 ADR-011：環境/靜態類（綠）===== -->
+        <mxCell id="g1-box" value="① 環境／靜態因子（ADR-011）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f5e9;strokeColor=#2e7d32;verticalAlign=top;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="400" y="160" width="360" height="380" as="geometry" />
+        </mxCell>
+        <mxCell id="f-holiday" value="假日 calendar_holiday.py&#10;放假/國定假日/連假/補班&#10;🟢[靜態](全市)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2e7d32;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="200" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="f-school" value="學期/學生數 school_calendar.py&#10;寒暑假 + 各級影響人口推估&#10;🟢[靜態](分區)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2e7d32;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="270" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="f-weather" value="天氣 weather.py&#10;溫濕雨風 + 溫度倒U舒適度&#10;🟡[即時](分區)｜訓練用歷史,現況預測接即時API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2e7d32;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="340" width="320" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f-terrain" value="地形 terrain.py&#10;高程 → 坡度 → 分類&#10;🟢[靜態](各站)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2e7d32;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="420" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 第二批 ADR-012：時空/POI 類（橘）===== -->
+        <mxCell id="g2-box" value="② 時空／POI 因子（ADR-012）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;verticalAlign=top;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="400" y="560" width="360" height="380" as="geometry" />
+        </mxCell>
+        <mxCell id="f-time" value="時間衍生 time_features.py&#10;時段/尖峰/星期/週末/月/季&#10;🟢[靜態](全市)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#e65100;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="600" width="320" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="f-poi" value="POI距離 + 區域類型 poi_distance.py&#10;9類POI最近距離,類型自動推導&#10;🟢[靜態](各站)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#e65100;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="665" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="f-daylight" value="日出日落 daylight.py&#10;是否白天/距日落&#10;🟢[靜態](全市)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#e65100;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="735" width="320" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="f-event" value="事件 event_impact.py&#10;活動/路跑影響(距離+規模)&#10;🟡[事件](少數站)｜資料後補" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#e65100;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="800" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="f-walert" value="特殊天氣 weather_alert.py&#10;颱風/豪大雨/停班課 異常日標籤&#10;🟡[即時](分區)｜訓練排除+情境預估" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#e65100;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="870" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 第三批 ADR-013：時序自身/鄰近/營運（紅，含防洩漏）===== -->
+        <mxCell id="g3-box" value="③ 站點時序自身／鄰近／營運（ADR-013）★最強特徵" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffebee;strokeColor=#c62828;verticalAlign=top;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="400" y="960" width="360" height="360" as="geometry" />
+        </mxCell>
+        <mxCell id="f-ts" value="時序自身 station_timeseries.py&#10;lag(前30分/1時/昨日/上週同時段)&#10;變化率/加速度&#10;🔴[即時](各站) ★防洩漏:只用≤t值" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c62828;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1000" width="320" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="f-stats" value="站點體質(同上模組)&#10;歷史空滿頻率/波動度P90-P10/日均周轉&#10;🟢[日批](各站) 用訓練期前統計" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c62828;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1085" width="320" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="f-neighbor" value="鄰近站連動 neighbor_stations.py&#10;距離指數衰減 exp(-d/0.3km)+缺車滿站壓力&#10;🔴[即時](各站) ★防洩漏:鄰站用≤t狀態" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c62828;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1160" width="320" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="f-capacity" value="站點容量(柱數)+故障車柱缺口&#10;缺口=總柱-可借-可還(間接推)&#10;🟢容量[靜態] 🔴缺口[即時](各站)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c62828;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1240" width="320" height="65" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 特徵組裝層（中右）===== -->
+        <mxCell id="assemble" value="特徵組裝層&#10;feature builder&#10;&#10;• 對齊 (站點, 時間 t) 合併所有因子&#10;• 時序特徵嚴格用 ≤ t 資料&#10;  （防資料洩漏，ADR-013）&#10;• 時間切分：1~5月訓練、6月驗證&#10;  禁隨機切分（ADR-002）&#10;• 異常日標籤 → 訓練排除/情境預估" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede7f6;strokeColor=#4527a0;fontSize=12;fontStyle=1;verticalAlign=top;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="820" y="480" width="300" height="240" as="geometry" />
+        </mxCell>
+
+        <!-- ===== LightGBM 模型 ===== -->
+        <mxCell id="model" value="LightGBM 單一模型（ADR-001/002）&#10;&#10;• 全市共用一個模型&#10;• 站點差異靠條件參數表達&#10;• quantile regression 出區間&#10;• 讓模型自學因子交互作用&#10;  （含天氣×尖峰等非線性）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2f1;strokeColor=#00695c;fontSize=13;fontStyle=1;verticalAlign=top;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="480" width="300" height="240" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 輸出 ===== -->
+        <mxCell id="output" value="輸出：PredictionInterval（ADR-004）&#10;&#10;• predicted_available（點估計,僅顯示）&#10;• lower_bound（下界→防空站觸發）&#10;• upper_bound（上界→防滿站觸發）&#10;• horizon：預設30分,可調(對應即時源)&#10;&#10;AI只估計,規則引擎吃區間做決策" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce4ec;strokeColor=#ad1457;fontSize=12;fontStyle=1;verticalAlign=top;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="480" width="300" height="240" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 核心約束註記 ===== -->
+        <mxCell id="note-core" value="核心約束（ADR-004，不可違反）：&#10;AI 只輸出估計值 + 區間，不做決策。所有調度由規則引擎吃「區間下界/上界」觸發，走「預覽→確認→執行→驗證」閘門。" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fillColor=#fce4ec;strokeColor=#ad1457;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="820" y="760" width="1020" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="note-leak" value="★資料洩漏防範（ADR-013）：紅色🔴因子（lag/變化率/加速度/鄰近站狀態/故障缺口）屬「僅事後可知」，預測 t+1 時只能用 ≤ t 的已發生值。所有 lag 特徵時間位移必須 ≤ 0。" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fillColor=#ffebee;strokeColor=#c62828;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="820" y="830" width="1020" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="note-cross" value="交叉影響（雨天×尖峰×假日×活動）：目前單因子先行，交叉留待後續 ADR。LightGBM 本身會學部分交互作用。" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;fillColor=#f5f5f5;strokeColor=#666666;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="820" y="900" width="1020" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 連線：因子群組 → 特徵組裝 → 模型 → 輸出 ===== -->
+        <mxCell id="e-g1" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#2e7d32;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="g1-box" target="assemble"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-g2" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#e65100;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="g2-box" target="assemble"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-g3" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#c62828;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="g3-box" target="assemble"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-am" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#4527a0;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="assemble" target="model"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-mo" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#00695c;strokeWidth=2;endArrow=block;" edge="1" parent="1" source="model" target="output"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- ===== 連線：資料源 → 因子群組（示意，箭頭指向對應群組）===== -->
+        <mxCell id="e-s3-1" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#90caf9;dashed=1;endArrow=open;" edge="1" parent="1" source="src-s3" target="g3-box"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-holiday-1" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#90caf9;dashed=1;endArrow=open;" edge="1" parent="1" source="src-holiday" target="g1-box"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e-osm-2" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#90caf9;dashed=1;endArrow=open;" edge="1" parent="1" source="src-osm" target="g2-box"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
