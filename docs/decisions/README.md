@@ -28,6 +28,7 @@
 | [ADR-008](ADR-008-依賴釘選與關鍵行為測試.md) | 精確釘選依賴＋優先測決策關鍵行為 | accepted（追溯） | backend, testing, dependencies | Python 3.12 為容器基線；CI 尚未建立 |
 | [ADR-009](ADR-009-SQLite持久化與Repository分層.md) | 黑客松階段使用 SQLite＋Repository | accepted（追溯） | database, backend | 單實例適用；多實例前需重評估 |
 | [ADR-010](ADR-010-Demo帳號與後端角色驗證.md) | Demo 本地帳號＋後端角色驗證 | accepted（追溯） | authentication, authorization, security | 無 token/session，只限受控 Demo |
+| [ADR-011](ADR-011-預測特徵因子模組化與資料源.md) | 預測特徵四因子模組化＋公開資料源 | accepted | prediction, features, data | 假日/天氣/地形/學生數各一模組；單因子先行，交叉影響待後續；天氣訓練用歷史、現況預測才接即時 |
 
 ## 新決策流程
 
