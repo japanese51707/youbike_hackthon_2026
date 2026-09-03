@@ -22,6 +22,9 @@ __pycache__/
 *.sqlite
 backend/data/
 
+# === 特徵模組的執行期快取（可重新產生）===
+backend/features/_elevation_cache.json
+
 # === 大型資料（放 S3，不進 Git；見 README 資料存放說明）===
 youbike資料集/
 output/
