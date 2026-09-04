@@ -99,7 +99,8 @@ def run_weight_experiment(df):
         sub = frame.dropna(subset=[tgt])
         train = sub[sub["is_train"] == 1]
         valid = sub[sub["is_train"] == 0]
-        train_clean = train[train["is_censored"] == 0]
+        # 訓練排除截斷樣本(ADR-015)+調度介入異常點(ADR-016,當目標時排除)
+        train_clean = train[(train["is_censored"] == 0) & (train["is_rebalancing"] == 0)]
 
         Xtr = train_clean[feat_cols].astype(float)
         ytr = train_clean[tgt].astype(float)
@@ -171,7 +172,8 @@ def run_full_training(df, tuned=False):
         sub = frame.dropna(subset=[tgt])
         train = sub[sub["is_train"] == 1]
         valid = sub[sub["is_train"] == 0]
-        train_clean = train[train["is_censored"] == 0]
+        # 訓練排除截斷樣本(ADR-015)+調度介入異常點(ADR-016,當目標時排除)
+        train_clean = train[(train["is_censored"] == 0) & (train["is_rebalancing"] == 0)]
 
         # baseline: seasonal naive
         table, gmed = fit_seasonal_naive(train_clean, target_col=tgt)
@@ -287,7 +289,7 @@ def run_tuning(df, n_trials=20):
         for train_months, valid_month in folds:
             trf = tr[tr["m"].isin(train_months)]
             vaf = tr[tr["m"] == valid_month]
-            trc = trf[trf["is_censored"] == 0]
+            trc = trf[(trf["is_censored"] == 0) & (trf["is_rebalancing"] == 0)]
             Xtr, ytr = trc[feat_cols].astype(float), trc[TGT].astype(float)
             Xva = vaf[feat_cols].astype(float)
             yva = vaf[TGT].astype(float).values
@@ -366,7 +368,8 @@ def main():
             sub = frame.dropna(subset=[tgt])
             train = sub[sub["is_train"] == 1]
             valid = sub[sub["is_train"] == 0]
-            train_clean = train[train["is_censored"] == 0]   # 截斷排除 ADR-015
+            # 截斷排除(ADR-015)+調度異常排除(ADR-016)
+            train_clean = train[(train["is_censored"] == 0) & (train["is_rebalancing"] == 0)]
 
             yva = valid[tgt].astype(float).values
             Xtr = train_clean[feat_cols].astype(float)

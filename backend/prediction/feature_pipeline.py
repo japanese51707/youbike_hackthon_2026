@@ -32,6 +32,10 @@ LAG_SLOTS = {"lag_30min": 1, "lag_1hr": 2, "lag_2hr": 4, "lag_1day": 48, "lag_1w
 # 多視野（ADR-017）：格數 → 分鐘數。每 30 分一格，故 h 格 = h*30 分。
 HORIZON_STEPS = {1: 30, 2: 60, 3: 90, 4: 120}
 
+# ADR-016 調度異常判定參數（可調）：D 標準 = 反常(σ倍) 且 大量(佔總柱比例)
+REBAL_SIGMA = 3.0   # |Δ-站均| > REBAL_SIGMA × 站std → 反常
+REBAL_CAP = 0.5     # |Δ| > 總柱 × REBAL_CAP → 一次搬走大半個站
+
 
 # ADR-018 ②③：站點主檔歸併 + 新舊站標記
 COORD_DECIMALS = 4  # 經緯度取整位數（小數 4 位 ≈ 10 公尺），作為 station_key 主鍵
@@ -86,9 +90,11 @@ def _add_lag_and_target(g: pd.DataFrame) -> pd.DataFrame:
         g[name] = ab.shift(k)              # 過去值
     g["change_1hr"] = ab - ab.shift(2)     # 近1小時變化（過去）
     g["change_2hr"] = ab - ab.shift(4)
-    # 逐格絕對變化（ADR-019 周轉量基礎）：|ab(t)-ab(t-1)|，用絕對值才是真周轉
-    # （淨變化會被借出又還回相抵洗成 0）。後續在 build_training_frame 用訓練期累加算 turnover。
-    g["abs_change_1step"] = (ab - ab.shift(1)).abs()
+    # 逐格淨變化與絕對變化：
+    #   delta_1step 帶正負（ADR-016 調度異常判定用）；abs_change_1step 絕對值（ADR-019 周轉量基礎，
+    #   用絕對值才是真周轉，淨變化會被借出又還回相抵洗成 0）。
+    g["delta_1step"] = ab - ab.shift(1)
+    g["abs_change_1step"] = g["delta_1step"].abs()
 
     # 多視野目標（ADR-017）：h 格後的「累積淨變化」= available(t+h) − available(t)
     #   每 30 分一格：h=1/2/3/4 對應 30/60/90/120 分鐘。直接對累積 Δ 訓練（分位數不可加）。
@@ -426,6 +432,20 @@ def build_training_frame(
     # 用於評估分報「老站/新站」MAE，讓新站表現不被整體平均掩蓋（owner 核准分界=訓練期結束）。
     first_seen = frame.groupby("station_key")["dt"].transform("min")
     frame["is_new_station"] = (first_seen >= train_end_ts).astype(int)
+
+    # ADR-016：調度介入異常點標記（離線清訓練資料；上線不即時偵測只事後標註）。
+    # D 標準：該格 1 步淨變化 |Δ - 站均| > REBAL_SIGMA×站std 且 |Δ| > 總柱×REBAL_CAP
+    #   （又反常又一次搬走大半個站，像調度而非自然借還）。
+    # ★防洩漏：站均/站std 只用訓練期(is_train==1)算；★只標「該格當目標時」排除，存量照常當特徵。
+    tp_d = frame[frame["is_train"] == 1].groupby("station_key")["delta_1step"]
+    d_stats = pd.DataFrame({"_dmean": tp_d.mean(), "_dstd": tp_d.std()}).reset_index()
+    frame = frame.merge(d_stats, on="station_key", how="left")
+    frame["_dstd"] = frame["_dstd"].fillna(0.0)
+    reversal = (frame["_dstd"] > 0) & (
+        (frame["delta_1step"] - frame["_dmean"]).abs() > REBAL_SIGMA * frame["_dstd"])
+    bulk = frame["delta_1step"].abs() > (frame["total_docks"].fillna(0) * REBAL_CAP)
+    frame["is_rebalancing"] = (reversal & bulk).fillna(False).astype(int)
+    frame = frame.drop(columns=["_dmean", "_dstd"])
 
     # 站點識別特徵（F-06）：該站 × day_type × time_slot 的「訓練期」歷史 P50 淨流量
     # ★只用訓練期算，避免洩漏（ADR-013/014 窗口約束）
