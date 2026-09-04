@@ -41,17 +41,17 @@ export default function OverviewCharts({ overview, simulation }) {
       top: 6,
       textStyle: { color: AXIS_COLOR },
     },
-    grid: { left: 52, right: 18, top: 48, bottom: 72, containLabel: true },
+    grid: { left: 52, right: 18, top: 48, bottom: 24, containLabel: true },
     xAxis: {
       type: "category",
       data: simulation["指標"],
       axisLine: { lineStyle: { color: GRID_COLOR } },
       axisLabel: {
         interval: 0,
-        rotate: 18,
+        rotate: 0,
         color: AXIS_COLOR,
         fontSize: 11,
-        margin: 14,
+        margin: 12,
       },
     },
     yAxis: {
