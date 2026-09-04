@@ -131,12 +131,111 @@ def run_weight_experiment(df):
     print("  ★注意：sample_weight 改變訓練目標，MAE 絕對值口徑一致(同驗證集)，可跨方案比。", flush=True)
 
 
+def run_full_training(df):
+    """正式訓練（收官）：整合所有採用因子 + 分位數模型 P10/P50/P90。
+
+    與消融不同：這裡用「上線的分位數迴歸」出區間，並報完整上線指標：
+      baseline(seasonal naive) vs LightGBM P50 各視野 MAE、分區間 MAE、
+      區間覆蓋率(P10-P90 是否涵蓋名目 80%)、分位數交叉率、新舊站分報。
+
+    採用因子（消融定案）：天氣 + POI + 行為指紋 + 地形 + dayoff(預設)。
+    回答 ADR-002 懸案：加了所有因子後，LightGBM 是否終於贏過 baseline。
+    """
+    import lightgbm as lgb
+    from prediction.feature_pipeline import HORIZON_STEPS
+
+    print("[2/3] 正式訓練：整合所有採用因子 + 分位數模型 ...", flush=True)
+    print("      因子=天氣+POI+行為指紋+地形+dayoff；模型=quantile P10/P50/P90", flush=True)
+    frame, feat_cols = build_training_frame(
+        df, TRAIN_END, with_weather=True, with_poi=True,
+        with_profile=True, with_terrain=True)  # dayoff_mode 預設 True
+    print(f"      特徵數={len(feat_cols)}", flush=True)
+
+    print("[3/3] 最終結果（baseline vs 全因子 LightGBM）", flush=True)
+    print("=" * 112, flush=True)
+    print(f"{'視野':>4} {'baseMAE':>9} {'LGB_P50':>9} {'改善':>8} "
+          f"{'決策base':>9} {'決策LGB':>9} {'決策改善':>9} "
+          f"{'已空base':>9} {'已空LGB':>9} {'覆蓋率':>7} {'交叉率':>6}", flush=True)
+    zone_rows = []
+    newold_rows = []
+    for h, mins in HORIZON_STEPS.items():
+        tgt = f"target_delta_{mins}"
+        sub = frame.dropna(subset=[tgt])
+        train = sub[sub["is_train"] == 1]
+        valid = sub[sub["is_train"] == 0]
+        train_clean = train[train["is_censored"] == 0]
+
+        # baseline: seasonal naive
+        table, gmed = fit_seasonal_naive(train_clean, target_col=tgt)
+        base_pred = predict_seasonal_naive(valid, table, gmed).values
+        yva = valid[tgt].astype(float).values
+        base_mae = mae(yva, base_pred)
+
+        # LightGBM 分位數 P10/P50/P90
+        Xtr = train_clean[feat_cols].astype(float)
+        ytr = train_clean[tgt].astype(float)
+        Xva = valid[feat_cols].astype(float)
+        preds = {}
+        for q, alpha in [("p10", 0.10), ("p50", 0.50), ("p90", 0.90)]:
+            m = lgb.LGBMRegressor(objective="quantile", alpha=alpha,
+                                  n_estimators=300, learning_rate=0.05,  # 未調參預設值
+                                  num_leaves=31, min_child_samples=50, verbose=-1)
+            m.fit(Xtr, ytr)
+            preds[q] = m.predict(Xva)
+        lgb_mae = mae(yva, preds["p50"])
+        imp = (base_mae - lgb_mae) / base_mae * 100 if base_mae else 0.0
+
+        # 覆蓋率：真值落在 [P10, P90] 的比例（名目 80%）
+        covered = ((yva >= preds["p10"]) & (yva <= preds["p90"])).mean()
+        # 分位數交叉率：P10 > P50 或 P50 > P90 的比例（應為 0）
+        cross = ((preds["p10"] > preds["p50"]) | (preds["p50"] > preds["p90"])).mean()
+
+        # 已空區
+        ab = valid["available_bikes"].values
+        em = ab <= 0
+        base_emp = mae(yva[em], base_pred[em]) if em.sum() else float("nan")
+        lgb_emp = mae(yva[em], preds["p50"][em]) if em.sum() else float("nan")
+        # 決策相關區（排除健康區）：可借 ≤ 3（已空 OR 接近空），精確重算合併 MAE
+        dm = ab <= 3
+        base_dec = mae(yva[dm], base_pred[dm]) if dm.sum() else float("nan")
+        lgb_dec = mae(yva[dm], preds["p50"][dm]) if dm.sum() else float("nan")
+        dec_imp = (base_dec - lgb_dec) / base_dec * 100 if base_dec else 0.0
+
+        print(f"{mins:>3}分 {base_mae:>9.3f} {lgb_mae:>9.3f} {imp:>+7.1f}% "
+              f"{base_dec:>9.3f} {lgb_dec:>9.3f} {dec_imp:>+8.1f}% "
+              f"{base_emp:>9.3f} {lgb_emp:>9.3f} {covered*100:>6.1f}% {cross*100:>5.1f}%", flush=True)
+
+        # 分區間（健康/接近空/已空）
+        zone_rows.append((mins, evaluate_by_zone(valid, yva, preds["p50"], base_pred)))
+        # 新舊站
+        nm = valid["is_new_station"].values == 1
+        newold_rows.append((mins,
+            mae(yva[~nm], preds["p50"][~nm]) if (~nm).sum() else None,
+            mae(yva[nm], preds["p50"][nm]) if nm.sum() else None,
+            int(nm.sum())))
+    print("=" * 96, flush=True)
+    print("解讀：改善>0=模型贏baseline；覆蓋率應接近名目80%；交叉率應=0", flush=True)
+
+    print("\n[附1] 分區間 MAE（baseline / LightGBM P50）：", flush=True)
+    for mins, rows in zone_rows:
+        print(f"  [{mins}分]", flush=True)
+        for name, n, zbase, zlgb in rows:
+            print(f"    {name:14} n={n:>8,}  base {zbase:>6.3f} / LGB {zlgb:>6.3f}", flush=True)
+
+    print("\n[附2] 新舊站分報（LightGBM P50 MAE）：", flush=True)
+    for mins, old_m, new_m, new_n in newold_rows:
+        ns = f"{new_m:.3f}" if new_m is not None else "—"
+        print(f"  {mins:>3}分  老站 {old_m:.3f} / 新站 {ns} (新站樣本 {new_n:,})", flush=True)
+    print("\n註：超參數為未調參預設值(ADR-002)；覆蓋率校準待 P2 conformal", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sample", type=int, default=None, help="只取前 N 站快速驗證")
     ap.add_argument("--weather", action="store_true", help="併入天氣因子（消融對比用）")
-    ap.add_argument("--mode", choices=["ablation", "weight"], default="ablation",
-                    help="ablation=因子消融對比 / weight=ADR-019 樣本權重三方案對比(已定案:不採用A,見ADR-019)")
+    ap.add_argument("--mode", choices=["ablation", "weight", "full"], default="ablation",
+                    help="ablation=因子消融對比 / weight=ADR-019 樣本權重三方案對比 / "
+                         "full=正式訓練(整合所有採用因子+分位數模型,收官數字)")
     ap.add_argument("--factor", choices=["weather", "holiday", "dayoff", "poi", "profile", "terrain"], default="holiday",
                     help="ablation 模式要測的因子：weather=天氣 / holiday=非週末假日(加料) / "
                          "dayoff=is_weekend 升級 is_dayoff(修正既有特徵,非加料) / poi=POI距離(14類) / "
@@ -203,6 +302,11 @@ def main():
     # ===== ADR-019：樣本權重三方案對比模式 =====
     if args.mode == "weight":
         run_weight_experiment(df)
+        return
+
+    # ===== 正式訓練模式（整合所有採用因子 + 分位數模型）=====
+    if args.mode == "full":
+        run_full_training(df)
         return
 
     # 依 --factor 決定本輪消融的因子（名稱 + build_training_frame 的開關）
