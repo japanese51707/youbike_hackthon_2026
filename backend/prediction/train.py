@@ -137,10 +137,10 @@ def main():
     ap.add_argument("--weather", action="store_true", help="併入天氣因子（消融對比用）")
     ap.add_argument("--mode", choices=["ablation", "weight"], default="ablation",
                     help="ablation=因子消融對比 / weight=ADR-019 樣本權重三方案對比(已定案:不採用A,見ADR-019)")
-    ap.add_argument("--factor", choices=["weather", "holiday", "dayoff", "poi", "profile"], default="holiday",
+    ap.add_argument("--factor", choices=["weather", "holiday", "dayoff", "poi", "profile", "terrain"], default="holiday",
                     help="ablation 模式要測的因子：weather=天氣 / holiday=非週末假日(加料) / "
                          "dayoff=is_weekend 升級 is_dayoff(修正既有特徵,非加料) / poi=POI距離(14類) / "
-                         "profile=站點行為指紋(日夜比/平假比/早峰流向/峰度/空滿頻率)")
+                         "profile=站點行為指紋(日夜比/平假比/早峰流向/峰度/空滿頻率) / terrain=地形(海拔/坡度)")
     args = ap.parse_args()
 
     print(f"[1/4] 讀 S3 資料{'(子集 '+str(args.sample)+' 站)' if args.sample else '(全量)'} ...", flush=True)
@@ -210,7 +210,8 @@ def main():
                    "holiday": ("非週末假日", "with_holiday"),
                    "dayoff": ("放假日升級", "dayoff_mode"),
                    "poi": ("POI距離", "with_poi"),
-                   "profile": ("行為指紋", "with_profile")}
+                   "profile": ("行為指紋", "with_profile"),
+                   "terrain": ("地形", "with_terrain")}
     FACTOR, factor_kw = _FACTOR_MAP[args.factor]
     print(f"[2/3] 消融對比：基準(無{FACTOR}) vs +{FACTOR} ...", flush=True)
     print(f"      探針=L2迴歸(學均值,對因子敏感);上線出區間仍用分位數", flush=True)
@@ -242,7 +243,8 @@ def main():
                     "非週末假日": "is_holiday/國定假日/連假；邊際價值在 is_weekend 之外的平日型假日與補班日",
                     "放假日升級": "is_weekend→is_dayoff(週末 OR 國定假日視為放假,補班日視為上班);修正既有特徵非加料",
                     "POI距離": "14類POI到最近距離(捷運/火車/轉運/學校/百貨/傳統市場/夜市/醫院/公園×3/河濱/展演/運動中心)+區域類型;靜態全站批次",
-                    "行為指紋": "日夜比/平假比/早峰淨流向/峰度/空滿頻率;訓練期算防洩漏;需求密度不進特徵(ADR-014)"}
+                    "行為指紋": "日夜比/平假比/早峰淨流向/峰度/空滿頻率;訓練期算防洩漏;需求密度不進特徵(ADR-014)",
+                    "地形": "海拔+坡度%(mapzen 200m取樣)+坡度分級;靜態全站批次;上坡站借車意願低還車意願高"}
     print(f"      本輪因子：{FACTOR}。{_factor_note.get(FACTOR, '')}", flush=True)
 
     # ADR-018 ③：新舊站分報（用 +因子組數字；冷啟動表現不被整體平均掩蓋）

@@ -321,6 +321,40 @@ def attach_profile(frame: pd.DataFrame, train_mask: pd.Series) -> pd.DataFrame:
     return frame.merge(prof, on="station_key", how="left")
 
 
+# 地形特徵欄（ADR-011，靜態，來自預抓 _elevation_cache.json）
+_TERRAIN_COLS = ["terrain_elevation", "terrain_slope_pct"]
+_TERRAIN_CLASS_CODE = {"flat": 0, "gentle": 1, "moderate": 2, "steep": 3, "unknown": 4}
+
+
+def attach_terrain(frame: pd.DataFrame) -> pd.DataFrame:
+    """全站併入地形特徵（ADR-011，靜態）：海拔 + 坡度% + 坡度分級碼。
+
+    直接讀預抓的 _elevation_cache.json（station_key 對齊 ADR-018），不即時打 API。
+    坡度用 200m 取樣（匹配 mapzen ~90m DEM，避免網格雜訊）。
+    """
+    import sys as _sys
+    from pathlib import Path as _P
+    _sys.path.insert(0, str(_P(__file__).parent.parent))
+    from features.terrain import load_elevation_cache, terrain_class_of
+
+    cache = load_elevation_cache()
+    rows = []
+    for sk in frame["station_key"].dropna().unique():
+        rec = cache.get(sk)
+        if rec is not None:
+            slope = rec.get("slope_pct")
+            rows.append({"station_key": sk,
+                         "terrain_elevation": rec.get("elevation"),
+                         "terrain_slope_pct": slope,
+                         "terrain_class_code": _TERRAIN_CLASS_CODE.get(
+                             terrain_class_of(slope), 4)})
+        else:
+            rows.append({"station_key": sk, "terrain_elevation": None,
+                         "terrain_slope_pct": None, "terrain_class_code": 4})
+    ttab = pd.DataFrame(rows)
+    return frame.merge(ttab, on="station_key", how="left")
+
+
 def build_training_frame(
     df: pd.DataFrame,
     train_end: str,
@@ -329,6 +363,7 @@ def build_training_frame(
     with_holiday: bool = False,
     with_poi: bool = False,
     with_profile: bool = False,
+    with_terrain: bool = False,
     dayoff_mode: bool = True,   # ADR-011 定案：is_weekend 升級 is_dayoff 為預設行為（消融可關）
 ):
     """組裝訓練特徵表。
@@ -453,5 +488,10 @@ def build_training_frame(
     if with_profile:
         frame = attach_profile(frame, frame["is_train"] == 1)
         feature_cols += _PROFILE_COLS
+
+    # 消融用：可選擇性併入地形因子（ADR-011，靜態海拔+坡度）
+    if with_terrain:
+        frame = attach_terrain(frame)
+        feature_cols += _TERRAIN_COLS + ["terrain_class_code"]
 
     return frame, feature_cols

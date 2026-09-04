@@ -8,9 +8,12 @@
   查站點中心 + 四個方向（東西南北）各約 100m 的點的高程，
   取「最大高程差 / 水平距離」當局部坡度（%）。單點高程不足以表達坡度，需周邊點。
 
-高程資料源：Open-Elevation 公開 API（免金鑰）。
-  查詢結果快取到本地 JSON，避免每次重複打 API（1576 站不需每次查）。
-  正式可換政府 DEM（更精確），介面不變。
+高程資料源：OpenTopoData mapzen DEM（Copernicus 合成，比 SRTM 準；免金鑰、可批次）。
+  全站高程已預抓存 _elevation_cache.json（station_key -> elevation/slope_pct）。
+  ★取樣距離用 200m（匹配 mapzen ~90m DEM 網格；50m 小於網格會放大插值雜訊，
+    實測 50m 中位坡度虛高到 8%，200m 修正為合理的 4%）。
+  pipeline 用 load_elevation_cache() 直接讀,不即時打 API。
+  get_terrain() 保留即時查(fallback,用 open-elevation),但主路徑用預抓快取。
 
 分類（config.terrain_thresholds，坡度%）：
   flat(<flat_max) / gentle(<gentle_max) / moderate(<moderate_max) / steep(其餘)
@@ -75,6 +78,24 @@ def _query_elevations(points: list[tuple[float, float]]) -> list[Optional[float]
     except Exception:
         # 失敗不靜默給 0（NFR-5）：回 None，讓上層知道拿不到
         return [None] * len(points)
+
+
+def load_elevation_cache() -> dict:
+    """載入預抓的全站高程快取（fetch_elevation 產出，200m 取樣 mapzen DEM）。
+
+    格式：station_key("lat_lng" 小數4位) -> {elevation, slope_pct, lat, lng}。
+    這是 build_training_frame 的 attach_terrain 直接用的來源（station_key 對齊 ADR-018）。
+    """
+    if _CACHE_PATH.exists():
+        return json.loads(_CACHE_PATH.read_text(encoding="utf-8"))
+    return {}
+
+
+def terrain_class_of(slope_pct: Optional[float]) -> str:
+    """坡度% → 分類（None → unknown）。"""
+    if slope_pct is None:
+        return "unknown"
+    return classify_slope(slope_pct)
 
 
 def get_terrain(lat: float, lng: float, use_cache: bool = True) -> dict:
