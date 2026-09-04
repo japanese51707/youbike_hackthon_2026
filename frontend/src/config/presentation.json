@@ -11,10 +11,30 @@
     "fillOpacity": 0.85
   },
   "route": {
-    "lineColor": "#087f5b",
-    "lineWidthPixels": 5,
-    "completedColor": "#2b8a3e",
-    "pendingColor": "#f08c00"
+    "lineColor": "#38d9a9",
+    "lineWidthPixels": 4,
+    "completedColor": "#38d9a9",
+    "pendingColor": "#ffa94d"
+  },
+  "layers": {
+    "voronoiOpacity": 0.16,
+    "voronoiLineColor": "#243149",
+    "voronoiPaddingDeg": 0.05,
+    "hexagonRadiusMeters": 700,
+    "hexagonElevationScale": 14,
+    "hexagonColorRange": [
+      [14, 30, 54],
+      [23, 58, 92],
+      [30, 96, 130],
+      [45, 171, 247],
+      [56, 217, 169],
+      [140, 233, 154]
+    ],
+    "arcWidthMinPixels": 2,
+    "arcWidthScale": 0.5,
+    "arcSourceColor": "#ffa94d",
+    "arcTargetColor": "#38d9a9",
+    "arcHeight": 0.35
   },
   "fallbackColor": "#495057",
   "statusColors": {

@@ -2,10 +2,15 @@ import { Card, Empty } from "antd";
 import { useCallback, useMemo } from "react";
 import SharedMap from "../map/SharedMap.jsx";
 import { createRouteLayers } from "../map/layers/routeLayers.js";
+import { createRouteArcLayer } from "../map/layers/arcLayers.js";
 import presentationConfig from "../../config/presentation.json";
 
 export default function RouteMap({ route }) {
-  const layers = useMemo(() => createRouteLayers(route ?? []), [route]);
+  const layers = useMemo(() => {
+    const safeRoute = route ?? [];
+    const arc = createRouteArcLayer(safeRoute);
+    return [...(arc ? [arc] : []), ...createRouteLayers(safeRoute)];
+  }, [route]);
   const getTooltip = useCallback(({ object }) => {
     if (!object?.station_name) return null;
     return {

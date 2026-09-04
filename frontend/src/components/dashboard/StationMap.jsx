@@ -1,10 +1,18 @@
-import { Card, Empty } from "antd";
-import { useCallback, useMemo } from "react";
+import { Card, Checkbox, Empty } from "antd";
+import { useCallback, useMemo, useState } from "react";
 import SharedMap from "../map/SharedMap.jsx";
 import { createStationGaugeLayer } from "../map/layers/stationGaugeLayer.js";
+import { createVoronoiLayer } from "../map/layers/voronoiLayer.js";
+import { createDensityLayer } from "../map/layers/densityLayer.js";
 import presentationConfig from "../../config/presentation.json";
 import { stationStatusLabels } from "../../utils/formatters.js";
 import { getStationColor } from "../../utils/mapPresentation.js";
+
+const layerOptions = [
+  { label: "站點狀態環", value: "stations" },
+  { label: "高負載熱區（Voronoi）", value: "zones" },
+  { label: "容量密度基底（Hexagon）", value: "density" },
+];
 
 const statusToneColor = {
   empty: "#ff6b6b",
@@ -44,17 +52,43 @@ function buildTooltipHtml(station) {
 }
 
 export default function StationMap({ stations, dimension, onSelectStation }) {
-  const layers = useMemo(
-    () => [
-      createStationGaugeLayer({
-        id: "dashboard-stations",
-        data: stations,
-        dimension,
-        getColor: (station) => getStationColor(station, dimension),
-        onSelectStation,
-      }),
-    ],
-    [dimension, onSelectStation, stations],
+  const [activeLayers, setActiveLayers] = useState(["stations"]);
+
+  const layers = useMemo(() => {
+    const getColor = (station) => getStationColor(station, dimension);
+    const composed = [];
+    // 由下而上疊：密度基底 → 熱區 → 站點環
+    if (activeLayers.includes("density")) {
+      composed.push(createDensityLayer({ id: "dashboard-density", data: stations }));
+    }
+    if (activeLayers.includes("zones")) {
+      composed.push(
+        createVoronoiLayer({ id: "dashboard-zones", data: stations, getColor }),
+      );
+    }
+    if (activeLayers.includes("stations")) {
+      composed.push(
+        createStationGaugeLayer({
+          id: "dashboard-stations",
+          data: stations,
+          dimension,
+          getColor,
+          onSelectStation,
+        }),
+      );
+    }
+    return composed.filter(Boolean);
+  }, [activeLayers, dimension, onSelectStation, stations]);
+
+  const layerControl = (
+    <div className="map-layer-control">
+      <div className="map-layer-control-title">圖層</div>
+      <Checkbox.Group
+        options={layerOptions}
+        value={activeLayers}
+        onChange={setActiveLayers}
+      />
+    </div>
   );
   const getTooltip = useCallback(({ object }) => {
     if (!object) return null;
@@ -86,6 +120,7 @@ export default function StationMap({ stations, dimension, onSelectStation }) {
         initialViewState={presentationConfig.maps.dashboard}
         layers={layers}
         getTooltip={getTooltip}
+        overlay={layerControl}
       />
     </Card>
   );

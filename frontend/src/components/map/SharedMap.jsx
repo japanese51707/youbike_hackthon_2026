@@ -11,12 +11,39 @@ import BasemapStatus from "./BasemapStatus.jsx";
 
 const BLOCKED_RESOURCE_URL = "data:application/octet-stream;base64,";
 
+// 自訂「2D」控制鈕：一鍵把 pitch/bearing 歸零，回到正北俯視（ADR-014 地圖互動）。
+class Reset2DControl {
+  onAdd(map) {
+    this._map = map;
+    this._container = document.createElement("div");
+    this._container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    this._button = document.createElement("button");
+    this._button.type = "button";
+    this._button.title = "回復 2D 俯視";
+    this._button.setAttribute("aria-label", "回復 2D 俯視");
+    this._button.className = "shared-map-2d-btn";
+    this._button.textContent = "2D";
+    this._onClick = () =>
+      map.easeTo({ pitch: 0, bearing: 0, duration: 300 });
+    this._button.addEventListener("click", this._onClick);
+    this._container.appendChild(this._button);
+    return this._container;
+  }
+
+  onRemove() {
+    this._button?.removeEventListener("click", this._onClick);
+    this._container?.parentNode?.removeChild(this._container);
+    this._map = undefined;
+  }
+}
+
 export default function SharedMap({
   ariaLabel,
   className = "",
   getTooltip,
   initialViewState,
   layers,
+  overlay = null,
 }) {
   const containerRef = useRef(null);
   const overlayRef = useRef(null);
@@ -95,7 +122,11 @@ export default function SharedMap({
         attributionControl: false,
         transformRequest,
       });
-      map.addControl(new maplibregl.NavigationControl(), "top-right");
+      map.addControl(
+        new maplibregl.NavigationControl({ visualizePitch: true }),
+        "top-right",
+      );
+      map.addControl(new Reset2DControl(), "top-right");
     } catch {
       map?.remove();
       setFallbackReason("WebGL 地圖初始化失敗");
@@ -202,6 +233,7 @@ export default function SharedMap({
   return (
     <div className={`shared-map ${className}`} role="region" aria-label={ariaLabel}>
       <div ref={containerRef} className="shared-map-canvas" />
+      {overlay}
       <BasemapStatus status={basemapStatus} reason={fallbackReason} />
     </div>
   );

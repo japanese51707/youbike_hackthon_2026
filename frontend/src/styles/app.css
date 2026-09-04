@@ -250,6 +250,47 @@ body {
   filter: invert(0.85) hue-rotate(180deg);
 }
 
+.shared-map-2d-btn {
+  color: var(--ct-text);
+  background: #101a2b;
+  font-family: var(--ct-mono);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.shared-map-2d-btn:hover {
+  color: var(--ct-primary);
+}
+
+.map-layer-control {
+  position: absolute;
+  z-index: 4;
+  top: 10px;
+  left: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--ct-border);
+  border-radius: 10px;
+  background: rgba(10, 16, 27, 0.9);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.map-layer-control-title {
+  margin-bottom: 8px;
+  color: var(--ct-text-dim);
+  font-family: var(--ct-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.map-layer-control .ant-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .basemap-status {
   position: absolute;
   z-index: 4;
