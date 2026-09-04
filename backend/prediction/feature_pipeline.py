@@ -86,6 +86,9 @@ def _add_lag_and_target(g: pd.DataFrame) -> pd.DataFrame:
         g[name] = ab.shift(k)              # 過去值
     g["change_1hr"] = ab - ab.shift(2)     # 近1小時變化（過去）
     g["change_2hr"] = ab - ab.shift(4)
+    # 逐格絕對變化（ADR-019 周轉量基礎）：|ab(t)-ab(t-1)|，用絕對值才是真周轉
+    # （淨變化會被借出又還回相抵洗成 0）。後續在 build_training_frame 用訓練期累加算 turnover。
+    g["abs_change_1step"] = (ab - ab.shift(1)).abs()
 
     # 多視野目標（ADR-017）：h 格後的「累積淨變化」= available(t+h) − available(t)
     #   每 30 分一格：h=1/2/3/4 對應 30/60/90/120 分鐘。直接對累積 Δ 訓練（分位數不可加）。
@@ -242,6 +245,30 @@ def build_training_frame(
                .median().rename("station_slot_p50").reset_index())
     frame["dtype"] = frame["is_weekend"]
     frame = frame.merge(profile, on=["station_key", "dtype", "time_slot"], how="left")
+
+    # ADR-019：訓練期周轉量 + 樣本權重 + 決策層信心分級
+    # ★防洩漏鐵律：turnover 只用訓練期(is_train==1)算，6 月驗證期不參與。
+    #   turnover = 該站訓練期「逐格絕對變化 |ab(t)-ab(t-1)|」的平均（每格平均周轉量）。
+    tp = frame[frame["is_train"] == 1]
+    turnover = (tp.groupby("station_key")["abs_change_1step"]
+                .mean().rename("station_turnover").reset_index())
+    frame = frame.merge(turnover, on="station_key", how="left")
+    # 新站等在訓練期沒資料 → turnover 為 NaN，補 0（低流量對待，權重最小）
+    frame["station_turnover"] = frame["station_turnover"].fillna(0.0)
+    # 樣本權重（三方案，train.py 消融時選用；此處三欄都備好）
+    frame["w_equal"] = 1.0
+    frame["w_log"] = np.log1p(frame["station_turnover"])       # log(1+turnover) 溫和
+    frame["w_linear"] = frame["station_turnover"]              # 線性（看極端站是否主宰）
+    # 決策層信心分級（機制 C，僅排序/標註，不進調度觸發—守 ADR-014）
+    # 以訓練期 turnover 的三分位數分「低/中/高流量」
+    q = tp.groupby("station_key")["abs_change_1step"].mean()
+    if len(q) >= 3:
+        lo, hi = q.quantile(0.33), q.quantile(0.67)
+    else:
+        lo, hi = 0.0, 0.0
+    frame["confidence_tier"] = pd.cut(
+        frame["station_turnover"], bins=[-1, lo, hi, float("inf")],
+        labels=["low", "mid", "high"]).astype("string").fillna("low")
 
     feature_cols = [
         *LAG_SLOTS.keys(), "change_1hr", "change_2hr",

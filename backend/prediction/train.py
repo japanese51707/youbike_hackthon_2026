@@ -70,10 +70,73 @@ def evaluate_by_zone(frame, y_true, y_pred_lgb, y_pred_base):
     return rows
 
 
+def run_weight_experiment(df):
+    """ADR-019：樣本權重三方案對比（等權 / log 溫和 / 線性）。
+
+    用固定特徵集（含天氣，天氣已定案留）+ L2 探針，對三種 sample_weight 各訓一個模型，
+    報各切面 MAE：全樣本 / 已空區 / Δ≠0 / 高流量站 / 低流量站，選在關鍵區改善且不讓極端站主宰者。
+    ★權重只用訓練期 turnover 算（feature_pipeline 已保證防洩漏）；turnover/權重欄不進特徵。
+    """
+    import lightgbm as lgb
+    from prediction.feature_pipeline import HORIZON_STEPS
+    frame, feat_cols = build_training_frame(df, TRAIN_END, with_weather=True)
+
+    # 防洩漏印證：turnover 應只由訓練期算 → 驗證期(6月)站若訓練期沒資料應為 0
+    va6 = frame[frame["is_train"] == 0]
+    tr = frame[frame["is_train"] == 1]
+    print(f"      [防洩漏印證] turnover 由訓練期 {tr['station_key'].nunique()} 站算；"
+          f"驗證期 turnover=0 的列比={float((va6['station_turnover']==0).mean())*100:.1f}%"
+          f"（僅新站/無訓練資料站應為 0）", flush=True)
+
+    weight_cols = [("等權", "w_equal"), ("log溫和", "w_log"), ("線性", "w_linear")]
+    # 高/低流量站分界：用驗證集的 confidence_tier（high vs low）
+    print("\n[3/3] ADR-019 樣本權重三方案對比（L2 探針，含天氣）", flush=True)
+    print("=" * 100, flush=True)
+    print(f"{'視野':>4} {'權重方案':>8} {'全樣本':>9} {'已空區':>9} {'Δ≠0':>9} "
+          f"{'高流量站':>10} {'低流量站':>10}", flush=True)
+    for h, mins in HORIZON_STEPS.items():
+        tgt = f"target_delta_{mins}"
+        sub = frame.dropna(subset=[tgt])
+        train = sub[sub["is_train"] == 1]
+        valid = sub[sub["is_train"] == 0]
+        train_clean = train[train["is_censored"] == 0]
+
+        Xtr = train_clean[feat_cols].astype(float)
+        ytr = train_clean[tgt].astype(float)
+        Xva = valid[feat_cols].astype(float)
+        yva = valid[tgt].astype(float).values
+        ab = valid["available_bikes"].values
+        empty_mask = ab <= 0
+        nz_mask = np.abs(yva) > 0
+        tier = valid["confidence_tier"].astype(str).to_numpy()
+        hi_mask = tier == "high"
+        lo_mask = tier == "low"
+
+        for label, wcol in weight_cols:
+            w = train_clean[wcol].astype(float).values
+            m = lgb.LGBMRegressor(objective="regression",
+                                  n_estimators=300, learning_rate=0.05,
+                                  num_leaves=31, min_child_samples=50, verbose=-1)
+            m.fit(Xtr, ytr, sample_weight=w)
+            pred = m.predict(Xva)
+
+            def zmae(mask):
+                return mae(yva[mask], pred[mask]) if mask.sum() else float("nan")
+            print(f"{mins:>3}分 {label:>8} {mae(yva, pred):>9.3f} {zmae(empty_mask):>9.3f} "
+                  f"{zmae(nz_mask):>9.3f} {zmae(hi_mask):>10.3f} {zmae(lo_mask):>10.3f}", flush=True)
+        print("-" * 100, flush=True)
+    print("=" * 100, flush=True)
+    print("解讀（ADR-019）：比較三方案。理想=高流量站 MAE 下降(模型更重視有訊號的站)，", flush=True)
+    print("  且低流量站未被嚴重犧牲。log 溫和 vs 線性看極端站是否主宰。選最佳者定案。", flush=True)
+    print("  ★注意：sample_weight 改變訓練目標，MAE 絕對值口徑一致(同驗證集)，可跨方案比。", flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sample", type=int, default=None, help="只取前 N 站快速驗證")
     ap.add_argument("--weather", action="store_true", help="併入天氣因子（消融對比用）")
+    ap.add_argument("--mode", choices=["ablation", "weight"], default="ablation",
+                    help="ablation=因子消融對比(天氣) / weight=ADR-019 樣本權重三方案對比(已定案:不採用A,見ADR-019)")
     args = ap.parse_args()
 
     print(f"[1/4] 讀 S3 資料{'(子集 '+str(args.sample)+' 站)' if args.sample else '(全量)'} ...", flush=True)
@@ -129,6 +192,11 @@ def main():
             out.append((mins, full_mae, empty_mae, nz_mae,
                         old_mae, new_mae, new_n, new_stations))
         return out
+
+    # ===== ADR-019：樣本權重三方案對比模式 =====
+    if args.mode == "weight":
+        run_weight_experiment(df)
+        return
 
     FACTOR = "天氣"  # 本輪消融的因子名（切換因子時改這裡）
     print(f"[2/3] 消融對比：基準(無{FACTOR}) vs +{FACTOR} ...", flush=True)

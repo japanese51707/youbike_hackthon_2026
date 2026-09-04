@@ -44,6 +44,10 @@ def _mk_rec(station: dict, action: str, quantity: int, reason: str,
         "predicted_at_arrival": round(float(at_arrival), 1),
         "lat": station.get("lat", 0.0),
         "lng": station.get("lng", 0.0),
+        # ADR-019 機制 C：流量信心分級（high/mid/low，依訓練期周轉量）。
+        # ★純標註，供 dispatcher 排序當「同分次要鍵」用。★不進觸發判斷（守 ADR-014：
+        #   需求密度/流量是加分項，非叫調度員的依據）。缺標註時預設 mid（中性，不影響排序）。
+        "confidence_tier": station.get("confidence_tier", "mid"),
     }
 
 

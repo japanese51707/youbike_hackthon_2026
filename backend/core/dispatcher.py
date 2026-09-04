@@ -82,8 +82,13 @@ def build_dispatch_list(
         r["recommendation_id"] = _rec_id(r["station_id"])
         r["override_active"] = r["station_id"] in overrides
 
-    # 3. 排序：覆寫站最前綴（override_active True 先），其餘依分數降序
-    recs.sort(key=lambda r: (not r["override_active"], -r["priority_score"]))
+    # 3. 排序：覆寫站最前綴（override_active True 先），其餘依分數降序，
+    #    同分時以流量信心分級 tie-break（ADR-019 機制 C：high 流量站優先）。
+    #    ★confidence_tier 只當「同分次要排序鍵」，不改觸發、不改緊急度分數本身
+    #      （守 ADR-014：流量是加分項，非調度觸發依據）。
+    _tier_rank = {"high": 0, "mid": 1, "low": 2}
+    recs.sort(key=lambda r: (not r["override_active"], -r["priority_score"],
+                             _tier_rank.get(r.get("confidence_tier", "mid"), 1)))
 
     # 4. 資源限制：時段上限
     fleet = cfg["fleet"]
