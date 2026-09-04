@@ -2,18 +2,43 @@ import { Alert, Descriptions, Drawer, Empty, Spin, Tag, Typography } from "antd"
 import ReactECharts from "echarts-for-react";
 import { formatDateTime, stationStatusLabels } from "../../utils/formatters.js";
 
+const AXIS_COLOR = "#8ea0b5";
+const GRID_COLOR = "rgba(148,163,184,0.15)";
+
 function historyOption(history) {
   return {
-    grid: { left: 36, right: 18, top: 30, bottom: 30 },
-    tooltip: { trigger: "axis" },
-    legend: { data: ["可借車輛", "緊急度"] },
+    backgroundColor: "transparent",
+    textStyle: { color: "#cbd5e1" },
+    grid: { left: 40, right: 20, top: 34, bottom: 30 },
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: "#0e1626",
+      borderColor: "#243149",
+      textStyle: { color: "#e5ecf5" },
+    },
+    legend: { data: ["可借車輛", "緊急度"], textStyle: { color: AXIS_COLOR } },
     xAxis: {
       type: "category",
       data: history.map((item) => formatDateTime(item.timestamp)),
+      axisLine: { lineStyle: { color: GRID_COLOR } },
+      axisLabel: { color: AXIS_COLOR },
     },
     yAxis: [
-      { type: "value", name: "台" },
-      { type: "value", name: "分", max: 100 },
+      {
+        type: "value",
+        name: "台",
+        nameTextStyle: { color: AXIS_COLOR },
+        axisLabel: { color: AXIS_COLOR },
+        splitLine: { lineStyle: { color: GRID_COLOR } },
+      },
+      {
+        type: "value",
+        name: "分",
+        max: 100,
+        nameTextStyle: { color: AXIS_COLOR },
+        axisLabel: { color: AXIS_COLOR },
+        splitLine: { show: false },
+      },
     ],
     series: [
       {
@@ -21,17 +46,53 @@ function historyOption(history) {
         type: "line",
         smooth: true,
         data: history.map((item) => item.available_bikes),
-        itemStyle: { color: "#087f5b" },
+        itemStyle: { color: "#38d9a9" },
+        areaStyle: { color: "rgba(56,217,169,0.12)" },
       },
       {
         name: "緊急度",
         type: "line",
         yAxisIndex: 1,
         data: history.map((item) => item.urgency_score),
-        itemStyle: { color: "#f08c00" },
+        itemStyle: { color: "#ffa94d" },
       },
     ],
   };
+}
+
+// 用既有 prediction 的 lower/upper/predicted（Dispatch ETA 區間）畫信賴區間範圍條。
+// 缺任一數值即不渲染，交由外層顯示「不可用」，不插值或捏造。
+function ForecastIntervalBar({ prediction, capacity }) {
+  const lower = Number(prediction?.lower_bound);
+  const upper = Number(prediction?.upper_bound);
+  const predicted = Number(prediction?.predicted_available);
+  const max = Number(capacity);
+  if (![lower, upper, predicted, max].every(Number.isFinite) || max <= 0) {
+    return null;
+  }
+
+  const pct = (value) => `${Math.min(100, Math.max(0, (value / max) * 100))}%`;
+  const bandLeft = pct(Math.min(lower, upper));
+  const bandWidth = `${Math.min(100, Math.max(0, (Math.abs(upper - lower) / max) * 100))}%`;
+
+  return (
+    <div className="forecast-ci">
+      <div className="forecast-ci-head">
+        <Typography.Text type="secondary">預測信賴區間（可借車輛）</Typography.Text>
+        <span className="mono forecast-ci-range">
+          {lower}–{upper} 台｜點估計 {predicted}
+        </span>
+      </div>
+      <div className="forecast-ci-track">
+        <div className="forecast-ci-band" style={{ left: bandLeft, width: bandWidth }} />
+        <div className="forecast-ci-point" style={{ left: pct(predicted) }} />
+      </div>
+      <div className="forecast-ci-scale mono">
+        <span>0</span>
+        <span>容量 {max}</span>
+      </div>
+    </div>
+  );
 }
 
 export default function StationDrawer({ open, onClose, detail, loading, error }) {
@@ -60,12 +121,18 @@ export default function StationDrawer({ open, onClose, detail, loading, error })
           </Descriptions>
 
           {detail.prediction ? (
-            <Alert
-              type="warning"
-              showIcon
-              message={`Dispatch ETA（${detail.prediction.horizon_minutes} 分鐘）預測 ${detail.prediction.predicted_available} 台`}
-              description={`這是既有動態到達時間預測，不是固定 +30／+60 展示。不確定區間 ${detail.prediction.lower_bound}–${detail.prediction.upper_bound} 台；決策應由規則引擎依區間下界判斷。`}
-            />
+            <div className="drawer-stack">
+              <Alert
+                type="warning"
+                showIcon
+                message={`Dispatch ETA（${detail.prediction.horizon_minutes} 分鐘）預測 ${detail.prediction.predicted_available} 台`}
+                description={`這是既有動態到達時間預測，不是固定 +30／+60 展示。決策應由規則引擎依區間下界判斷。`}
+              />
+              <ForecastIntervalBar
+                prediction={detail.prediction}
+                capacity={current.total_docks}
+              />
+            </div>
           ) : (
             <Alert type="info" showIcon message="此站目前沒有 Mock 預測明細" />
           )}
