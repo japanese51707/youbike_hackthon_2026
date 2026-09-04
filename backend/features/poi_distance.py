@@ -4,12 +4,13 @@ POI 距離因子 + 站點區域類型（features.poi_distance）— ADR-012
 標注 9 類地理靜態 POI 座標（poi_data.json，來自 OSM），計算 YouBike 站點到
 「最近各類 POI」的距離。站點區域類型由「最近且在門檻內的 POI 類別」自動推導。
 
-POI 類型：metro/train/bus_terminal/school/mall/night_market/hospital/park/venue
+POI 類型（14 類，ADR-012 + owner 細分）：
+  metro/train/bus_terminal/school/mall/traditional_market/night_market/
+  hospital/park/park_sports/park_forest/riverside/venue/sports_center
 
 區域類型推導（可 config 調門檻）：
   找該站門檻距離內、最近的 POI 類別當主類型；都不在門檻內 → residential（住宅區）。
-  類別→區域類型對映：metro/train/bus_terminal→transit、school→school、
-  mall/night_market→commercial、park→leisure、hospital→medical、venue→venue。
+  類別→區域類型對映見 _TYPE_MAP。
 
 對外暴露：
     distances_to_poi(lat, lng) -> dict         # 到各類最近 POI 的距離(km)
@@ -29,10 +30,12 @@ _POI_PATH = Path(__file__).parent / "poi_data.json"
 _TYPE_MAP = {
     "metro": "transit", "train": "transit", "bus_terminal": "transit",
     "school": "school",
-    "mall": "commercial", "night_market": "commercial",
-    "park": "leisure",
+    "mall": "commercial", "traditional_market": "commercial", "night_market": "commercial",
+    "park": "leisure", "park_sports": "leisure", "park_forest": "leisure",
+    "riverside": "leisure",
     "hospital": "medical",
     "venue": "venue",
+    "sports_center": "sports",
 }
 # 判定區域類型的距離門檻（公里）：最近 POI 在此距離內才算該類型
 _AREA_THRESHOLD_KM = 0.3
@@ -79,17 +82,13 @@ def classify_area_type(lat: float, lng: float,
 
 
 def get_poi_feature(lat: float, lng: float) -> dict:
-    """站點 POI 特徵：到各類最近距離 + 區域類型。"""
+    """站點 POI 特徵：到各類最近距離 + 區域類型。
+
+    距離欄位依 poi_data.json 的類別動態產生（dist_<類別>_km），
+    自動涵蓋 14 類（含 traditional_market/park_sports/park_forest/riverside/sports_center）。
+    """
     dists = distances_to_poi(lat, lng)
-    return {
-        "area_type": classify_area_type(lat, lng),
-        "dist_metro_km": dists.get("metro"),
-        "dist_train_km": dists.get("train"),
-        "dist_bus_terminal_km": dists.get("bus_terminal"),
-        "dist_school_km": dists.get("school"),
-        "dist_mall_km": dists.get("mall"),
-        "dist_night_market_km": dists.get("night_market"),
-        "dist_hospital_km": dists.get("hospital"),
-        "dist_park_km": dists.get("park"),
-        "dist_venue_km": dists.get("venue"),
-    }
+    out = {"area_type": classify_area_type(lat, lng)}
+    for ptype, d in dists.items():
+        out[f"dist_{ptype}_km"] = d
+    return out
