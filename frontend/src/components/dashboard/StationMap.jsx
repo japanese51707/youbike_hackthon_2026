@@ -51,7 +51,7 @@ function buildTooltipHtml(station) {
   `;
 }
 
-export default function StationMap({ stations, dimension, onSelectStation }) {
+export default function StationMap({ stations, dimension, onSelectStation, focus }) {
   const [activeLayers, setActiveLayers] = useState(["stations"]);
 
   const layers = useMemo(() => {
@@ -121,6 +121,7 @@ export default function StationMap({ stations, dimension, onSelectStation }) {
         layers={layers}
         getTooltip={getTooltip}
         overlay={layerControl}
+        focusTarget={focus}
       />
     </Card>
   );

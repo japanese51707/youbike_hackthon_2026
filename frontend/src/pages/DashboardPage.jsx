@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import AsyncState from "../components/common/AsyncState.jsx";
 import MetricCard from "../components/common/MetricCard.jsx";
 import AlertPanel from "../components/dashboard/AlertPanel.jsx";
+import DeficitRankingPanel from "../components/dashboard/DeficitRankingPanel.jsx";
 import RecommendationPanel from "../components/dashboard/RecommendationPanel.jsx";
 import StationDrawer from "../components/dashboard/StationDrawer.jsx";
 import StationMap from "../components/dashboard/StationMap.jsx";
@@ -25,6 +26,7 @@ export default function DashboardPage() {
   const [districtFilter, setDistrictFilter] = useState("all");
   const [mapDimension, setMapDimension] = useState("status");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [mapFocus, setMapFocus] = useState(null);
 
   const stations = dashboard.data?.stations || [];
   const districts = useMemo(
@@ -44,6 +46,16 @@ export default function DashboardPage() {
   const openStation = (stationId) => {
     dashboard.selectStation(stationId);
     setDrawerOpen(true);
+  };
+
+  const focusStation = (station) => {
+    if (!station) return;
+    setMapFocus({
+      longitude: Number(station.lng),
+      latitude: Number(station.lat),
+      zoom: 15,
+      key: `${station.station_id}-${Date.now()}`,
+    });
   };
 
   return (
@@ -106,7 +118,10 @@ export default function DashboardPage() {
             stations={filteredStations}
             dimension={mapDimension}
             onSelectStation={openStation}
+            focus={mapFocus}
           />
+
+          <DeficitRankingPanel stations={stations} onFocus={focusStation} />
 
           <TemporalPanel />
 
@@ -114,6 +129,7 @@ export default function DashboardPage() {
             <RecommendationPanel
               recommendations={dashboard.data.recommendations}
               onConfirm={dashboard.confirmRecommendation}
+              onFocus={focusStation}
             />
             <AlertPanel
               alerts={dashboard.data.alerts}

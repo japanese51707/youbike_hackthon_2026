@@ -1,4 +1,4 @@
-import { CheckCircleOutlined, EyeOutlined } from "@ant-design/icons";
+import { AimOutlined, CheckCircleOutlined, EyeOutlined } from "@ant-design/icons";
 import {
   Button,
   Card,
@@ -14,7 +14,7 @@ import { useState } from "react";
 
 const priorityColors = { high: "red", medium: "orange", low: "blue" };
 
-export default function RecommendationPanel({ recommendations, onConfirm }) {
+export default function RecommendationPanel({ recommendations, onConfirm, onFocus }) {
   const [preview, setPreview] = useState(null);
   const [confirming, setConfirming] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
@@ -41,6 +41,17 @@ export default function RecommendationPanel({ recommendations, onConfirm }) {
         renderItem={(item) => (
           <List.Item
             actions={[
+              onFocus ? (
+                <Button
+                  key="focus"
+                  size="small"
+                  type="text"
+                  icon={<AimOutlined />}
+                  onClick={() => onFocus(item)}
+                >
+                  定位
+                </Button>
+              ) : null,
               <Button
                 key="preview"
                 size="small"
@@ -49,7 +60,7 @@ export default function RecommendationPanel({ recommendations, onConfirm }) {
               >
                 預覽
               </Button>,
-            ]}
+            ].filter(Boolean)}
           >
             <List.Item.Meta
               title={

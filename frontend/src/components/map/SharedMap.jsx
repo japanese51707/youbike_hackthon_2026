@@ -40,12 +40,14 @@ class Reset2DControl {
 export default function SharedMap({
   ariaLabel,
   className = "",
+  focusTarget = null,
   getTooltip,
   initialViewState,
   layers,
   overlay = null,
 }) {
   const containerRef = useRef(null);
+  const mapRef = useRef(null);
   const overlayRef = useRef(null);
   const overlayPropsRef = useRef({ layers, getTooltip });
   const fallbackAppliedRef = useRef(false);
@@ -127,6 +129,7 @@ export default function SharedMap({
         "top-right",
       );
       map.addControl(new Reset2DControl(), "top-right");
+      mapRef.current = map;
     } catch {
       map?.remove();
       setFallbackReason("WebGL 地圖初始化失敗");
@@ -216,6 +219,7 @@ export default function SharedMap({
       map.off("error", handleMapError);
       overlay?.setProps({ layers: [] });
       overlayRef.current = null;
+      mapRef.current = null;
       map.remove();
     };
   }, [
@@ -229,6 +233,20 @@ export default function SharedMap({
   useEffect(() => {
     overlayRef.current?.setProps({ layers, getTooltip });
   }, [getTooltip, layers]);
+
+  // 外部（例如缺口排行榜）觸發平滑飛越到指定站點。
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusTarget) return;
+    const { longitude, latitude, zoom } = focusTarget;
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return;
+    map.flyTo({
+      center: [longitude, latitude],
+      zoom: Number.isFinite(zoom) ? zoom : map.getZoom(),
+      duration: 800,
+      essential: true,
+    });
+  }, [focusTarget]);
 
   return (
     <div className={`shared-map ${className}`} role="region" aria-label={ariaLabel}>

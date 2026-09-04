@@ -421,6 +421,56 @@ body {
   gap: 24px;
 }
 
+.ranking-panel .ranking-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.ranking-heading {
+  margin-bottom: 8px;
+}
+
+.rank-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--ct-border);
+}
+
+.rank-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rank-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.rank-name {
+  display: block;
+  color: var(--ct-text);
+}
+
+.rank-sub {
+  color: var(--ct-text-dim);
+  font-size: 11px;
+}
+
+@media (max-width: 620px) {
+  .ranking-panel .ranking-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
 .forecast-ci {
   padding: 12px 14px;
   border: 1px solid var(--ct-border);
