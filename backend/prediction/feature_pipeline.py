@@ -213,12 +213,63 @@ def attach_holiday(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.drop(columns=["_datekey"])
 
 
+# POI 距離特徵欄（14 類）+ 區域類型類別碼，供 build_training_frame 引用
+_POI_DIST_COLS = [
+    "dist_metro_km", "dist_train_km", "dist_bus_terminal_km", "dist_school_km",
+    "dist_mall_km", "dist_traditional_market_km", "dist_night_market_km",
+    "dist_hospital_km", "dist_park_km", "dist_park_sports_km",
+    "dist_park_forest_km", "dist_riverside_km", "dist_venue_km",
+    "dist_sports_center_km",
+]
+# area_type 文字 → 類別碼（LightGBM 吃數值；label encode，順序不代表大小，模型用分裂處理）
+_AREA_CODE = {"transit": 0, "school": 1, "commercial": 2, "leisure": 3,
+              "medical": 4, "venue": 5, "sports": 6, "residential": 7, "mixed": 8}
+
+
+def attach_poi(frame: pd.DataFrame) -> pd.DataFrame:
+    """全站批次併入 POI 距離特徵 + 區域類型（ADR-012，14 類，靜態）。
+
+    POI 距離是靜態的（站座標固定），故以唯一 station_key 算一次距離再 merge 回，效率高。
+    特徵：到 14 類最近 POI 的距離(km) + area_type_code（區域類型類別碼）。
+    """
+    import sys as _sys
+    from pathlib import Path as _P
+    _sys.path.insert(0, str(_P(__file__).parent.parent))
+    from features.poi_distance import get_poi_feature
+
+    frame = frame.copy()
+    # 每站一組座標（用 groupby first 拿座標）
+    coords = frame.groupby("station_key").first().reset_index()
+    rows = []
+    for _, r in coords.iterrows():
+        lat = r.get("緯度")
+        if lat is None or pd.isna(lat):
+            lat = r.get("lat")
+        lng = r.get("經度")
+        if lng is None or pd.isna(lng):
+            lng = r.get("lng")
+        rec = {"station_key": r["station_key"]}
+        if lat is not None and lng is not None and pd.notna(lat) and pd.notna(lng):
+            f = get_poi_feature(float(lat), float(lng))
+            for c in _POI_DIST_COLS:
+                rec[c] = f.get(c)
+            rec["area_type_code"] = _AREA_CODE.get(f.get("area_type"), 8)
+        else:
+            for c in _POI_DIST_COLS:
+                rec[c] = None
+            rec["area_type_code"] = 8  # mixed（座標缺失）
+        rows.append(rec)
+    ptab = pd.DataFrame(rows)
+    return frame.merge(ptab, on="station_key", how="left")
+
+
 def build_training_frame(
     df: pd.DataFrame,
     train_end: str,
     profile_by_station: dict | None = None,
     with_weather: bool = False,
     with_holiday: bool = False,
+    with_poi: bool = False,
     dayoff_mode: bool = True,   # ADR-011 定案：is_weekend 升級 is_dayoff 為預設行為（消融可關）
 ):
     """組裝訓練特徵表。
@@ -333,5 +384,10 @@ def build_training_frame(
     if with_holiday:
         frame = attach_holiday(frame)
         feature_cols += ["is_holiday", "is_national_holiday", "is_long_weekend"]
+
+    # 消融用：可選擇性併入 POI 距離因子（ADR-012，14 類靜態距離 + 區域類型）
+    if with_poi:
+        frame = attach_poi(frame)
+        feature_cols += _POI_DIST_COLS + ["area_type_code"]
 
     return frame, feature_cols

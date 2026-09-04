@@ -137,9 +137,9 @@ def main():
     ap.add_argument("--weather", action="store_true", help="併入天氣因子（消融對比用）")
     ap.add_argument("--mode", choices=["ablation", "weight"], default="ablation",
                     help="ablation=因子消融對比 / weight=ADR-019 樣本權重三方案對比(已定案:不採用A,見ADR-019)")
-    ap.add_argument("--factor", choices=["weather", "holiday", "dayoff"], default="holiday",
+    ap.add_argument("--factor", choices=["weather", "holiday", "dayoff", "poi"], default="holiday",
                     help="ablation 模式要測的因子：weather=天氣 / holiday=非週末假日(加料) / "
-                         "dayoff=is_weekend 升級 is_dayoff(修正既有特徵,非加料)")
+                         "dayoff=is_weekend 升級 is_dayoff(修正既有特徵,非加料) / poi=POI距離(14類)")
     args = ap.parse_args()
 
     print(f"[1/4] 讀 S3 資料{'(子集 '+str(args.sample)+' 站)' if args.sample else '(全量)'} ...", flush=True)
@@ -207,7 +207,8 @@ def main():
     # 依 --factor 決定本輪消融的因子（名稱 + build_training_frame 的開關）
     _FACTOR_MAP = {"weather": ("天氣", "with_weather"),
                    "holiday": ("非週末假日", "with_holiday"),
-                   "dayoff": ("放假日升級", "dayoff_mode")}
+                   "dayoff": ("放假日升級", "dayoff_mode"),
+                   "poi": ("POI距離", "with_poi")}
     FACTOR, factor_kw = _FACTOR_MAP[args.factor]
     print(f"[2/3] 消融對比：基準(無{FACTOR}) vs +{FACTOR} ...", flush=True)
     print(f"      探針=L2迴歸(學均值,對因子敏感);上線出區間仍用分位數", flush=True)
@@ -237,7 +238,8 @@ def main():
     print("解讀：改善>0 = 因子讓模型更準。三個切面——全樣本(被0稀釋)/已空區(系統存在理由)/Δ≠0(真正有變化時)", flush=True)
     _factor_note = {"天氣": "天氣型態用雨量分級(無日照無法分晴/陰)+溫度倒U舒適度",
                     "非週末假日": "is_holiday/國定假日/連假；邊際價值在 is_weekend 之外的平日型假日與補班日",
-                    "放假日升級": "is_weekend→is_dayoff(週末 OR 國定假日視為放假,補班日視為上班);修正既有特徵非加料"}
+                    "放假日升級": "is_weekend→is_dayoff(週末 OR 國定假日視為放假,補班日視為上班);修正既有特徵非加料",
+                    "POI距離": "14類POI到最近距離(捷運/火車/轉運/學校/百貨/傳統市場/夜市/醫院/公園×3/河濱/展演/運動中心)+區域類型;靜態全站批次"}
     print(f"      本輪因子：{FACTOR}。{_factor_note.get(FACTOR, '')}", flush=True)
 
     # ADR-018 ③：新舊站分報（用 +因子組數字；冷啟動表現不被整體平均掩蓋）
