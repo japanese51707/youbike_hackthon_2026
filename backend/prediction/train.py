@@ -131,9 +131,16 @@ def run_weight_experiment(df):
     print("  ★注意：sample_weight 改變訓練目標，MAE 絕對值口徑一致(同驗證集)，可跨方案比。", flush=True)
 
 
-def run_full_training(df):
+# ADR-020 調參後最佳超參數（時序 CV 選出，CV 正常區間 MAE 改善 +4.4%）
+TUNED_PARAMS = {"n_estimators": 300, "learning_rate": 0.1, "num_leaves": 127,
+                "min_child_samples": 200, "subsample": 0.7, "colsample_bytree": 0.8,
+                "reg_lambda": 0.0}
+
+
+def run_full_training(df, tuned=False):
     """正式訓練（收官）：整合所有採用因子 + 分位數模型 P10/P50/P90。
 
+    tuned=True 用 ADR-020 調參後最佳超參數；False 用未調參預設值。
     與消融不同：這裡用「上線的分位數迴歸」出區間，並報完整上線指標：
       baseline(seasonal naive) vs LightGBM P50 各視野 MAE、分區間 MAE、
       區間覆蓋率(P10-P90 是否涵蓋名目 80%)、分位數交叉率、新舊站分報。
@@ -152,10 +159,11 @@ def run_full_training(df):
     print(f"      特徵數={len(feat_cols)}", flush=True)
 
     print("[3/3] 最終結果（baseline vs 全因子 LightGBM）", flush=True)
-    print("=" * 112, flush=True)
+    print("=" * 124, flush=True)
     print(f"{'視野':>4} {'baseMAE':>9} {'LGB_P50':>9} {'改善':>8} "
+          f"{'正常base':>9} {'正常LGB':>9} {'正常改善':>9} "
           f"{'決策base':>9} {'決策LGB':>9} {'決策改善':>9} "
-          f"{'已空base':>9} {'已空LGB':>9} {'覆蓋率':>7} {'交叉率':>6}", flush=True)
+          f"{'覆蓋率':>7} {'交叉率':>6}", flush=True)
     zone_rows = []
     newold_rows = []
     for h, mins in HORIZON_STEPS.items():
@@ -175,11 +183,11 @@ def run_full_training(df):
         Xtr = train_clean[feat_cols].astype(float)
         ytr = train_clean[tgt].astype(float)
         Xva = valid[feat_cols].astype(float)
+        hp = TUNED_PARAMS if tuned else {"n_estimators": 300, "learning_rate": 0.05,
+                                         "num_leaves": 31, "min_child_samples": 50}
         preds = {}
         for q, alpha in [("p10", 0.10), ("p50", 0.50), ("p90", 0.90)]:
-            m = lgb.LGBMRegressor(objective="quantile", alpha=alpha,
-                                  n_estimators=300, learning_rate=0.05,  # 未調參預設值
-                                  num_leaves=31, min_child_samples=50, verbose=-1)
+            m = lgb.LGBMRegressor(objective="quantile", alpha=alpha, verbose=-1, **hp)
             m.fit(Xtr, ytr)
             preds[q] = m.predict(Xva)
         lgb_mae = mae(yva, preds["p50"])
@@ -200,10 +208,17 @@ def run_full_training(df):
         base_dec = mae(yva[dm], base_pred[dm]) if dm.sum() else float("nan")
         lgb_dec = mae(yva[dm], preds["p50"][dm]) if dm.sum() else float("nan")
         dec_imp = (base_dec - lgb_dec) / base_dec * 100 if base_dec else 0.0
+        # 正常區間（ADR-020）：可借≥1 且 可還≥1（觀測值未被物理邊界截斷），公平對比
+        ad = valid["available_docks"].values
+        nm_zone = (ab >= 1) & (ad >= 1)
+        base_norm = mae(yva[nm_zone], base_pred[nm_zone]) if nm_zone.sum() else float("nan")
+        lgb_norm = mae(yva[nm_zone], preds["p50"][nm_zone]) if nm_zone.sum() else float("nan")
+        norm_imp = (base_norm - lgb_norm) / base_norm * 100 if base_norm else 0.0
 
         print(f"{mins:>3}分 {base_mae:>9.3f} {lgb_mae:>9.3f} {imp:>+7.1f}% "
+              f"{base_norm:>9.3f} {lgb_norm:>9.3f} {norm_imp:>+8.1f}% "
               f"{base_dec:>9.3f} {lgb_dec:>9.3f} {dec_imp:>+8.1f}% "
-              f"{base_emp:>9.3f} {lgb_emp:>9.3f} {covered*100:>6.1f}% {cross*100:>5.1f}%", flush=True)
+              f"{covered*100:>6.1f}% {cross*100:>5.1f}%", flush=True)
 
         # 分區間（健康/接近空/已空）
         zone_rows.append((mins, evaluate_by_zone(valid, yva, preds["p50"], base_pred)))
@@ -229,13 +244,96 @@ def run_full_training(df):
     print("\n註：超參數為未調參預設值(ADR-002)；覆蓋率校準待 P2 conformal", flush=True)
 
 
+def run_tuning(df, n_trials=20):
+    """ADR-020：時序 CV 超參數優化（隨機搜尋，無新依賴）。
+
+    ★防洩漏鐵律：只用訓練期(1~5月)做 expanding window 時序 CV，6 月完全不參與選參。
+      折：1-3月訓/4月驗、1-4月訓/5月驗（月份用 dt.month）。
+    ★選參目標：正常區間(可借≥1 且 可還≥1，未截斷)的 P50 MAE，CV 折平均（owner 定）。
+    以 60 分視野為代表選參（成本考量；ADR-020 已註各視野最佳參數可能不同待實驗）。
+    """
+    import lightgbm as lgb
+    import random
+
+    print("[2/3] 時序 CV 超參數優化（隨機搜尋 %d 組；6 月不參與選參）..." % n_trials, flush=True)
+    frame, feat_cols = build_training_frame(
+        df, TRAIN_END, with_weather=True, with_poi=True,
+        with_profile=True, with_terrain=True)
+    TGT = "target_delta_60"   # 代表視野
+    sub = frame.dropna(subset=[TGT])
+    # 只用訓練期(1~5月)，6 月排除
+    tr = sub[sub["is_train"] == 1].copy()
+    tr["m"] = tr["dt"].dt.month
+    # expanding window 折
+    folds = [([1, 2, 3], 4), ([1, 2, 3, 4], 5)]
+    print(f"      折：{[(f[0], '→驗'+str(f[1])) for f in folds]}；選參目標=正常區間P50 MAE", flush=True)
+
+    # 搜尋空間
+    space = {
+        "n_estimators": [200, 300, 500, 800],
+        "learning_rate": [0.02, 0.03, 0.05, 0.1],
+        "num_leaves": [15, 31, 63, 127],
+        "min_child_samples": [20, 50, 100, 200],
+        "subsample": [0.7, 0.8, 1.0],
+        "colsample_bytree": [0.7, 0.8, 1.0],
+        "reg_lambda": [0.0, 1.0, 5.0],
+    }
+    default = {"n_estimators": 300, "learning_rate": 0.05, "num_leaves": 31,
+               "min_child_samples": 50, "subsample": 1.0, "colsample_bytree": 1.0,
+               "reg_lambda": 0.0}
+
+    def cv_score(params):
+        scores = []
+        for train_months, valid_month in folds:
+            trf = tr[tr["m"].isin(train_months)]
+            vaf = tr[tr["m"] == valid_month]
+            trc = trf[trf["is_censored"] == 0]
+            Xtr, ytr = trc[feat_cols].astype(float), trc[TGT].astype(float)
+            Xva = vaf[feat_cols].astype(float)
+            yva = vaf[TGT].astype(float).values
+            m = lgb.LGBMRegressor(objective="quantile", alpha=0.5, verbose=-1, **params)
+            m.fit(Xtr, ytr)
+            pred = m.predict(Xva)
+            # 正常區間
+            ab = vaf["available_bikes"].values
+            ad = vaf["available_docks"].values
+            nz = (ab >= 1) & (ad >= 1)
+            scores.append(mae(yva[nz], pred[nz]) if nz.sum() else float("nan"))
+        return float(np.mean(scores))
+
+    random.seed(42)
+    # 先算預設值的 CV 分數當基準
+    base_score = cv_score(default)
+    print(f"      [基準] 預設超參數 CV 正常區間MAE = {base_score:.4f}", flush=True)
+
+    best_params, best_score = default, base_score
+    for i in range(n_trials):
+        params = {k: random.choice(v) for k, v in space.items()}
+        s = cv_score(params)
+        mark = ""
+        if s < best_score:
+            best_score, best_params = s, params
+            mark = "  ★新最佳"
+        print(f"      trial {i+1:>2}/{n_trials}: CV MAE={s:.4f}{mark}", flush=True)
+
+    print("\n[3/3] 調參結果", flush=True)
+    print("=" * 60, flush=True)
+    print(f"預設 CV 正常區間MAE : {base_score:.4f}", flush=True)
+    print(f"最佳 CV 正常區間MAE : {best_score:.4f}  改善 {(base_score-best_score)/base_score*100:+.2f}%", flush=True)
+    print(f"最佳超參數：{best_params}", flush=True)
+    print("=" * 60, flush=True)
+    print("註：時序CV只用訓練期(1-5月),6月不參與選參(防洩漏)。以60分視野選參。", flush=True)
+    return best_params
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sample", type=int, default=None, help="只取前 N 站快速驗證")
     ap.add_argument("--weather", action="store_true", help="併入天氣因子（消融對比用）")
-    ap.add_argument("--mode", choices=["ablation", "weight", "full"], default="ablation",
-                    help="ablation=因子消融對比 / weight=ADR-019 樣本權重三方案對比 / "
-                         "full=正式訓練(整合所有採用因子+分位數模型,收官數字)")
+    ap.add_argument("--mode", choices=["ablation", "weight", "full", "tune"], default="ablation",
+                    help="ablation=因子消融 / weight=樣本權重對比 / full=正式訓練 / "
+                         "tune=ADR-020 時序CV超參數優化")
+    ap.add_argument("--tuned", action="store_true", help="full 模式用 ADR-020 調參後最佳超參數")
     ap.add_argument("--factor", choices=["weather", "holiday", "dayoff", "poi", "profile", "terrain"], default="holiday",
                     help="ablation 模式要測的因子：weather=天氣 / holiday=非週末假日(加料) / "
                          "dayoff=is_weekend 升級 is_dayoff(修正既有特徵,非加料) / poi=POI距離(14類) / "
@@ -306,7 +404,12 @@ def main():
 
     # ===== 正式訓練模式（整合所有採用因子 + 分位數模型）=====
     if args.mode == "full":
-        run_full_training(df)
+        run_full_training(df, tuned=args.tuned)
+        return
+
+    # ===== ADR-020：時序 CV 超參數優化 =====
+    if args.mode == "tune":
+        run_tuning(df)
         return
 
     # 依 --factor 決定本輪消融的因子（名稱 + build_training_frame 的開關）
