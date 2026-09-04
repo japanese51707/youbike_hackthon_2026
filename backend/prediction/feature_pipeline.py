@@ -263,6 +263,64 @@ def attach_poi(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.merge(ptab, on="station_key", how="left")
 
 
+# 行為指紋特徵欄（ADR-014，訓練期算，每站一個值）
+_PROFILE_COLS = [
+    "prof_day_night_ratio",   # 日夜活動比：白天(6-18)周轉 / 夜間周轉 → 就業型 vs 住宅型
+    "prof_holiday_ratio",     # 平假日比：假日周轉 / 平日周轉 → 休閒型 vs 通勤型
+    "prof_morning_flow",      # 早峰淨流向：早上(7-9)平均淨變化（負=流出/住宅端 正=流入/辦公端）
+    "prof_peakedness",        # 峰度：各時段周轉的變異係數（高=有明顯尖峰 轉運站 低=平坦）
+    "prof_empty_freq",        # 歷史空站頻率
+    "prof_full_freq",         # 歷史滿站頻率
+]
+
+
+def attach_profile(frame: pd.DataFrame, train_mask: pd.Series) -> pd.DataFrame:
+    """全站批次併入站點行為指紋（ADR-014，六指標之特徵子集）。
+
+    ★防洩漏鐵律（ADR-014 補記）：所有指紋只用訓練期（train_mask）資料算，
+      6 月驗證期不參與。以 station_key 分組算好每站一個值再 merge 回全 frame。
+    ★需求密度不進特徵（ADR-014 owner 界線：規劃層/決策層加分項，非預測特徵）。
+
+    指標定義（用訓練期）：
+      日夜活動比、平假日比、早峰淨流向、峰度、空站/滿站頻率。
+    """
+    frame = frame.copy()
+    tp = frame[train_mask].copy()
+    # 逐格絕對變化（周轉基礎）；淨變化（流向）
+    tp = tp.sort_values(["station_key", "dt"])
+    tp["abs_chg"] = tp.groupby("station_key")["available_bikes"].diff().abs()
+    tp["net_chg"] = tp.groupby("station_key")["available_bikes"].diff()
+
+    is_day = tp["hour"].between(6, 17)          # 白天 6-18 時
+    is_dayoff = tp["is_weekend"] == 1           # 用 is_dayoff（已含國定假日）
+    is_morning = tp["hour"].between(7, 8)       # 早峰 7-9 時
+
+    def _ratio(mask_a, mask_b, col="abs_chg"):
+        a = tp[mask_a].groupby("station_key")[col].mean()
+        b = tp[mask_b].groupby("station_key")[col].mean()
+        return (a / b.replace(0, np.nan)).rename("r")
+
+    day_night = _ratio(is_day, ~is_day)
+    holiday = _ratio(is_dayoff, ~is_dayoff)
+    morning_flow = tp[is_morning].groupby("station_key")["net_chg"].mean()
+    # 峰度：各時段周轉的變異係數（std/mean）
+    slot_turn = tp.groupby(["station_key", "time_slot"])["abs_chg"].mean()
+    peakedness = (slot_turn.groupby("station_key").std()
+                  / slot_turn.groupby("station_key").mean().replace(0, np.nan))
+    empty_freq = (tp["available_bikes"] <= 0).groupby(tp["station_key"]).mean()
+    full_freq = (tp["available_docks"] <= 0).groupby(tp["station_key"]).mean()
+
+    prof = pd.DataFrame({
+        "prof_day_night_ratio": day_night,
+        "prof_holiday_ratio": holiday,
+        "prof_morning_flow": morning_flow,
+        "prof_peakedness": peakedness,
+        "prof_empty_freq": empty_freq,
+        "prof_full_freq": full_freq,
+    }).reset_index()
+    return frame.merge(prof, on="station_key", how="left")
+
+
 def build_training_frame(
     df: pd.DataFrame,
     train_end: str,
@@ -270,6 +328,7 @@ def build_training_frame(
     with_weather: bool = False,
     with_holiday: bool = False,
     with_poi: bool = False,
+    with_profile: bool = False,
     dayoff_mode: bool = True,   # ADR-011 定案：is_weekend 升級 is_dayoff 為預設行為（消融可關）
 ):
     """組裝訓練特徵表。
@@ -389,5 +448,10 @@ def build_training_frame(
     if with_poi:
         frame = attach_poi(frame)
         feature_cols += _POI_DIST_COLS + ["area_type_code"]
+
+    # 消融用：可選擇性併入站點行為指紋（ADR-014，訓練期算，防洩漏）
+    if with_profile:
+        frame = attach_profile(frame, frame["is_train"] == 1)
+        feature_cols += _PROFILE_COLS
 
     return frame, feature_cols
