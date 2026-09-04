@@ -120,7 +120,14 @@ def main():
             # Δ≠0 樣本 MAE（排除零膨脹稀釋，看真正有變化時的準度）
             nz_mask = np.abs(yva) > 0
             nz_mae = mae(yva[nz_mask], pred[nz_mask]) if nz_mask.sum() else None
-            out.append((mins, full_mae, empty_mae, nz_mae))
+            # ADR-018 ③：新舊站分報（老站=訓練期見過；新站=訓練期後才上線的冷啟動站）
+            newmask = valid["is_new_station"].values == 1
+            old_mae = mae(yva[~newmask], pred[~newmask]) if (~newmask).sum() else None
+            new_mae = mae(yva[newmask], pred[newmask]) if newmask.sum() else None
+            new_n = int(newmask.sum())
+            new_stations = int(valid.loc[newmask, "station_key"].nunique())
+            out.append((mins, full_mae, empty_mae, nz_mae,
+                        old_mae, new_mae, new_n, new_stations))
         return out
 
     FACTOR = "天氣"  # 本輪消融的因子名（切換因子時改這裡）
@@ -136,7 +143,10 @@ def main():
     print(f"{'視野':>5} {'基準全':>9} {'+因子全':>9} {'全改善':>8}  "
           f"{'基準已空':>9} {'+因子已空':>10} {'已空改善':>9}  "
           f"{'基準Δ≠0':>9} {'+因子Δ≠0':>10} {'Δ≠0改善':>9}", flush=True)
-    for (mins, b_full, b_emp, b_nz), (_, w_full, w_emp, w_nz) in zip(base_group, weather_group):
+    for b_row, w_row in zip(base_group, weather_group):
+        mins, b_full, b_emp, b_nz = b_row[0], b_row[1], b_row[2], b_row[3]
+        w_full, w_emp, w_nz = w_row[1], w_row[2], w_row[3]
+
         def pct(a, b):
             return (a - b) / a * 100 if a else 0.0
         print(f"{mins:>3}分 {b_full:>9.3f} {w_full:>9.3f} {pct(b_full, w_full):>+7.2f}%  "
@@ -145,6 +155,17 @@ def main():
     print("=" * 92, flush=True)
     print("解讀：改善>0 = 因子讓模型更準。三個切面——全樣本(被0稀釋)/已空區(系統存在理由)/Δ≠0(真正有變化時)", flush=True)
     print(f"      本輪因子：{FACTOR}。天氣型態用雨量分級(資料無日照無法分晴/陰)+溫度倒U舒適度", flush=True)
+
+    # ADR-018 ③：新舊站分報（用 +因子組數字；冷啟動表現不被整體平均掩蓋）
+    print("\n[附] 新舊站分報 MAE（ADR-018，+因子組）：老站=訓練期見過 / 新站=訓練期後才上線", flush=True)
+    print("-" * 72, flush=True)
+    print(f"{'視野':>5} {'老站MAE':>10} {'新站MAE':>10} {'新站樣本數':>12} {'新站數':>8}", flush=True)
+    for w_row in weather_group:
+        mins, old_mae, new_mae, new_n, new_st = w_row[0], w_row[4], w_row[5], w_row[6], w_row[7]
+        new_s = f"{new_mae:.3f}" if new_mae is not None else "—(驗證集無新站)"
+        print(f"{mins:>3}分 {old_mae:>10.3f} {new_s:>10} {new_n:>12,} {new_st:>8}", flush=True)
+    print("-" * 72, flush=True)
+    print("解讀：新站無訓練期歷史(冷啟動)。若新站 MAE 明顯高於老站 → 未來考慮 ADR-001 分層降級(另開 ADR)", flush=True)
     return
 
     # （舊單組輸出保留供參考，上面 return 已結束）

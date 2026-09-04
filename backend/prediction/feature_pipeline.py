@@ -33,6 +33,31 @@ LAG_SLOTS = {"lag_30min": 1, "lag_1hr": 2, "lag_2hr": 4, "lag_1day": 48, "lag_1w
 HORIZON_STEPS = {1: 30, 2: 60, 3: 90, 4: 120}
 
 
+# ADR-018 ②③：站點主檔歸併 + 新舊站標記
+COORD_DECIMALS = 4  # 經緯度取整位數（小數 4 位 ≈ 10 公尺），作為 station_key 主鍵
+
+
+def _attach_station_key(df: pd.DataFrame) -> pd.DataFrame:
+    """以經緯度(小數 4 位≈10 公尺)為主鍵歸併站點，處理編碼亂碼/改名造成的同站被拆。
+
+    產生欄位：
+      - station_key：canonical 站點主鍵字串 "lat_lng"（歸併後，同座標視為同站）
+      - is_new_station：ADR-018 ③ 新舊站標記（訓練期結束後才首次出現 → 1）
+
+    有座標缺失(NaN)的列，退回用場站名稱當 key（極少數，避免整列丟失）。
+    """
+    df = df.copy()
+    lat_col = "緯度" if "緯度" in df.columns else "lat"
+    lng_col = "經度" if "經度" in df.columns else "lng"
+    lat = pd.to_numeric(df[lat_col], errors="coerce").round(COORD_DECIMALS)
+    lng = pd.to_numeric(df[lng_col], errors="coerce").round(COORD_DECIMALS)
+    key = lat.astype("string") + "_" + lng.astype("string")
+    # 座標缺失退回站名（避免 NaN key 把不同站併在一起）
+    key = key.where(lat.notna() & lng.notna(), other="name:" + df["場站名稱"].astype("string"))
+    df["station_key"] = key
+    return df
+
+
 def _forward_fill_grid(g: pd.DataFrame) -> pd.DataFrame:
     """單站：補齊 30 分鐘時間格，缺值只 forward fill（禁 interpolate，防洩漏）。"""
     g = g.sort_values("dt").set_index("dt")
@@ -41,7 +66,10 @@ def _forward_fill_grid(g: pd.DataFrame) -> pd.DataFrame:
     # 只 forward fill（用過去值補，不用未來）
     for col in ["available_bikes", "available_docks", "total_docks"]:
         g[col] = g[col].ffill()
-    g["場站名稱"] = g["場站名稱"].ffill()
+    # 站點識別欄位維持（reindex 產生的 NaN 用同站唯一值補回）
+    for col in ["場站名稱", "station_key", "is_new_station"]:
+        if col in g.columns:
+            g[col] = g[col].ffill().bfill()
     # 保留座標欄（天氣因子對照最近測站要用）——reindex 會產生 NaN，ffill 補回
     for col in ["經度", "緯度", "lat", "lng"]:
         if col in g.columns:
@@ -100,16 +128,20 @@ def attach_weather(frame: pd.DataFrame) -> pd.DataFrame:
     _sys.path.insert(0, str(_P(__file__).parent.parent))
     from features.weather import nearest_station, _load_station_year, _temp_comfort
 
-    # 1. 全站 → 最近測站（一次算好，站數有限）
-    stations = frame[["場站名稱"]].drop_duplicates()
-    # 用每站第一筆座標查最近測站
-    coords = frame.groupby("場站名稱").first().reset_index()
+    # 1. 全站 → 最近測站（一次算好，站數有限）。以 station_key 為主鍵（ADR-018）
+    coords = frame.groupby("station_key").first().reset_index()
     st_map = {}
     for _, r in coords.iterrows():
-        lat = r.get("緯度") or r.get("lat")
-        lng = r.get("經度") or r.get("lng")
-        if lat and lng:
-            st_map[r["場站名稱"]] = nearest_station(float(lat), float(lng))["station_id"]
+        lat = r.get("緯度")
+        if lat is None or pd.isna(lat):
+            lat = r.get("lat")
+        lng = r.get("經度")
+        if lng is None or pd.isna(lng):
+            lng = r.get("lng")
+        # ★注意 float('nan') 在 Python 是 truthy，必須用 pd.notna 明確擋掉髒座標（ADR-018）
+        # 座標無效的站(極少數)跳過→天氣欄留 NaN，由後續 ffill 處理，不讓整批崩潰
+        if lat is not None and lng is not None and pd.notna(lat) and pd.notna(lng):
+            st_map[r["station_key"]] = nearest_station(float(lat), float(lng))["station_id"]
 
     # 2. 逐測站讀天氣（快取），向量化組成查表（不逐列 append，避免慢）
     year = int(str(frame["dt"].iloc[0])[:4])
@@ -134,7 +166,7 @@ def attach_weather(frame: pd.DataFrame) -> pd.DataFrame:
 
     # 3. frame 加測站 id + 小時鍵，join 天氣
     frame = frame.copy()
-    frame["wsid"] = frame["場站名稱"].map(st_map)
+    frame["wsid"] = frame["station_key"].map(st_map)
     frame["_hourkey"] = frame["dt"].dt.strftime("%Y-%m-%d %H")
     frame = frame.merge(wtab, on=["wsid", "_hourkey"], how="left")
 
@@ -142,9 +174,9 @@ def attach_weather(frame: pd.DataFrame) -> pd.DataFrame:
     frame["temp_comfort"] = frame["temperature"].apply(
         lambda t: _temp_comfort(t) if pd.notna(t) else None)
     frame["rain_level"] = frame["precipitation"].apply(_rain_level)
-    # 缺值 forward fill（同站時序，不用未來）
+    # 缺值 forward fill（同站時序，不用未來）。以 station_key 分組（ADR-018）
     for col in ["temperature", "humidity", "wind_speed", "temp_comfort"]:
-        frame[col] = frame.groupby("場站名稱")[col].ffill()
+        frame[col] = frame.groupby("station_key")[col].ffill()
     return frame.drop(columns=["wsid", "_hourkey"])
 
 
@@ -169,8 +201,17 @@ def build_training_frame(
                                 "可還位數": "available_docks",
                                 "總車柱數": "total_docks"})
 
+    # ADR-018 ①：時間戳統一。3~5 月來源帶秒(如 00:00:43)、且與 1/2/6 月整點不齊，
+    # 一律 floor 到 30 分格，根除跨月接縫與未來跨站對齊風險。
+    df["dt"] = df["dt"].dt.floor("30min")
+
+    # ADR-018 ②：站點主檔歸併。schema 無站點 ID，只有場站名稱(字串)，且含編碼亂碼
+    # (同座標不同名)。以經緯度(小數 4 位≈10 公尺)為主鍵 station_key 歸併，
+    # 避免同一站被拆成兩份稀釋歷史/站點識別特徵。
+    df = _attach_station_key(df)
+
     frames = []
-    for name, g in df.groupby("場站名稱"):
+    for key, g in df.groupby("station_key"):
         g = _forward_fill_grid(g)
         g = _add_lag_and_target(g)
         frames.append(g)
@@ -187,14 +228,20 @@ def build_training_frame(
     train_end_ts = pd.to_datetime(train_end) + pd.Timedelta(days=1)
     frame["is_train"] = (frame["dt"] < train_end_ts).astype(int)
 
+    # ADR-018 ③：新舊站標記。以 station_key 首次出現時間 ≥ 訓練期結束 → 新站(冷啟動)。
+    # 用於評估分報「老站/新站」MAE，讓新站表現不被整體平均掩蓋（owner 核准分界=訓練期結束）。
+    first_seen = frame.groupby("station_key")["dt"].transform("min")
+    frame["is_new_station"] = (first_seen >= train_end_ts).astype(int)
+
     # 站點識別特徵（F-06）：該站 × day_type × time_slot 的「訓練期」歷史 P50 淨流量
     # ★只用訓練期算，避免洩漏（ADR-013/014 窗口約束）
+    # ★以 station_key（歸併後主鍵）分組，避免亂碼站名把同站拆成兩份稀釋（ADR-018）
     train_part = frame[frame["is_train"] == 1].copy()
     train_part["dtype"] = train_part["is_weekend"]
-    profile = (train_part.groupby(["場站名稱", "dtype", "time_slot"])["target_delta_30"]
+    profile = (train_part.groupby(["station_key", "dtype", "time_slot"])["target_delta_30"]
                .median().rename("station_slot_p50").reset_index())
     frame["dtype"] = frame["is_weekend"]
-    frame = frame.merge(profile, on=["場站名稱", "dtype", "time_slot"], how="left")
+    frame = frame.merge(profile, on=["station_key", "dtype", "time_slot"], how="left")
 
     feature_cols = [
         *LAG_SLOTS.keys(), "change_1hr", "change_2hr",
