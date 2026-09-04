@@ -434,18 +434,21 @@ def build_training_frame(
     frame["is_new_station"] = (first_seen >= train_end_ts).astype(int)
 
     # ADR-016：調度介入異常點標記（離線清訓練資料；上線不即時偵測只事後標註）。
-    # D 標準：該格 1 步淨變化 |Δ - 站均| > REBAL_SIGMA×站std 且 |Δ| > 總柱×REBAL_CAP
+    # D 標準：該格 1 步淨變化 |Δ - 同時段基準均| > REBAL_SIGMA×同時段std 且 |Δ| > 總柱×REBAL_CAP
     #   （又反常又一次搬走大半個站，像調度而非自然借還）。
-    # ★防洩漏：站均/站std 只用訓練期(is_train==1)算；★只標「該格當目標時」排除，存量照常當特徵。
-    tp_d = frame[frame["is_train"] == 1].groupby("station_key")["delta_1step"]
+    # ★基準用「站×平假日×時段(hour)」而非全時段站均（owner 洞察）：否則通勤尖峰的「規律大流量」
+    #   （如住宅區早上固定大量流入、商業區傍晚固定流出）會被誤判成調度。用同時段歷史比才準。
+    # ★防洩漏：基準均/std 只用訓練期(is_train==1)算；★只標「該格當目標時」排除，存量照常當特徵。
+    frame["_hh"] = frame["dt"].dt.hour
+    tp_d = frame[frame["is_train"] == 1].groupby(["station_key", "is_weekend", "_hh"])["delta_1step"]
     d_stats = pd.DataFrame({"_dmean": tp_d.mean(), "_dstd": tp_d.std()}).reset_index()
-    frame = frame.merge(d_stats, on="station_key", how="left")
+    frame = frame.merge(d_stats, on=["station_key", "is_weekend", "_hh"], how="left")
     frame["_dstd"] = frame["_dstd"].fillna(0.0)
     reversal = (frame["_dstd"] > 0) & (
         (frame["delta_1step"] - frame["_dmean"]).abs() > REBAL_SIGMA * frame["_dstd"])
     bulk = frame["delta_1step"].abs() > (frame["total_docks"].fillna(0) * REBAL_CAP)
     frame["is_rebalancing"] = (reversal & bulk).fillna(False).astype(int)
-    frame = frame.drop(columns=["_dmean", "_dstd"])
+    frame = frame.drop(columns=["_dmean", "_dstd", "_hh"])
 
     # 站點識別特徵（F-06）：該站 × day_type × time_slot 的「訓練期」歷史 P50 淨流量
     # ★只用訓練期算，避免洩漏（ADR-013/014 窗口約束）
