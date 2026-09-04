@@ -37,6 +37,31 @@ export const stationStatusLabels = {
   full: "滿站",
 };
 
+export const terrainLabels = {
+  flat: "平地",
+  gentle_up: "緩上坡",
+  gentle_down: "緩下坡",
+  moderate_up: "中上坡",
+  moderate_down: "中下坡",
+  steep_up: "陡上坡",
+  steep_down: "陡下坡",
+};
+
+export const areaTypeLabels = {
+  transit: "轉乘站",
+  school: "學區",
+  leisure: "休閒",
+  commercial: "商業區",
+  mixed: "混合",
+  residential: "住宅區",
+};
+
+export const freshnessLabels = {
+  live: "即時",
+  stale: "延遲",
+  cached: "快取",
+};
+
 export const taskStatusLabels = {
   assigned: "已指派",
   in_progress: "執行中",

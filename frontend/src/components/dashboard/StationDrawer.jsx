@@ -1,6 +1,71 @@
 import { Alert, Descriptions, Drawer, Empty, Spin, Tag, Typography } from "antd";
 import ReactECharts from "echarts-for-react";
-import { formatDateTime, stationStatusLabels } from "../../utils/formatters.js";
+import {
+  areaTypeLabels,
+  formatDateTime,
+  freshnessLabels,
+  stationStatusLabels,
+} from "../../utils/formatters.js";
+import {
+  computeElevationVsNeighbors,
+  deriveCapacityTier,
+  deriveStationTags,
+  deriveTidalPattern,
+  getStationElevation,
+  PENDING_DATA_SOURCES,
+} from "../../config/stationEnrichment.js";
+import StationForecastChart from "./StationForecastChart.jsx";
+
+const weatherConditionLabels = {
+  clear: "晴",
+  cloudy: "多雲",
+  rain: "雨",
+  heavy_rain: "大雨",
+  thunderstorm: "雷雨",
+};
+
+// 區域天氣：mock 只有單一行政區的天氣，只有同區站點才顯示為該站參考天氣，
+// 其他區明確標示「無此區即時天氣 Mock」，不套用不相符的資料。
+function StationWeather({ station, weather }) {
+  if (!weather) return null;
+  const sameDistrict = station.district === weather.district;
+
+  if (!sameDistrict) {
+    return (
+      <Alert
+        type="info"
+        showIcon
+        message="即時天氣"
+        description={`目前 Mock 僅提供「${weather.district}」的即時天氣，此站所屬「${station.district}」無對應資料。`}
+      />
+    );
+  }
+
+  return (
+    <Descriptions
+      title={`即時天氣（${weather.district}）`}
+      column={2}
+      size="small"
+      bordered
+    >
+      <Descriptions.Item label="天氣">
+        {weatherConditionLabels[weather.condition] ?? weather.condition}
+      </Descriptions.Item>
+      <Descriptions.Item label="氣溫">
+        <span className="mono">{weather.temperature}°C</span>
+      </Descriptions.Item>
+      <Descriptions.Item label="降雨機率">
+        <span className="mono">{weather.rain_probability}%</span>
+      </Descriptions.Item>
+      <Descriptions.Item label="資料時間">
+        {formatDateTime(weather.timestamp)}
+      </Descriptions.Item>
+      <Descriptions.Item label="說明" span={2}>
+        {weather.description}
+      </Descriptions.Item>
+    </Descriptions>
+  );
+}
 
 const AXIS_COLOR = "#8ea0b5";
 const GRID_COLOR = "rgba(148,163,184,0.15)";
@@ -95,7 +160,7 @@ function ForecastIntervalBar({ prediction, capacity }) {
   );
 }
 
-export default function StationDrawer({ open, onClose, detail, loading, error }) {
+export default function StationDrawer({ open, onClose, detail, loading, error, weather }) {
   const current = detail?.current;
 
   return (
@@ -109,16 +174,98 @@ export default function StationDrawer({ open, onClose, detail, loading, error })
       {error ? <Alert type="error" showIcon message={error.message} /> : null}
       {!loading && !error && current ? (
         <div className="drawer-stack">
-          <Descriptions column={2} size="small" bordered>
-            <Descriptions.Item label="行政區">{current.district}</Descriptions.Item>
+          {/* 即時狀態 */}
+          <Descriptions title="即時狀態" column={2} size="small" bordered>
             <Descriptions.Item label="狀態">
               <Tag>{stationStatusLabels[current.status] || current.status}</Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="可借">{current.available_bikes} 台</Descriptions.Item>
-            <Descriptions.Item label="可還">{current.available_docks} 位</Descriptions.Item>
-            <Descriptions.Item label="使用率">{current.usage_rate}%</Descriptions.Item>
-            <Descriptions.Item label="資料時間">{formatDateTime(current.timestamp)}</Descriptions.Item>
+            <Descriptions.Item label="服務狀態">
+              {current.service_available ? (
+                <Tag color="green">正常營運</Tag>
+              ) : (
+                <Tag color="red">暫停服務</Tag>
+              )}
+            </Descriptions.Item>
+            <Descriptions.Item label="可借">
+              <span className="mono">{current.available_bikes}</span> 台
+            </Descriptions.Item>
+            <Descriptions.Item label="可還">
+              <span className="mono">{current.available_docks}</span> 位
+            </Descriptions.Item>
+            <Descriptions.Item label="容量">
+              <span className="mono">{current.total_docks}</span> 格
+            </Descriptions.Item>
+            <Descriptions.Item label="使用率">
+              <span className="mono">{current.usage_rate}%</span>
+            </Descriptions.Item>
+            <Descriptions.Item label="資料新鮮度">
+              {freshnessLabels[current.data_freshness] ?? current.data_freshness ?? "—"}
+            </Descriptions.Item>
+            <Descriptions.Item label="資料時間">
+              {formatDateTime(current.timestamp)}
+            </Descriptions.Item>
           </Descriptions>
+
+          {/* 站點特徵 */}
+          <Descriptions title="站點特徵" column={2} size="small" bordered>
+            <Descriptions.Item label="行政區">{current.district}</Descriptions.Item>
+            <Descriptions.Item label="區域類型">
+              {areaTypeLabels[current.area_type] ?? current.area_type ?? "—"}
+            </Descriptions.Item>
+            <Descriptions.Item label="容量規模">
+              {deriveCapacityTier(current) ?? "—"}
+            </Descriptions.Item>
+            <Descriptions.Item label="潮汐型態（推斷）">
+              {deriveTidalPattern(current)}
+            </Descriptions.Item>
+          </Descriptions>
+
+          <div className="station-tags">
+            {deriveStationTags(current).map((tag) => (
+              <Tag key={tag} color="cyan">
+                {tag}
+              </Tag>
+            ))}
+            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+              特徵依站名自動標註
+            </Typography.Text>
+          </div>
+
+          {/* 地理與流動 */}
+          <Descriptions title="地理與流動" column={2} size="small" bordered>
+            <Descriptions.Item label="海拔（範例）">
+              {getStationElevation(current) != null ? (
+                <span className="mono">{getStationElevation(current)} m</span>
+              ) : (
+                "—"
+              )}
+            </Descriptions.Item>
+            <Descriptions.Item label="鄰站相對高度">
+              {(() => {
+                const rel = computeElevationVsNeighbors(
+                  current,
+                  detail.params?.params?.nearby_stations,
+                );
+                if (!rel) return "—";
+                const sign = rel.diff > 0 ? "+" : "";
+                return (
+                  <span>
+                    <span className="mono">
+                      {sign}
+                      {rel.diff} m
+                    </span>
+                    ｜{rel.tendency}
+                  </span>
+                );
+              })()}
+            </Descriptions.Item>
+          </Descriptions>
+
+          {/* 環境 */}
+          <StationWeather station={current} weather={weather} />
+
+          {/* 未來預測（固定 +30／+60 展示曲線） */}
+          <StationForecastChart stationId={current.station_id} />
 
           {detail.prediction ? (
             <div className="drawer-stack">
@@ -145,6 +292,18 @@ export default function StationDrawer({ open, onClose, detail, loading, error })
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="此站沒有歷史 Mock" />
             )}
           </div>
+
+          <Alert
+            type="info"
+            showIcon
+            message="待接真實資料源"
+            description={
+              <span>
+                以下屬性目前為範例／推斷或尚未提供，將由真實資料源取代：
+                {PENDING_DATA_SOURCES.join("、")}。
+              </span>
+            }
+          />
         </div>
       ) : null}
     </Drawer>

@@ -165,6 +165,7 @@ export default function DashboardPage() {
             detail={dashboard.detail}
             loading={dashboard.detailLoading}
             error={dashboard.detailError}
+            weather={dashboard.data.weather}
           />
         </div>
       ) : null}

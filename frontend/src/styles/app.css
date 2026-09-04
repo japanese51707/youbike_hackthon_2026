@@ -471,6 +471,21 @@ body {
   }
 }
 
+.station-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.forecast-slot-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 6px 0 12px;
+  font-size: 12px;
+}
+
 .forecast-ci {
   padding: 12px 14px;
   border: 1px solid var(--ct-border);
