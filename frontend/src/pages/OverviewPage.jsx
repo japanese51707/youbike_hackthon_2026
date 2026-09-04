@@ -3,6 +3,7 @@ import { Card, List, Space, Tag, Typography } from "antd";
 import AsyncState from "../components/common/AsyncState.jsx";
 import MetricCard from "../components/common/MetricCard.jsx";
 import TemporalPanel from "../components/temporal/TemporalPanel.jsx";
+import DispatchPlannerPanel from "../components/overview/DispatchPlannerPanel.jsx";
 import OverviewCharts from "../components/overview/OverviewCharts.jsx";
 import TimelinePlayback from "../components/overview/TimelinePlayback.jsx";
 import useOverviewData from "../hooks/useOverviewData.js";
@@ -48,6 +49,11 @@ export default function OverviewPage() {
           <OverviewCharts
             overview={operations.data.overview}
             simulation={operations.data.simulation}
+          />
+
+          <DispatchPlannerPanel
+            stations={operations.data.stations}
+            operators={operations.data.operators}
           />
 
           <TimelinePlayback

@@ -486,6 +486,46 @@ body {
   font-size: 12px;
 }
 
+.planner-card {
+  border: 1px solid var(--ct-border);
+  background: var(--ct-panel);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+}
+
+.planner-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.planner-map {
+  height: 360px;
+  border-radius: 10px;
+}
+
+.planner-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 22px;
+  margin-top: 16px;
+}
+
+.planner-factors {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ct-text-dim);
+  line-height: 1.9;
+}
+
+@media (max-width: 760px) {
+  .planner-body {
+    grid-template-columns: 1fr;
+  }
+}
+
 .forecast-ci {
   padding: 12px 14px;
   border: 1px solid var(--ct-border);
