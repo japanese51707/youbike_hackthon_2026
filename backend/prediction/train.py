@@ -136,7 +136,10 @@ def main():
     ap.add_argument("--sample", type=int, default=None, help="只取前 N 站快速驗證")
     ap.add_argument("--weather", action="store_true", help="併入天氣因子（消融對比用）")
     ap.add_argument("--mode", choices=["ablation", "weight"], default="ablation",
-                    help="ablation=因子消融對比(天氣) / weight=ADR-019 樣本權重三方案對比(已定案:不採用A,見ADR-019)")
+                    help="ablation=因子消融對比 / weight=ADR-019 樣本權重三方案對比(已定案:不採用A,見ADR-019)")
+    ap.add_argument("--factor", choices=["weather", "holiday", "dayoff"], default="holiday",
+                    help="ablation 模式要測的因子：weather=天氣 / holiday=非週末假日(加料) / "
+                         "dayoff=is_weekend 升級 is_dayoff(修正既有特徵,非加料)")
     args = ap.parse_args()
 
     print(f"[1/4] 讀 S3 資料{'(子集 '+str(args.sample)+' 站)' if args.sample else '(全量)'} ...", flush=True)
@@ -145,8 +148,11 @@ def main():
 
     from prediction.feature_pipeline import HORIZON_STEPS
 
-    def run_group(with_weather: bool):
+    def run_group(**factor_kwargs):
         """跑一組（有/無因子），回各視野結果，供消融對比。
+
+        factor_kwargs：傳給 build_training_frame 的因子開關（with_weather/with_holiday...）。
+          不傳=基準組（純時序+站點識別）；傳 with_xxx=True=加該因子組。
 
         ★消融探針用 L2 迴歸（objective=regression，學均值），不是分位數。
           原因（ADR-002 消融評估方法段）：目標 Δ 有 ~78% 為 0（零膨脹重尾），
@@ -154,7 +160,7 @@ def main():
           L2 學均值對因子敏感，才能公平比較每個因子的邊際貢獻。
           （上線出區間仍用分位數 P10/P50/P90，見主訓練流程；探針只為量測因子效果。）
         """
-        frame, feat_cols = build_training_frame(df, TRAIN_END, with_weather=with_weather)
+        frame, feat_cols = build_training_frame(df, TRAIN_END, **factor_kwargs)
         import lightgbm as lgb
         out = []
         for h, mins in HORIZON_STEPS.items():
@@ -198,13 +204,20 @@ def main():
         run_weight_experiment(df)
         return
 
-    FACTOR = "天氣"  # 本輪消融的因子名（切換因子時改這裡）
+    # 依 --factor 決定本輪消融的因子（名稱 + build_training_frame 的開關）
+    _FACTOR_MAP = {"weather": ("天氣", "with_weather"),
+                   "holiday": ("非週末假日", "with_holiday"),
+                   "dayoff": ("放假日升級", "dayoff_mode")}
+    FACTOR, factor_kw = _FACTOR_MAP[args.factor]
     print(f"[2/3] 消融對比：基準(無{FACTOR}) vs +{FACTOR} ...", flush=True)
     print(f"      探針=L2迴歸(學均值,對因子敏感);上線出區間仍用分位數", flush=True)
     print("      跑基準組...", flush=True)
-    base_group = run_group(with_weather=False)
+    # 測 dayoff 本身時，基準組須明確關掉 dayoff（否則預設 True 會兩組相同）；
+    # 測其他因子時，基準組保持預設（含已定案的 dayoff，才是正確對照基準）。
+    base_kwargs = {"dayoff_mode": False} if args.factor == "dayoff" else {}
+    base_group = run_group(**base_kwargs)
     print(f"      跑 +{FACTOR} 組（全站批次併入）...", flush=True)
-    weather_group = run_group(with_weather=True)
+    weather_group = run_group(**{factor_kw: True})
 
     print(f"[3/3] 消融結果：{FACTOR}因子的邊際影響程度", flush=True)
     print("=" * 92, flush=True)
@@ -222,7 +235,10 @@ def main():
               f"{b_nz:>9.3f} {w_nz:>10.3f} {pct(b_nz, w_nz):>+8.2f}%", flush=True)
     print("=" * 92, flush=True)
     print("解讀：改善>0 = 因子讓模型更準。三個切面——全樣本(被0稀釋)/已空區(系統存在理由)/Δ≠0(真正有變化時)", flush=True)
-    print(f"      本輪因子：{FACTOR}。天氣型態用雨量分級(資料無日照無法分晴/陰)+溫度倒U舒適度", flush=True)
+    _factor_note = {"天氣": "天氣型態用雨量分級(無日照無法分晴/陰)+溫度倒U舒適度",
+                    "非週末假日": "is_holiday/國定假日/連假；邊際價值在 is_weekend 之外的平日型假日與補班日",
+                    "放假日升級": "is_weekend→is_dayoff(週末 OR 國定假日視為放假,補班日視為上班);修正既有特徵非加料"}
+    print(f"      本輪因子：{FACTOR}。{_factor_note.get(FACTOR, '')}", flush=True)
 
     # ADR-018 ③：新舊站分報（用 +因子組數字；冷啟動表現不被整體平均掩蓋）
     print("\n[附] 新舊站分報 MAE（ADR-018，+因子組）：老站=訓練期見過 / 新站=訓練期後才上線", flush=True)

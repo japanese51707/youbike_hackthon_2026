@@ -183,11 +183,43 @@ def attach_weather(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.drop(columns=["wsid", "_hourkey"])
 
 
+def attach_holiday(frame: pd.DataFrame) -> pd.DataFrame:
+    """全市批次併入假日特徵（ADR-011 假日因子；全站共用，不分站）。
+
+    假日是全市一致的「已知未來確定」因子（月曆早定好）。以「唯一日期」批次算好一張小表
+    （1~6 月約 180 天），再 map 回 frame，效率高。
+    特徵：is_holiday（放假）、is_national_holiday（國定假日，非單純週末）、
+          is_long_weekend（連假，前後含當天連續 ≥3 天放假）。
+    ★注意與既有 is_weekend/weekday 重疊：假日因子的邊際價值在「平日型假日」（如落在平日的
+      春節/端午）與「補班的週六」——這些是 is_weekend 抓不到的部分。
+    """
+    import sys as _sys
+    from pathlib import Path as _P
+    _sys.path.insert(0, str(_P(__file__).parent.parent))
+    from features.calendar_holiday import get_holiday_feature
+
+    frame = frame.copy()
+    frame["_datekey"] = frame["dt"].dt.strftime("%Y%m%d")
+    uniq = frame["_datekey"].dropna().unique()
+    rows = []
+    for dk in uniq:
+        f = get_holiday_feature(dk)
+        rows.append({"_datekey": dk,
+                     "is_holiday": int(bool(f["is_holiday"])),
+                     "is_national_holiday": int(bool(f["is_national_holiday"])),
+                     "is_long_weekend": int(bool(f["is_long_weekend"]))})
+    htab = pd.DataFrame(rows)
+    frame = frame.merge(htab, on="_datekey", how="left")
+    return frame.drop(columns=["_datekey"])
+
+
 def build_training_frame(
     df: pd.DataFrame,
     train_end: str,
     profile_by_station: dict | None = None,
     with_weather: bool = False,
+    with_holiday: bool = False,
+    dayoff_mode: bool = True,   # ADR-011 定案：is_weekend 升級 is_dayoff 為預設行為（消融可關）
 ):
     """組裝訓練特徵表。
 
@@ -226,6 +258,20 @@ def build_training_frame(
     frame["is_weekend"] = (frame["weekday"] >= 5).astype(int)
     frame["month"] = frame["dt"].dt.month
     frame["time_slot"] = frame["hour"] * 2 + (frame["dt"].dt.minute >= 30).astype(int)
+
+    # dayoff_mode（ADR-011 假日因子的「修正既有特徵」做法，非加料）：
+    # 把 is_weekend 升級為 is_dayoff——週末 OR 國定假日視為放假、補班日視為上班。
+    # 讓「落在平日的春節/清明」與「補班的週六」被正確歸類（放假就是放假，不管週末或國定）。
+    # ★特徵欄不變（仍叫 is_weekend），只改值，是乾淨對照；連 station_slot_p50 分組也按放假型態。
+    if dayoff_mode:
+        import sys as _sys
+        from pathlib import Path as _P
+        _sys.path.insert(0, str(_P(__file__).parent.parent))
+        from features.calendar_holiday import get_holiday_feature
+        dks = frame["dt"].dt.strftime("%Y%m%d")
+        offmap = {dk: int(bool(get_holiday_feature(dk)["is_holiday"]))
+                  for dk in dks.dropna().unique()}
+        frame["is_weekend"] = dks.map(offmap).fillna(frame["is_weekend"]).astype(int)
 
     # 訓練/驗證切分（時間切分，ADR-002）
     train_end_ts = pd.to_datetime(train_end) + pd.Timedelta(days=1)
@@ -282,5 +328,10 @@ def build_training_frame(
         frame = attach_weather(frame)
         feature_cols += ["temperature", "humidity", "wind_speed",
                          "temp_comfort", "rain_level"]
+
+    # 消融用：可選擇性併入假日因子（ADR-011，全市批次；is_weekend 之外的平日型假日/補班）
+    if with_holiday:
+        frame = attach_holiday(frame)
+        feature_cols += ["is_holiday", "is_national_holiday", "is_long_weekend"]
 
     return frame, feature_cols
