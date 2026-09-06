@@ -1,5 +1,5 @@
 """
-事件因子（features.event_impact）— ADR-012（選項 A：介面先行）
+事件因子（features.event_impact）— ADR-102（選項 A：介面先行）
 ================================================================
 活動/路跑/馬拉松等動態事件會短時間大幅改變周邊站點需求。這類是逐次資料、
 無現成歷史 API，故採「事件資料表」介面：結構先建好，歷史資料事後補、現場可填。
@@ -9,7 +9,7 @@
   lat, lng, expected_attendance, influence_radius_km
 
 特徵計算：給定站點座標 + 時間 → 該時刻是否有事件影響、影響強度（依距離與規模）。
-影響強度轉換係數初期粗估（ADR-011/012），之後校準。
+影響強度轉換係數初期粗估（ADR-101/012），之後校準。
 
 對外暴露：
     get_active_events(date) -> list             # 某日進行中的事件
@@ -34,7 +34,7 @@ def _load() -> list[dict]:
 
 def _save(events: list[dict]) -> None:
     _EVENTS_PATH.write_text(
-        json.dumps({"_說明": "事件資料表（活動/路跑/馬拉松），ADR-012 選項A介面先行，資料事後補。",
+        json.dumps({"_說明": "事件資料表（活動/路跑/馬拉松），ADR-102 選項A介面先行，資料事後補。",
                     "events": events}, ensure_ascii=False, indent=1),
         encoding="utf-8")
 

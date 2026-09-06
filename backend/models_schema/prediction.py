@@ -1,11 +1,11 @@
 """
-預測結果 Schema（對齊 api_contract §2.2，v4 多視野 ADR-017）
+預測結果 Schema（對齊 api_contract §2.2，v4 多視野 ADR-107）
 只有「預測數字 + 不確定區間」。緊急度不在這裡（那是 calc_urgency 另外算，
 放在 DispatchRecommendation.priority_score）。
 
-ADR-017：從單一視野改為 horizons[] 陣列（30/60/90/120 分）。
+ADR-107：從單一視野改為 horizons[] 陣列（30/60/90/120 分）。
 每個視野直接對「累積淨變化」訓練分位數（分位數不可加，不用單步相加）。
-horizon_minutes 一律為分鐘數，不綁資料格數（粒度落差解法見 ADR-017/api_contract §2.2）。
+horizon_minutes 一律為分鐘數，不綁資料格數（粒度落差解法見 ADR-107/api_contract §2.2）。
 """
 
 from enum import Enum

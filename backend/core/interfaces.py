@@ -28,13 +28,13 @@ class PredictionInterval:
     predicted_available: float   # 點估計（僅供顯示，規則引擎不吃）
     lower_bound: float           # 下界（悲觀：車最少）→ 防空站用
     upper_bound: float           # 上界（悲觀：車最多）→ 防滿站用
-    horizon_minutes: int         # 前瞻分鐘數（分鐘數，不綁資料格數，ADR-017）
+    horizon_minutes: int         # 前瞻分鐘數（分鐘數，不綁資料格數，ADR-107）
     source: str = "mock"         # 來源標記（mock / lightgbm / historical_fallback）
 
 
 @dataclass
 class MultiHorizonPrediction:
-    """多視野預測（ADR-017）：一站含多個 horizon 的區間。
+    """多視野預測（ADR-107）：一站含多個 horizon 的區間。
 
     規則引擎依調度員到達時間，用 for_horizon() 挑最接近的視野。
     """

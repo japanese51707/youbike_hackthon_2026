@@ -1,5 +1,5 @@
 """
-地形因子（features.terrain）— ADR-011
+地形因子（features.terrain）— ADR-101
 ======================================
 用站點座標查高程，估算局部坡度，套 config.terrain_thresholds 分類。
 地形影響騎乘意願（上坡站點借車意願低、還車意願高，反之亦然）。
@@ -84,7 +84,7 @@ def load_elevation_cache() -> dict:
     """載入預抓的全站高程快取（fetch_elevation 產出，200m 取樣 mapzen DEM）。
 
     格式：station_key("lat_lng" 小數4位) -> {elevation, slope_pct, lat, lng}。
-    這是 build_training_frame 的 attach_terrain 直接用的來源（station_key 對齊 ADR-018）。
+    這是 build_training_frame 的 attach_terrain 直接用的來源（station_key 對齊 ADR-108）。
     """
     if _CACHE_PATH.exists():
         return json.loads(_CACHE_PATH.read_text(encoding="utf-8"))

@@ -1,10 +1,10 @@
 """
-POI 距離因子 + 站點區域類型（features.poi_distance）— ADR-012
+POI 距離因子 + 站點區域類型（features.poi_distance）— ADR-102
 ==============================================================
 標注 9 類地理靜態 POI 座標（poi_data.json，來自 OSM），計算 YouBike 站點到
 「最近各類 POI」的距離。站點區域類型由「最近且在門檻內的 POI 類別」自動推導。
 
-POI 類型（14 類，ADR-012 + owner 細分）：
+POI 類型（14 類，ADR-102 + owner 細分）：
   metro/train/bus_terminal/school/mall/traditional_market/night_market/
   hospital/park/park_sports/park_forest/riverside/venue/sports_center
 

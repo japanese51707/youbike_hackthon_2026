@@ -2,15 +2,15 @@
 特徵組裝 pipeline（prediction.feature_pipeline）— P1
 =====================================================
 把 backend/features/ 的因子 + 站點歷史存量，組裝成可訓練/推論的特徵表。
-這一層是**防洩漏約束的強制執行點**（ADR-013~016）。
+這一層是**防洩漏約束的強制執行點**（ADR-103~016）。
 
 ★強制約束（不可繞過）：
-  1. 計算窗口（ADR-013/014）：歷史統計/行為指紋/站點識別特徵，只用「目標時點之前」的資料。
+  1. 計算窗口（ADR-103/014）：歷史統計/行為指紋/站點識別特徵，只用「目標時點之前」的資料。
      訓練時用訓練期；每列的站點識別特徵用「該列時點之前」的歷史（避免用到未來）。
   2. 缺失值（§5-1）：只 forward fill，禁 interpolate。
-  3. 截斷標記（ADR-015）：目標 Δ=0 且同時空站(可借=0)或滿站(可還=0) → 標 is_censored。
+  3. 截斷標記（ADR-105）：目標 Δ=0 且同時空站(可借=0)或滿站(可還=0) → 標 is_censored。
      正常站的 Δ=0 不標（是真實低需求）。
-  4. lag（ADR-013）：只往過去取。
+  4. lag（ADR-103）：只往過去取。
 
 目標變數：淨變化量 Δ = available_bikes(t+1) − available_bikes(t)（下一時段，30分）。
   規則引擎吃「到達存量」，等同 available(t) + 預測Δ；預測Δ的區間下界/上界即防空/防滿。
@@ -29,15 +29,15 @@ import pandas as pd
 # 每 30 分一格
 LAG_SLOTS = {"lag_30min": 1, "lag_1hr": 2, "lag_2hr": 4, "lag_1day": 48, "lag_1week": 336}
 
-# 多視野（ADR-017）：格數 → 分鐘數。每 30 分一格，故 h 格 = h*30 分。
+# 多視野（ADR-107）：格數 → 分鐘數。每 30 分一格，故 h 格 = h*30 分。
 HORIZON_STEPS = {1: 30, 2: 60, 3: 90, 4: 120}
 
-# ADR-016 調度異常判定參數（可調）：D 標準 = 反常(σ倍) 且 大量(佔總柱比例)
+# ADR-106 調度異常判定參數（可調）：D 標準 = 反常(σ倍) 且 大量(佔總柱比例)
 REBAL_SIGMA = 3.0   # |Δ-站均| > REBAL_SIGMA × 站std → 反常
 REBAL_CAP = 0.5     # |Δ| > 總柱 × REBAL_CAP → 一次搬走大半個站
 
 
-# ADR-018 ②③：站點主檔歸併 + 新舊站標記
+# ADR-108 ②③：站點主檔歸併 + 新舊站標記
 COORD_DECIMALS = 4  # 經緯度取整位數（小數 4 位 ≈ 10 公尺），作為 station_key 主鍵
 
 
@@ -46,7 +46,7 @@ def _attach_station_key(df: pd.DataFrame) -> pd.DataFrame:
 
     產生欄位：
       - station_key：canonical 站點主鍵字串 "lat_lng"（歸併後，同座標視為同站）
-      - is_new_station：ADR-018 ③ 新舊站標記（訓練期結束後才首次出現 → 1）
+      - is_new_station：ADR-108 ③ 新舊站標記（訓練期結束後才首次出現 → 1）
 
     有座標缺失(NaN)的列，退回用場站名稱當 key（極少數，避免整列丟失）。
     """
@@ -91,17 +91,17 @@ def _add_lag_and_target(g: pd.DataFrame) -> pd.DataFrame:
     g["change_1hr"] = ab - ab.shift(2)     # 近1小時變化（過去）
     g["change_2hr"] = ab - ab.shift(4)
     # 逐格淨變化與絕對變化：
-    #   delta_1step 帶正負（ADR-016 調度異常判定用）；abs_change_1step 絕對值（ADR-019 周轉量基礎，
+    #   delta_1step 帶正負（ADR-106 調度異常判定用）；abs_change_1step 絕對值（ADR-109 周轉量基礎，
     #   用絕對值才是真周轉，淨變化會被借出又還回相抵洗成 0）。
     g["delta_1step"] = ab - ab.shift(1)
     g["abs_change_1step"] = g["delta_1step"].abs()
 
-    # 多視野目標（ADR-017）：h 格後的「累積淨變化」= available(t+h) − available(t)
+    # 多視野目標（ADR-107）：h 格後的「累積淨變化」= available(t+h) − available(t)
     #   每 30 分一格：h=1/2/3/4 對應 30/60/90/120 分鐘。直接對累積 Δ 訓練（分位數不可加）。
     for h, mins in HORIZON_STEPS.items():
         g[f"target_delta_{mins}"] = ab.shift(-h) - ab
 
-    # 截斷標記（ADR-015）：以「30分視野目標」判定（可借=0 或 可還=0 且 Δ=0）
+    # 截斷標記（ADR-105）：以「30分視野目標」判定（可借=0 或 可還=0 且 Δ=0）
     # 注意 target_delta_30 末格為 NaN（shift(-1)），fillna(False) 讓其不算截斷（之後 dropna 會移除）
     at_empty = (g["available_bikes"] <= 0)
     at_full = (g["available_docks"] <= 0)
@@ -137,7 +137,7 @@ def attach_weather(frame: pd.DataFrame) -> pd.DataFrame:
     _sys.path.insert(0, str(_P(__file__).parent.parent))
     from features.weather import nearest_station, _load_station_year, _temp_comfort
 
-    # 1. 全站 → 最近測站（一次算好，站數有限）。以 station_key 為主鍵（ADR-018）
+    # 1. 全站 → 最近測站（一次算好，站數有限）。以 station_key 為主鍵（ADR-108）
     coords = frame.groupby("station_key").first().reset_index()
     st_map = {}
     for _, r in coords.iterrows():
@@ -147,7 +147,7 @@ def attach_weather(frame: pd.DataFrame) -> pd.DataFrame:
         lng = r.get("經度")
         if lng is None or pd.isna(lng):
             lng = r.get("lng")
-        # ★注意 float('nan') 在 Python 是 truthy，必須用 pd.notna 明確擋掉髒座標（ADR-018）
+        # ★注意 float('nan') 在 Python 是 truthy，必須用 pd.notna 明確擋掉髒座標（ADR-108）
         # 座標無效的站(極少數)跳過→天氣欄留 NaN，由後續 ffill 處理，不讓整批崩潰
         if lat is not None and lng is not None and pd.notna(lat) and pd.notna(lng):
             st_map[r["station_key"]] = nearest_station(float(lat), float(lng))["station_id"]
@@ -183,14 +183,14 @@ def attach_weather(frame: pd.DataFrame) -> pd.DataFrame:
     frame["temp_comfort"] = frame["temperature"].apply(
         lambda t: _temp_comfort(t) if pd.notna(t) else None)
     frame["rain_level"] = frame["precipitation"].apply(_rain_level)
-    # 缺值 forward fill（同站時序，不用未來）。以 station_key 分組（ADR-018）
+    # 缺值 forward fill（同站時序，不用未來）。以 station_key 分組（ADR-108）
     for col in ["temperature", "humidity", "wind_speed", "temp_comfort"]:
         frame[col] = frame.groupby("station_key")[col].ffill()
     return frame.drop(columns=["wsid", "_hourkey"])
 
 
 def attach_holiday(frame: pd.DataFrame) -> pd.DataFrame:
-    """全市批次併入假日特徵（ADR-011 假日因子；全站共用，不分站）。
+    """全市批次併入假日特徵（ADR-101 假日因子；全站共用，不分站）。
 
     假日是全市一致的「已知未來確定」因子（月曆早定好）。以「唯一日期」批次算好一張小表
     （1~6 月約 180 天），再 map 回 frame，效率高。
@@ -233,7 +233,7 @@ _AREA_CODE = {"transit": 0, "school": 1, "commercial": 2, "leisure": 3,
 
 
 def attach_poi(frame: pd.DataFrame) -> pd.DataFrame:
-    """全站批次併入 POI 距離特徵 + 區域類型（ADR-012，14 類，靜態）。
+    """全站批次併入 POI 距離特徵 + 區域類型（ADR-102，14 類，靜態）。
 
     POI 距離是靜態的（站座標固定），故以唯一 station_key 算一次距離再 merge 回，效率高。
     特徵：到 14 類最近 POI 的距離(km) + area_type_code（區域類型類別碼）。
@@ -269,7 +269,7 @@ def attach_poi(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.merge(ptab, on="station_key", how="left")
 
 
-# 行為指紋特徵欄（ADR-014，訓練期算，每站一個值）
+# 行為指紋特徵欄（ADR-104，訓練期算，每站一個值）
 _PROFILE_COLS = [
     "prof_day_night_ratio",   # 日夜活動比：白天(6-18)周轉 / 夜間周轉 → 就業型 vs 住宅型
     "prof_holiday_ratio",     # 平假日比：假日周轉 / 平日周轉 → 休閒型 vs 通勤型
@@ -281,11 +281,11 @@ _PROFILE_COLS = [
 
 
 def attach_profile(frame: pd.DataFrame, train_mask: pd.Series) -> pd.DataFrame:
-    """全站批次併入站點行為指紋（ADR-014，六指標之特徵子集）。
+    """全站批次併入站點行為指紋（ADR-104，六指標之特徵子集）。
 
-    ★防洩漏鐵律（ADR-014 補記）：所有指紋只用訓練期（train_mask）資料算，
+    ★防洩漏鐵律（ADR-104 補記）：所有指紋只用訓練期（train_mask）資料算，
       6 月驗證期不參與。以 station_key 分組算好每站一個值再 merge 回全 frame。
-    ★需求密度不進特徵（ADR-014 owner 界線：規劃層/決策層加分項，非預測特徵）。
+    ★需求密度不進特徵（ADR-104 owner 界線：規劃層/決策層加分項，非預測特徵）。
 
     指標定義（用訓練期）：
       日夜活動比、平假日比、早峰淨流向、峰度、空站/滿站頻率。
@@ -327,15 +327,15 @@ def attach_profile(frame: pd.DataFrame, train_mask: pd.Series) -> pd.DataFrame:
     return frame.merge(prof, on="station_key", how="left")
 
 
-# 地形特徵欄（ADR-011，靜態，來自預抓 _elevation_cache.json）
+# 地形特徵欄（ADR-101，靜態，來自預抓 _elevation_cache.json）
 _TERRAIN_COLS = ["terrain_elevation", "terrain_slope_pct"]
 _TERRAIN_CLASS_CODE = {"flat": 0, "gentle": 1, "moderate": 2, "steep": 3, "unknown": 4}
 
 
 def attach_terrain(frame: pd.DataFrame) -> pd.DataFrame:
-    """全站併入地形特徵（ADR-011，靜態）：海拔 + 坡度% + 坡度分級碼。
+    """全站併入地形特徵（ADR-101，靜態）：海拔 + 坡度% + 坡度分級碼。
 
-    直接讀預抓的 _elevation_cache.json（station_key 對齊 ADR-018），不即時打 API。
+    直接讀預抓的 _elevation_cache.json（station_key 對齊 ADR-108），不即時打 API。
     坡度用 200m 取樣（匹配 mapzen ~90m DEM，避免網格雜訊）。
     """
     import sys as _sys
@@ -370,7 +370,7 @@ def build_training_frame(
     with_poi: bool = False,
     with_profile: bool = False,
     with_terrain: bool = False,
-    dayoff_mode: bool = True,   # ADR-011 定案：is_weekend 升級 is_dayoff 為預設行為（消融可關）
+    dayoff_mode: bool = True,   # ADR-101 定案：is_weekend 升級 is_dayoff 為預設行為（消融可關）
 ):
     """組裝訓練特徵表。
 
@@ -387,11 +387,11 @@ def build_training_frame(
                                 "可還位數": "available_docks",
                                 "總車柱數": "total_docks"})
 
-    # ADR-018 ①：時間戳統一。3~5 月來源帶秒(如 00:00:43)、且與 1/2/6 月整點不齊，
+    # ADR-108 ①：時間戳統一。3~5 月來源帶秒(如 00:00:43)、且與 1/2/6 月整點不齊，
     # 一律 floor 到 30 分格，根除跨月接縫與未來跨站對齊風險。
     df["dt"] = df["dt"].dt.floor("30min")
 
-    # ADR-018 ②：站點主檔歸併。schema 無站點 ID，只有場站名稱(字串)，且含編碼亂碼
+    # ADR-108 ②：站點主檔歸併。schema 無站點 ID，只有場站名稱(字串)，且含編碼亂碼
     # (同座標不同名)。以經緯度(小數 4 位≈10 公尺)為主鍵 station_key 歸併，
     # 避免同一站被拆成兩份稀釋歷史/站點識別特徵。
     df = _attach_station_key(df)
@@ -410,7 +410,7 @@ def build_training_frame(
     frame["month"] = frame["dt"].dt.month
     frame["time_slot"] = frame["hour"] * 2 + (frame["dt"].dt.minute >= 30).astype(int)
 
-    # dayoff_mode（ADR-011 假日因子的「修正既有特徵」做法，非加料）：
+    # dayoff_mode（ADR-101 假日因子的「修正既有特徵」做法，非加料）：
     # 把 is_weekend 升級為 is_dayoff——週末 OR 國定假日視為放假、補班日視為上班。
     # 讓「落在平日的春節/清明」與「補班的週六」被正確歸類（放假就是放假，不管週末或國定）。
     # ★特徵欄不變（仍叫 is_weekend），只改值，是乾淨對照；連 station_slot_p50 分組也按放假型態。
@@ -428,12 +428,12 @@ def build_training_frame(
     train_end_ts = pd.to_datetime(train_end) + pd.Timedelta(days=1)
     frame["is_train"] = (frame["dt"] < train_end_ts).astype(int)
 
-    # ADR-018 ③：新舊站標記。以 station_key 首次出現時間 ≥ 訓練期結束 → 新站(冷啟動)。
+    # ADR-108 ③：新舊站標記。以 station_key 首次出現時間 ≥ 訓練期結束 → 新站(冷啟動)。
     # 用於評估分報「老站/新站」MAE，讓新站表現不被整體平均掩蓋（owner 核准分界=訓練期結束）。
     first_seen = frame.groupby("station_key")["dt"].transform("min")
     frame["is_new_station"] = (first_seen >= train_end_ts).astype(int)
 
-    # ADR-016：調度介入異常點標記（離線清訓練資料；上線不即時偵測只事後標註）。
+    # ADR-106：調度介入異常點標記（離線清訓練資料；上線不即時偵測只事後標註）。
     # D 標準：該格 1 步淨變化 |Δ - 同時段基準均| > REBAL_SIGMA×同時段std 且 |Δ| > 總柱×REBAL_CAP
     #   （又反常又一次搬走大半個站，像調度而非自然借還）。
     # ★基準用「站×平假日×時段(hour)」而非全時段站均（owner 洞察）：否則通勤尖峰的「規律大流量」
@@ -451,8 +451,8 @@ def build_training_frame(
     frame = frame.drop(columns=["_dmean", "_dstd", "_hh"])
 
     # 站點識別特徵（F-06）：該站 × day_type × time_slot 的「訓練期」歷史 P50 淨流量
-    # ★只用訓練期算，避免洩漏（ADR-013/014 窗口約束）
-    # ★以 station_key（歸併後主鍵）分組，避免亂碼站名把同站拆成兩份稀釋（ADR-018）
+    # ★只用訓練期算，避免洩漏（ADR-103/014 窗口約束）
+    # ★以 station_key（歸併後主鍵）分組，避免亂碼站名把同站拆成兩份稀釋（ADR-108）
     train_part = frame[frame["is_train"] == 1].copy()
     train_part["dtype"] = train_part["is_weekend"]
     profile = (train_part.groupby(["station_key", "dtype", "time_slot"])["target_delta_30"]
@@ -460,7 +460,7 @@ def build_training_frame(
     frame["dtype"] = frame["is_weekend"]
     frame = frame.merge(profile, on=["station_key", "dtype", "time_slot"], how="left")
 
-    # ADR-019：訓練期周轉量 + 樣本權重 + 決策層信心分級
+    # ADR-109：訓練期周轉量 + 樣本權重 + 決策層信心分級
     # ★防洩漏鐵律：turnover 只用訓練期(is_train==1)算，6 月驗證期不參與。
     #   turnover = 該站訓練期「逐格絕對變化 |ab(t)-ab(t-1)|」的平均（每格平均周轉量）。
     tp = frame[frame["is_train"] == 1]
@@ -473,7 +473,7 @@ def build_training_frame(
     frame["w_equal"] = 1.0
     frame["w_log"] = np.log1p(frame["station_turnover"])       # log(1+turnover) 溫和
     frame["w_linear"] = frame["station_turnover"]              # 線性（看極端站是否主宰）
-    # 決策層信心分級（機制 C，僅排序/標註，不進調度觸發—守 ADR-014）
+    # 決策層信心分級（機制 C，僅排序/標註，不進調度觸發—守 ADR-104）
     # 以訓練期 turnover 的三分位數分「低/中/高流量」
     q = tp.groupby("station_key")["abs_change_1step"].mean()
     if len(q) >= 3:
@@ -497,22 +497,22 @@ def build_training_frame(
         feature_cols += ["temperature", "humidity", "wind_speed",
                          "temp_comfort", "rain_level"]
 
-    # 消融用：可選擇性併入假日因子（ADR-011，全市批次；is_weekend 之外的平日型假日/補班）
+    # 消融用：可選擇性併入假日因子（ADR-101，全市批次；is_weekend 之外的平日型假日/補班）
     if with_holiday:
         frame = attach_holiday(frame)
         feature_cols += ["is_holiday", "is_national_holiday", "is_long_weekend"]
 
-    # 消融用：可選擇性併入 POI 距離因子（ADR-012，14 類靜態距離 + 區域類型）
+    # 消融用：可選擇性併入 POI 距離因子（ADR-102，14 類靜態距離 + 區域類型）
     if with_poi:
         frame = attach_poi(frame)
         feature_cols += _POI_DIST_COLS + ["area_type_code"]
 
-    # 消融用：可選擇性併入站點行為指紋（ADR-014，訓練期算，防洩漏）
+    # 消融用：可選擇性併入站點行為指紋（ADR-104，訓練期算，防洩漏）
     if with_profile:
         frame = attach_profile(frame, frame["is_train"] == 1)
         feature_cols += _PROFILE_COLS
 
-    # 消融用：可選擇性併入地形因子（ADR-011，靜態海拔+坡度）
+    # 消融用：可選擇性併入地形因子（ADR-101，靜態海拔+坡度）
     if with_terrain:
         frame = attach_terrain(frame)
         feature_cols += _TERRAIN_COLS + ["terrain_class_code"]

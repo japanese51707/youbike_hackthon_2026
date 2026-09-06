@@ -6,7 +6,7 @@ Seasonal naive baseline（prediction.baseline）— P1 / 審查 F-02
 
 評審最可能問「你的模型比單純查歷史平均好多少」——這個 baseline 就是答案。
 
-多視野（ADR-017）：target_col 指定要預測哪個視野的累積 Δ 欄位。
+多視野（ADR-107）：target_col 指定要預測哪個視野的累積 Δ 欄位。
 """
 
 from __future__ import annotations

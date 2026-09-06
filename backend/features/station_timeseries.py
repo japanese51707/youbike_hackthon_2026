@@ -1,9 +1,9 @@
 """
-站點時序自身因子（features.station_timeseries）— ADR-013（最強特徵）
+站點時序自身因子（features.station_timeseries）— ADR-103（最強特徵）
 ====================================================================
 從站點的歷史存量序列衍生「站點自身」時序特徵。附件標「免費、優先級最高」。
 
-★資料洩漏防範（ADR-013 不可違反約束）：
+★資料洩漏防範（ADR-103 不可違反約束）：
   預測 t+1 時，只能用 ≤ t 的已發生值。所有 lag/變化率/加速度都往「過去」取，
   絕不含 t+1 當下值（那是要預測的目標）。每個特徵標明相對 t 的時間位移，全部 ≤ 0。
 
@@ -86,11 +86,11 @@ def compute_station_stats(series_before) -> dict:
     series_before：pandas DataFrame，含 available_bikes/available_docks/total_docks。
     回傳：歷史空站頻率、滿站頻率、波動度(P90-P10)、日均周轉量。
 
-    ★★★ 資料洩漏警告（ADR-013 補記 F-01）★★★
+    ★★★ 資料洩漏警告（ADR-103 補記 F-01）★★★
     參數名 series_before 表示「應只含目標期之前的資料」，但本函式**不強制檢查**。
     呼叫者（特徵組裝 pipeline）必須確保傳入的是訓練期/expanding window 資料，
     絕不可含驗證/預測期，否則統計量洩漏未來、驗證虛高且不報錯。
-    此約束須在 pipeline 層級強制（見 ADR-013 補記待辦）。
+    此約束須在 pipeline 層級強制（見 ADR-103 補記待辦）。
     另：缺失值填補只能 forward fill，禁止 interpolate（會用到未來值）。
     """
     import pandas as pd

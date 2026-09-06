@@ -6,7 +6,7 @@ LightGBM 訓練 + 驗證（prediction.train）— P1
 依 ADR-002/004/015：
 - 時間切分（1~5月訓、6月驗），禁隨機切分
 - quantile regression 出 P10/P50/P90（規則引擎吃下界/上界）
-- 截斷樣本（is_censored）訓練時排除（ADR-015：Δ=0且空/滿站的假資料）
+- 截斷樣本（is_censored）訓練時排除（ADR-105：Δ=0且空/滿站的假資料）
 - 分區間評估（健康/接近空/已空），不只報整體平均
 
 用法：
@@ -53,7 +53,7 @@ def mae(y_true, y_pred) -> float:
 
 
 def evaluate_by_zone(frame, y_true, y_pred_lgb, y_pred_base):
-    """分區間評估（ADR-015）：健康/接近空/已空，各報 MAE。"""
+    """分區間評估（ADR-105）：健康/接近空/已空，各報 MAE。"""
     ab = frame["available_bikes"].values
     zones = {
         "已空(可借=0)": ab <= 0,
@@ -71,7 +71,7 @@ def evaluate_by_zone(frame, y_true, y_pred_lgb, y_pred_base):
 
 
 def run_weight_experiment(df):
-    """ADR-019：樣本權重三方案對比（等權 / log 溫和 / 線性）。
+    """ADR-109：樣本權重三方案對比（等權 / log 溫和 / 線性）。
 
     用固定特徵集（含天氣，天氣已定案留）+ L2 探針，對三種 sample_weight 各訓一個模型，
     報各切面 MAE：全樣本 / 已空區 / Δ≠0 / 高流量站 / 低流量站，選在關鍵區改善且不讓極端站主宰者。
@@ -90,7 +90,7 @@ def run_weight_experiment(df):
 
     weight_cols = [("等權", "w_equal"), ("log溫和", "w_log"), ("線性", "w_linear")]
     # 高/低流量站分界：用驗證集的 confidence_tier（high vs low）
-    print("\n[3/3] ADR-019 樣本權重三方案對比（L2 探針，含天氣）", flush=True)
+    print("\n[3/3] ADR-109 樣本權重三方案對比（L2 探針，含天氣）", flush=True)
     print("=" * 100, flush=True)
     print(f"{'視野':>4} {'權重方案':>8} {'全樣本':>9} {'已空區':>9} {'Δ≠0':>9} "
           f"{'高流量站':>10} {'低流量站':>10}", flush=True)
@@ -99,7 +99,7 @@ def run_weight_experiment(df):
         sub = frame.dropna(subset=[tgt])
         train = sub[sub["is_train"] == 1]
         valid = sub[sub["is_train"] == 0]
-        # 訓練排除截斷樣本(ADR-015)+調度介入異常點(ADR-016,當目標時排除)
+        # 訓練排除截斷樣本(ADR-105)+調度介入異常點(ADR-106,當目標時排除)
         train_clean = train[(train["is_censored"] == 0) & (train["is_rebalancing"] == 0)]
 
         Xtr = train_clean[feat_cols].astype(float)
@@ -127,12 +127,12 @@ def run_weight_experiment(df):
                   f"{zmae(nz_mask):>9.3f} {zmae(hi_mask):>10.3f} {zmae(lo_mask):>10.3f}", flush=True)
         print("-" * 100, flush=True)
     print("=" * 100, flush=True)
-    print("解讀（ADR-019）：比較三方案。理想=高流量站 MAE 下降(模型更重視有訊號的站)，", flush=True)
+    print("解讀（ADR-109）：比較三方案。理想=高流量站 MAE 下降(模型更重視有訊號的站)，", flush=True)
     print("  且低流量站未被嚴重犧牲。log 溫和 vs 線性看極端站是否主宰。選最佳者定案。", flush=True)
     print("  ★注意：sample_weight 改變訓練目標，MAE 絕對值口徑一致(同驗證集)，可跨方案比。", flush=True)
 
 
-# ADR-020 調參後最佳超參數（時序 CV 選出，CV 正常區間 MAE 改善 +4.4%）
+# ADR-110 調參後最佳超參數（時序 CV 選出，CV 正常區間 MAE 改善 +4.4%）
 TUNED_PARAMS = {"n_estimators": 300, "learning_rate": 0.1, "num_leaves": 127,
                 "min_child_samples": 200, "subsample": 0.7, "colsample_bytree": 0.8,
                 "reg_lambda": 0.0}
@@ -141,7 +141,7 @@ TUNED_PARAMS = {"n_estimators": 300, "learning_rate": 0.1, "num_leaves": 127,
 def run_full_training(df, tuned=False):
     """正式訓練（收官）：整合所有採用因子 + 分位數模型 P10/P50/P90。
 
-    tuned=True 用 ADR-020 調參後最佳超參數；False 用未調參預設值。
+    tuned=True 用 ADR-110 調參後最佳超參數；False 用未調參預設值。
     與消融不同：這裡用「上線的分位數迴歸」出區間，並報完整上線指標：
       baseline(seasonal naive) vs LightGBM P50 各視野 MAE、分區間 MAE、
       區間覆蓋率(P10-P90 是否涵蓋名目 80%)、分位數交叉率、新舊站分報。
@@ -172,7 +172,7 @@ def run_full_training(df, tuned=False):
         sub = frame.dropna(subset=[tgt])
         train = sub[sub["is_train"] == 1]
         valid = sub[sub["is_train"] == 0]
-        # 訓練排除截斷樣本(ADR-015)+調度介入異常點(ADR-016,當目標時排除)
+        # 訓練排除截斷樣本(ADR-105)+調度介入異常點(ADR-106,當目標時排除)
         train_clean = train[(train["is_censored"] == 0) & (train["is_rebalancing"] == 0)]
 
         # baseline: seasonal naive
@@ -210,7 +210,7 @@ def run_full_training(df, tuned=False):
         base_dec = mae(yva[dm], base_pred[dm]) if dm.sum() else float("nan")
         lgb_dec = mae(yva[dm], preds["p50"][dm]) if dm.sum() else float("nan")
         dec_imp = (base_dec - lgb_dec) / base_dec * 100 if base_dec else 0.0
-        # 正常區間（ADR-020）：可借≥1 且 可還≥1（觀測值未被物理邊界截斷），公平對比
+        # 正常區間（ADR-110）：可借≥1 且 可還≥1（觀測值未被物理邊界截斷），公平對比
         ad = valid["available_docks"].values
         nm_zone = (ab >= 1) & (ad >= 1)
         base_norm = mae(yva[nm_zone], base_pred[nm_zone]) if nm_zone.sum() else float("nan")
@@ -247,12 +247,12 @@ def run_full_training(df, tuned=False):
 
 
 def run_tuning(df, n_trials=20):
-    """ADR-020：時序 CV 超參數優化（隨機搜尋，無新依賴）。
+    """ADR-110：時序 CV 超參數優化（隨機搜尋，無新依賴）。
 
     ★防洩漏鐵律：只用訓練期(1~5月)做 expanding window 時序 CV，6 月完全不參與選參。
       折：1-3月訓/4月驗、1-4月訓/5月驗（月份用 dt.month）。
     ★選參目標：正常區間(可借≥1 且 可還≥1，未截斷)的 P50 MAE，CV 折平均（owner 定）。
-    以 60 分視野為代表選參（成本考量；ADR-020 已註各視野最佳參數可能不同待實驗）。
+    以 60 分視野為代表選參（成本考量；ADR-110 已註各視野最佳參數可能不同待實驗）。
     """
     import lightgbm as lgb
     import random
@@ -334,8 +334,8 @@ def main():
     ap.add_argument("--weather", action="store_true", help="併入天氣因子（消融對比用）")
     ap.add_argument("--mode", choices=["ablation", "weight", "full", "tune"], default="ablation",
                     help="ablation=因子消融 / weight=樣本權重對比 / full=正式訓練 / "
-                         "tune=ADR-020 時序CV超參數優化")
-    ap.add_argument("--tuned", action="store_true", help="full 模式用 ADR-020 調參後最佳超參數")
+                         "tune=ADR-110 時序CV超參數優化")
+    ap.add_argument("--tuned", action="store_true", help="full 模式用 ADR-110 調參後最佳超參數")
     ap.add_argument("--factor", choices=["weather", "holiday", "dayoff", "poi", "profile", "terrain"], default="holiday",
                     help="ablation 模式要測的因子：weather=天氣 / holiday=非週末假日(加料) / "
                          "dayoff=is_weekend 升級 is_dayoff(修正既有特徵,非加料) / poi=POI距離(14類) / "
@@ -368,7 +368,7 @@ def main():
             sub = frame.dropna(subset=[tgt])
             train = sub[sub["is_train"] == 1]
             valid = sub[sub["is_train"] == 0]
-            # 截斷排除(ADR-015)+調度異常排除(ADR-016)
+            # 截斷排除(ADR-105)+調度異常排除(ADR-106)
             train_clean = train[(train["is_censored"] == 0) & (train["is_rebalancing"] == 0)]
 
             yva = valid[tgt].astype(float).values
@@ -390,7 +390,7 @@ def main():
             # Δ≠0 樣本 MAE（排除零膨脹稀釋，看真正有變化時的準度）
             nz_mask = np.abs(yva) > 0
             nz_mae = mae(yva[nz_mask], pred[nz_mask]) if nz_mask.sum() else None
-            # ADR-018 ③：新舊站分報（老站=訓練期見過；新站=訓練期後才上線的冷啟動站）
+            # ADR-108 ③：新舊站分報（老站=訓練期見過；新站=訓練期後才上線的冷啟動站）
             newmask = valid["is_new_station"].values == 1
             old_mae = mae(yva[~newmask], pred[~newmask]) if (~newmask).sum() else None
             new_mae = mae(yva[newmask], pred[newmask]) if newmask.sum() else None
@@ -400,7 +400,7 @@ def main():
                         old_mae, new_mae, new_n, new_stations))
         return out
 
-    # ===== ADR-019：樣本權重三方案對比模式 =====
+    # ===== ADR-109：樣本權重三方案對比模式 =====
     if args.mode == "weight":
         run_weight_experiment(df)
         return
@@ -410,7 +410,7 @@ def main():
         run_full_training(df, tuned=args.tuned)
         return
 
-    # ===== ADR-020：時序 CV 超參數優化 =====
+    # ===== ADR-110：時序 CV 超參數優化 =====
     if args.mode == "tune":
         run_tuning(df)
         return
@@ -453,12 +453,12 @@ def main():
                     "非週末假日": "is_holiday/國定假日/連假；邊際價值在 is_weekend 之外的平日型假日與補班日",
                     "放假日升級": "is_weekend→is_dayoff(週末 OR 國定假日視為放假,補班日視為上班);修正既有特徵非加料",
                     "POI距離": "14類POI到最近距離(捷運/火車/轉運/學校/百貨/傳統市場/夜市/醫院/公園×3/河濱/展演/運動中心)+區域類型;靜態全站批次",
-                    "行為指紋": "日夜比/平假比/早峰淨流向/峰度/空滿頻率;訓練期算防洩漏;需求密度不進特徵(ADR-014)",
+                    "行為指紋": "日夜比/平假比/早峰淨流向/峰度/空滿頻率;訓練期算防洩漏;需求密度不進特徵(ADR-104)",
                     "地形": "海拔+坡度%(mapzen 200m取樣)+坡度分級;靜態全站批次;上坡站借車意願低還車意願高"}
     print(f"      本輪因子：{FACTOR}。{_factor_note.get(FACTOR, '')}", flush=True)
 
-    # ADR-018 ③：新舊站分報（用 +因子組數字；冷啟動表現不被整體平均掩蓋）
-    print("\n[附] 新舊站分報 MAE（ADR-018，+因子組）：老站=訓練期見過 / 新站=訓練期後才上線", flush=True)
+    # ADR-108 ③：新舊站分報（用 +因子組數字；冷啟動表現不被整體平均掩蓋）
+    print("\n[附] 新舊站分報 MAE（ADR-108，+因子組）：老站=訓練期見過 / 新站=訓練期後才上線", flush=True)
     print("-" * 72, flush=True)
     print(f"{'視野':>5} {'老站MAE':>10} {'新站MAE':>10} {'新站樣本數':>12} {'新站數':>8}", flush=True)
     for w_row in weather_group:
@@ -470,7 +470,7 @@ def main():
     return
 
     # （舊單組輸出保留供參考，上面 return 已結束）
-    print("[4/4] 結果（多視野 ADR-017）", flush=True)
+    print("[4/4] 結果（多視野 ADR-107）", flush=True)
     print("=" * 64, flush=True)
     print(f"{'視野':>6} {'baseline':>10} {'LightGBM':>10} {'改善':>8} {'覆蓋率':>8} {'交叉':>6}", flush=True)
     for mins, bm, lm, cov, cross, _ in results:

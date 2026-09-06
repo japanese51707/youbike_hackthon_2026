@@ -1,8 +1,8 @@
 """
-天氣因子（features.weather）— ADR-011
+天氣因子（features.weather）— ADR-101
 ======================================
 天氣影響騎乘意願（雨天需求降、好天氣休閒站需求升）。訓練階段用歷史資料；
-即時 CWA API 待模型建好、要「以現況預測下個時段」時才接（owner 核准，見 ADR-011）。
+即時 CWA API 待模型建好、要「以現況預測下個時段」時才接（owner 核准，見 ADR-101）。
 
 資料源：CODiS 重建逐時歷史（github Raingel/historical_weather）。
   新北市 56 個在營測站（weather_stations.json）。
@@ -142,7 +142,7 @@ def get_weather_feature(lat: float, lng: float, timestamp: str) -> dict:
     except Exception:
         pass  # 拿不到資料 → 保持 None（NFR-5 明確缺值）
 
-    # 溫度舒適度（倒 U 型，ADR-013）：騎乘意願在「最適溫」最高，太熱太冷都降。
+    # 溫度舒適度（倒 U 型，ADR-103）：騎乘意願在「最適溫」最高，太熱太冷都降。
     # 用高斯型：comfort = exp(-((T - 最適)/寬度)^2)，值域 0~1。
     if feature["temperature"] is not None:
         feature["temp_comfort"] = round(_temp_comfort(feature["temperature"]), 3)
