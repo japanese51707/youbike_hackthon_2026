@@ -66,7 +66,8 @@ superseded-by:
 | ADR-108 | ADR-018 | 資料品質與站點主檔處理 | accepted |
 | ADR-109 | ADR-019 | 流量加權訓練與決策層信心 | accepted |
 | ADR-110 | ADR-020 | 超參數優化與時序交叉驗證 | accepted |
-| ADR-111 | （新增） | 規則引擎吃截斷訊號與到達存量三層判斷 | proposed |
+| ADR-111 | （新增） | 規則引擎吃截斷訊號與到達存量三層判斷 | accepted |
+| ADR-112 | （新增） | 緊急度分數計算公式 | accepted |
 
 **ADR-2xx（保留給 C，前端分支自行落實，本次不建立檔案）**：
 
