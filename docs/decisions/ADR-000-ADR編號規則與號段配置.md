@@ -56,16 +56,17 @@ superseded-by:
 
 | 新號 | 舊號 | 標題 | 狀態 |
 |------|------|------|------|
-| ADR-101 | ADR-101 | 預測特徵因子模組化與資料源 | accepted |
-| ADR-102 | ADR-102 | 擴充特徵時間POI事件特殊天氣 | accepted |
-| ADR-103 | ADR-103 | 時序自身鄰近連動營運面因子 | accepted |
-| ADR-104 | ADR-104 | 站點行為指紋與需求密度分層 | accepted |
-| ADR-105 | ADR-105 | 目標變數定義與截斷樣本處理 | accepted |
-| ADR-106 | ADR-106 | 調度標註離線與線上分離 | accepted |
-| ADR-107 | ADR-107 | 多視野預測與累積分位數 | accepted |
-| ADR-108 | ADR-108 | 資料品質與站點主檔處理 | accepted |
-| ADR-109 | ADR-109 | 流量加權訓練與決策層信心 | accepted |
-| ADR-110 | ADR-110 | 超參數優化與時序交叉驗證 | accepted |
+| ADR-101 | ADR-011 | 預測特徵因子模組化與資料源 | accepted |
+| ADR-102 | ADR-012 | 擴充特徵時間POI事件特殊天氣 | accepted |
+| ADR-103 | ADR-013 | 時序自身鄰近連動營運面因子 | accepted |
+| ADR-104 | ADR-014 | 站點行為指紋與需求密度分層 | accepted |
+| ADR-105 | ADR-015 | 目標變數定義與截斷樣本處理 | accepted |
+| ADR-106 | ADR-016 | 調度標註離線與線上分離 | accepted |
+| ADR-107 | ADR-017 | 多視野預測與累積分位數 | accepted |
+| ADR-108 | ADR-018 | 資料品質與站點主檔處理 | accepted |
+| ADR-109 | ADR-019 | 流量加權訓練與決策層信心 | accepted |
+| ADR-110 | ADR-020 | 超參數優化與時序交叉驗證 | accepted |
+| ADR-111 | （新增） | 規則引擎吃截斷訊號與到達存量三層判斷 | proposed |
 
 **ADR-2xx（保留給 C，前端分支自行落實，本次不建立檔案）**：
 
