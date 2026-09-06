@@ -217,39 +217,50 @@ A 把三方對接、整合到 Git
 
 > 原則：站點在坡上 → 使用者傾向騎下坡離開 → 易空；站點在坡下 → 易滿。
 
-### 2.2 預測結果 `Prediction`（B 產出，A 使用）
+### 2.2 預測結果 `Prediction`（B 產出，A 使用）— 多視野（ADR-107）
+
+**v4 變更（ADR-107，2026-09-03）**：從單一視野改為 **`horizons[]` 陣列**（多視野 30/60/90/120 分）。
+每個 horizon 直接對「累積淨變化」訓練分位數（分位數不可加，故不用單步相加）。
+
 ```json
 {
   "station_id": "500101001",
   "predict_from": "2026-06-02T08:00:00",
-  "predict_target_time": "2026-06-02T08:35:00",
-  "horizon_minutes": 35,
   "horizon_source": "dispatch",
-  "predicted_available": 4.0,
-  "lower_bound": 1.0,
-  "upper_bound": 8.0
+  "horizons": [
+    {"horizon_minutes": 30,  "predict_target_time": "2026-06-02T08:30:00",
+     "predicted_available": 6.0, "lower_bound": 3.0, "upper_bound": 9.0},
+    {"horizon_minutes": 60,  "predict_target_time": "2026-06-02T09:00:00",
+     "predicted_available": 4.0, "lower_bound": 1.0, "upper_bound": 8.0},
+    {"horizon_minutes": 90,  "predict_target_time": "2026-06-02T09:30:00",
+     "predicted_available": 3.0, "lower_bound": 0.0, "upper_bound": 7.0},
+    {"horizon_minutes": 120, "predict_target_time": "2026-06-02T10:00:00",
+     "predicted_available": 2.0, "lower_bound": 0.0, "upper_bound": 7.0}
+  ]
 }
 ```
 
 **欄位說明：**
 
-- `predicted_available`：**預測未來某時刻的可借車數**（不是現況！現況在 StationStatus）。
-  - 預測依據：該站歷史「同時段的淨流出/流入」+ 當前狀態 + 各因子
-  - 意義：「從現在起算，`horizon_minutes` 之後，這站預計還有幾台」
-- `lower_bound` / `upper_bound`：**動態信賴區間**（quantile regression 產出）
-  - 由歷史資料學出「這站這時段的可能範圍」，每站每時段的區間寬窄不同
-  - 規則引擎用**下界**觸發（預測可失手、判斷不跟著失手）
-  - 「實際值落在區間內 = 預測準確」
-- `horizon_minutes` + `horizon_source`：**有兩種來源（C-03，重要）**，因為不是每個預測場景都有調度員：
-  | horizon_source | 用途 | horizon_minutes 怎麼來 |
-  |----------------|------|----------------------|
-  | `dispatch` | 派任務時 | 動態 = 調度員當前位置到目標站的交通時間 + 當前任務完成預估（見 parameter_groups §7） |
-  | `default` | 警示掃描（每 60 秒全市）、歷史時間軸預存 urgency | 固定值 `config.fleet.響應時間_分鐘`（30 分） |
-  - 警示掃描與歷史回填沒有特定調度員，用 `default` 的固定 horizon；只有實際派任務才用 `dispatch` 的動態 horizon
-- `predict_from`：預測的起算時間（通常是現在）
-- `predict_target_time`：預測的目標時刻（= predict_from + horizon_minutes）
+- `horizons[]`：**多個預測視野的陣列**，每個元素是一個時間視野的預測。
+  - 向後相容：陣列若只含一個元素，等同舊的單一視野。
+  - 每個元素含：`horizon_minutes`、`predict_target_time`、`predicted_available`、`lower_bound`、`upper_bound`。
+- 每元素的 `predicted_available`：**該視野目標時刻的預測可借車數**（不是現況！現況在 StationStatus）。
+  - 意義：「從 predict_from 起算，`horizon_minutes` 分鐘之後，這站預計還有幾台」。
+- 每元素的 `lower_bound` / `upper_bound`：**動態信賴區間**（quantile regression，直接對該視野累積 Δ 訓練）。
+  - 規則引擎用**下界**觸發防空、**上界**觸發防滿（預測可失手、判斷不跟著失手）。
+- **`horizon_minutes` 一律為「分鐘數」，不綁資料格數（ADR-107）**：
+  - 訓練用 30 分格歷史；上線若為 5 分格即時源，horizon 分鐘語意不變，差別在 lag 格數與更新頻率。
+  - 上線粒度落差解法：(a) 5 分聚合回 30 分（Demo 建議）或 (b) 用 5 分粒度重訓（roadmap）。
+- `horizon_source`：**兩種來源（C-03）**，決定「規則引擎挑哪個 horizon」：
+  | horizon_source | 用途 | 規則引擎取用 |
+  |----------------|------|-------------|
+  | `dispatch` | 派任務時 | 依調度員預估到達時間，**挑 horizons[] 中最接近的視野**的區間 |
+  | `default` | 警示掃描、歷史時間軸 | 用 30 分那個 horizon（對齊 config.fleet.響應時間_分鐘）|
+- `predict_from`：預測的起算時間（通常是現在）。
 
-> 已移除原本的 `confidence` 欄位：不確定性已由 lower/upper_bound 區間表達，confidence 多餘。
+> 已移除 `confidence`：不確定性由 lower/upper_bound 表達。
+> ⚠️ B（模型輸出）、C（前端顯示）、A（規則引擎取用）都須依此多視野結構對接。
 
 ### 2.3 調度建議 `DispatchRecommendation`（A 產出，C 顯示）
 ```json

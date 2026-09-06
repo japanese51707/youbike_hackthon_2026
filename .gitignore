@@ -22,6 +22,12 @@ __pycache__/
 *.sqlite
 backend/data/
 
+# === 特徵模組的執行期快取（可重新產生）===
+# _elevation_cache.json 進版控：站點高程/坡度為靜態資產(mapzen 200m抓好),
+#   比照 poi_data.json 保存,避免每次重抓外部 API(見 ADR-011 地形因子)
+backend/features/_holiday_cache.json
+backend/features/_weather_cache/
+
 # === 大型資料（放 S3，不進 Git；見 README 資料存放說明）===
 youbike資料集/
 output/
