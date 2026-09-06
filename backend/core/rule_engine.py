@@ -30,7 +30,9 @@ from .interfaces import PredictionInterval, get_predictor
 
 
 def _mk_rec(station: dict, action: str, quantity: int, reason: str,
-            basis: str, at_arrival: float) -> dict:
+            basis: str, at_arrival: float,
+            urgency_tier: str = "normal", is_censored_demand: bool = False,
+            breach_horizon_min=None, arrival_by_horizon=None) -> dict:
     """組一筆規則引擎輸出（未含優先級，dispatcher 再補）。"""
     return {
         "station_id": station.get("station_id", ""),
@@ -39,14 +41,18 @@ def _mk_rec(station: dict, action: str, quantity: int, reason: str,
         "action": action,                    # "補車" / "取車"
         "quantity": int(quantity),
         "reason": reason,                    # 人看得懂的中文原因
-        "basis": basis,                      # 判斷依據：區間下界/上界、保底門檻、降級
+        "basis": basis,                      # 判斷依據：截斷訊號/區間下界上界/保底門檻/降級
         "current_available": int(station.get("available_bikes", 0)),
         "predicted_at_arrival": round(float(at_arrival), 1),
         "lat": station.get("lat", 0.0),
         "lng": station.get("lng", 0.0),
+        # ADR-111 三層判斷輸出（前端呈現用）：
+        "urgency_tier": urgency_tier,               # censored(最高緊急截斷)/warning(警示)/normal
+        "is_censored_demand": is_censored_demand,   # 需求被物理邊界壓抑(缺很凶/爆很凶)
+        "breach_horizon_min": breach_horizon_min,   # 最早穿透邊界的視野(分鐘)，None=未穿透
+        "arrival_by_horizon": arrival_by_horizon or {},  # 各視野到達存量(現況+Δ)，前端趨勢圖
         # ADR-109 機制 C：流量信心分級（high/mid/low，依訓練期周轉量）。
-        # ★純標註，供 dispatcher 排序當「同分次要鍵」用。★不進觸發判斷（守 ADR-104：
-        #   需求密度/流量是加分項，非叫調度員的依據）。缺標註時預設 mid（中性，不影響排序）。
+        # ★純標註，供 dispatcher 排序當「同分次要鍵」用。★不進觸發判斷（守 ADR-104）。
         "confidence_tier": station.get("confidence_tier", "mid"),
     }
 
@@ -75,6 +81,9 @@ def evaluate_station(
     reason = None
     basis = None
     at_arrival = available
+    urgency_tier = "normal"          # ADR-111 三層：censored / warning / normal
+    is_censored_demand = False       # 需求被物理邊界壓抑
+    breach_horizon_min = None        # 最早穿透邊界的視野（分鐘）
 
     if prediction is not None:
         # 防空：下界放大後的到達存量
@@ -83,29 +92,51 @@ def evaluate_station(
         docks_empty = total - available
         returnable_lower = docks_empty - (prediction.upper_bound - available) * sensitivity
 
-        if arrival <= buffer_bikes:
-            action = "補車"
-            basis = "預測區間下界"
+        # ADR-111 截斷判斷（用 raw 照實值，不夾）：
+        #   raw_lower < 0 → 到達存量穿透空站底（需求被壓抑的缺車，最高緊急補車）
+        #   raw_upper > total → 到達存量穿透滿站頂（需求被壓抑的爆滿，最高緊急取車）
+        raw_lo = prediction.raw_lower_bound
+        raw_hi = prediction.raw_upper_bound
+
+        if raw_lo is not None and raw_lo < 0:
+            # 截斷層（最高緊急）：空站仍將流出
+            action, basis = "補車", "截斷訊號（到達存量穿透空站底）"
+            urgency_tier, is_censored_demand = "censored", True
+            breach_horizon_min = prediction.horizon_minutes
+            at_arrival = 0.0   # 物理實際到達 0（顯示用）
+            reason = (f"現況 {available:.0f} 台，{horizon} 分鐘後預測仍將淨流出至 "
+                      f"{raw_lo:.1f} 台（缺口約 {abs(raw_lo):.0f} 台）——需求被壓抑，最高緊急補車")
+        elif raw_hi is not None and raw_hi > total:
+            # 截斷層（最高緊急）：滿站仍將流入
+            action, basis = "取車", "截斷訊號（到達存量穿透滿站頂）"
+            urgency_tier, is_censored_demand = "censored", True
+            breach_horizon_min = prediction.horizon_minutes
+            at_arrival = total   # 物理實際到達滿（顯示用）
+            reason = (f"現況 {available:.0f} 台，{horizon} 分鐘後預測仍將淨流入至 "
+                      f"{raw_hi:.1f} 台（超出 {raw_hi - total:.0f} 台）——需求被壓抑，最高緊急取車")
+        elif arrival <= buffer_bikes:
+            # 警示層：快空（未穿透）
+            action, basis, urgency_tier = "補車", "預測區間下界", "warning"
             at_arrival = arrival
             reason = (f"{horizon} 分鐘後預測到達存量最低 {arrival:.1f} 台，"
                       f"低於安全緩衝 {buffer_bikes:.0f} 台，即將空站")
         elif returnable_lower <= buffer_bikes:
-            action = "取車"
-            basis = "預測區間上界"
-            at_arrival = total - returnable_lower   # 到達時的存量（近似）
+            # 警示層：快滿（未穿透）
+            action, basis, urgency_tier = "取車", "預測區間上界", "warning"
+            at_arrival = total - returnable_lower
             reason = (f"{horizon} 分鐘後預測可還位最低 {returnable_lower:.1f} 個，"
                       f"低於安全緩衝 {buffer_bikes:.0f} 個，即將滿站")
 
-    # 降級/保底：沒有預測，或預測未觸發但踩到保底水位
+    # 降級/保底：沒有預測，或預測未觸發但踩到保底水位（警示層）
     if action is None:
         if usage_rate < trig["低水位_借用率百分比"]:
-            action, basis = "補車", "保底門檻（借用率低水位）"
+            action, basis, urgency_tier = "補車", "保底門檻（借用率低水位）", "warning"
             at_arrival = available
             reason = (f"借用率 {usage_rate:.0f}% 低於保底門檻 "
                       f"{trig['低水位_借用率百分比']}%"
                       + ("（無預測，降級判斷）" if prediction is None else "（動態判斷未觸發）"))
         elif usage_rate > trig["高水位_借用率百分比"]:
-            action, basis = "取車", "保底門檻（借用率高水位）"
+            action, basis, urgency_tier = "取車", "保底門檻（借用率高水位）", "warning"
             at_arrival = available
             reason = (f"借用率 {usage_rate:.0f}% 高於保底門檻 "
                       f"{trig['高水位_借用率百分比']}%"
@@ -122,7 +153,16 @@ def evaluate_station(
         quantity = max(1, round(available - target_available))
     quantity = int(min(quantity, fleet["每車容量"]))
 
-    return _mk_rec(station, action, quantity, reason, basis, at_arrival)
+    # 各視野到達存量（前端趨勢圖用）——單視野時只有當前 horizon；多視野待接真實 predictor
+    arrival_by_horizon = {}
+    if prediction is not None:
+        arrival_by_horizon[str(prediction.horizon_minutes)] = round(
+            float(prediction.raw_predicted), 1)
+
+    return _mk_rec(station, action, quantity, reason, basis, at_arrival,
+                   urgency_tier=urgency_tier, is_censored_demand=is_censored_demand,
+                   breach_horizon_min=breach_horizon_min,
+                   arrival_by_horizon=arrival_by_horizon)
 
 
 def generate_recommendations(

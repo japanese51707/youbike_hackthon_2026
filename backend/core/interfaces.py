@@ -15,21 +15,39 @@ B 模組介面契約 + Mock 實作（讓 A 的規則引擎能獨立開發）
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Optional, Protocol
 
 
 @dataclass
 class PredictionInterval:
     """單一視野的預測區間（B 的 predict 輸出）。
 
-    point/lower/upper 皆為「該視野目標時點的預測可借車數（存量）」。
-    多視野時回傳多個 PredictionInterval（見 MultiHorizonPrediction）。
+    到達存量 = 現況可借 + 模型預測淨Δ，組裝在 predictor 層（ADR-111）。
+
+    ★兩套值（ADR-111，避免假數據蓋掉截斷訊號）：
+    - lower/upper/predicted_available：**夾過 [0, 總柱]** 的物理可能值，供前端顯示。
+    - raw_lower/raw_upper/raw_predicted：**照實、可為負或超過總柱**，供規則引擎判斷截斷
+      （raw_lower<0 即穿透空站底、缺口=|raw_lower|；raw_upper>總柱 即穿透滿站頂）。
+      raw 預設沿用夾過值（向後相容：B 未提供 raw 時退回夾過值，不影響現有呼叫）。
     """
-    predicted_available: float   # 點估計（僅供顯示，規則引擎不吃）
-    lower_bound: float           # 下界（悲觀：車最少）→ 防空站用
-    upper_bound: float           # 上界（悲觀：車最多）→ 防滿站用
+    predicted_available: float   # 點估計（夾過，僅供顯示，規則引擎不吃）
+    lower_bound: float           # 下界（夾過 [0,總柱]，悲觀：車最少）→ 顯示用
+    upper_bound: float           # 上界（夾過 [0,總柱]，悲觀：車最多）→ 顯示用
     horizon_minutes: int         # 前瞻分鐘數（分鐘數，不綁資料格數，ADR-107）
     source: str = "mock"         # 來源標記（mock / lightgbm / historical_fallback）
+    # ADR-111 raw（照實不夾，截斷判斷用）；None 時退回夾過值（向後相容）
+    raw_lower_bound: Optional[float] = None
+    raw_upper_bound: Optional[float] = None
+    raw_predicted: Optional[float] = None
+
+    def __post_init__(self):
+        # raw 未提供時退回夾過值（向後相容：舊 predictor 不會壞，只是失去穿透偵測能力）
+        if self.raw_lower_bound is None:
+            self.raw_lower_bound = self.lower_bound
+        if self.raw_upper_bound is None:
+            self.raw_upper_bound = self.upper_bound
+        if self.raw_predicted is None:
+            self.raw_predicted = self.predicted_available
 
 
 @dataclass
@@ -88,17 +106,24 @@ class MockPredictor:
         else:
             drift = 0.0
 
-        point = max(0.0, min(total, available + drift))
-        # 區間寬度：容量越大越寬（±10% 容量，至少 ±1）
-        half = max(1.0, total * 0.10)
-        lower = max(0.0, point - half)
-        upper = min(total, point + half)
+        # raw：照實的到達存量（可為負/超過總柱，ADR-111 截斷判斷用，不夾）
+        raw_point = available + drift
+        half = max(1.0, total * 0.10)   # 區間寬度：容量越大越寬（±10%，至少 ±1）
+        raw_lower = raw_point - half
+        raw_upper = raw_point + half
+        # 夾過值：物理可能值 [0, 總柱]，前端顯示用
+        point = max(0.0, min(total, raw_point))
+        lower = max(0.0, min(total, raw_lower))
+        upper = max(0.0, min(total, raw_upper))
         return PredictionInterval(
             predicted_available=round(point, 1),
             lower_bound=round(lower, 1),
             upper_bound=round(upper, 1),
             horizon_minutes=horizon_minutes,
             source="mock",
+            raw_lower_bound=round(raw_lower, 1),
+            raw_upper_bound=round(raw_upper, 1),
+            raw_predicted=round(raw_point, 1),
         )
 
 

@@ -51,3 +51,60 @@ def test_degradation_basis_when_no_prediction():
     assert rec is not None
     assert "保底門檻" in rec["basis"]
     assert rec["action"] == "補車"
+
+
+# ── ADR-111 截斷訊號三層判斷測試 ──
+
+def test_censored_empty_still_outflow():
+    """截斷層：空站(現況0)預測仍將淨流出(raw_lower<0穿透空站底) → 最高緊急補車。"""
+    cfg = get_config()
+    st = _station(available=0, total=40, usage=0)
+    # raw 照實給穿透值(到達存量 -5，缺口5台)；夾過值顯示 0
+    pred = PredictionInterval(predicted_available=0, lower_bound=0, upper_bound=2,
+                              horizon_minutes=30,
+                              raw_lower_bound=-5, raw_upper_bound=2, raw_predicted=-3)
+    rec = evaluate_station(st, pred, cfg)
+    assert rec is not None
+    assert rec["action"] == "補車"
+    assert rec["urgency_tier"] == "censored"
+    assert rec["is_censored_demand"] is True
+    assert rec["breach_horizon_min"] == 30
+    assert "壓抑" in rec["reason"]
+
+
+def test_censored_full_still_inflow():
+    """截斷層：滿站(現況接近總柱)預測仍將淨流入(raw_upper>total穿透滿站頂) → 最高緊急取車。"""
+    cfg = get_config()
+    st = _station(available=40, total=40, usage=100)
+    pred = PredictionInterval(predicted_available=40, lower_bound=38, upper_bound=40,
+                              horizon_minutes=30,
+                              raw_lower_bound=38, raw_upper_bound=46, raw_predicted=43)
+    rec = evaluate_station(st, pred, cfg)
+    assert rec is not None
+    assert rec["action"] == "取車"
+    assert rec["urgency_tier"] == "censored"
+    assert rec["is_censored_demand"] is True
+
+
+def test_warning_near_empty_not_breached():
+    """警示層：快空但未穿透邊界(raw_lower≥0) → warning，非censored。"""
+    cfg = get_config()
+    st = _station(available=3, total=40, usage=7.5)
+    pred = PredictionInterval(predicted_available=1, lower_bound=0, upper_bound=3,
+                              horizon_minutes=30,
+                              raw_lower_bound=0, raw_upper_bound=3, raw_predicted=1)
+    rec = evaluate_station(st, pred, cfg)
+    assert rec is not None
+    assert rec["action"] == "補車"
+    assert rec["urgency_tier"] == "warning"
+    assert rec["is_censored_demand"] is False
+
+
+def test_normal_tier_no_censor():
+    """正常層：安全區 → 不觸發(None)，不應標截斷。"""
+    cfg = get_config()
+    st = _station(available=20, total=40, usage=50)
+    pred = PredictionInterval(predicted_available=20, lower_bound=16, upper_bound=24,
+                              horizon_minutes=30,
+                              raw_lower_bound=16, raw_upper_bound=24, raw_predicted=20)
+    assert evaluate_station(st, pred, cfg) is None
