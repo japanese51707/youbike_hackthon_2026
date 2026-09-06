@@ -1,4 +1,4 @@
-// 共用地圖遠端邊界：底圖 style 改為自帶暗色 style（ADR-014），
+// 共用地圖遠端邊界：底圖 style 改為自帶暗色 style（ADR-204），
 // 但所有 tile／glyph／sprite 仍鎖 OpenFreeMap 同源；此處集中出向 allowlist 與 attribution。
 export const mapConfig = Object.freeze({
   // 僅作為 origin allowlist 與相對 URL 解析的基準；實際 style 由 createDarkBasemapStyle() 提供。

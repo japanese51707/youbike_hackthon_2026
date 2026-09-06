@@ -14,7 +14,7 @@ supersedes:
 superseded-by:
 ---
 
-# ADR-013：Past／Live／Predict 前端呈現與 Mock-first
+# ADR-203：Past／Live／Predict 前端呈現與 Mock-first
 
 ## 背景與問題
 
@@ -32,7 +32,7 @@ superseded-by:
 - frontend-local Mock／view model 與正式共同 API 契約分離。欄位名稱、資料正規化與 mapping 可由 C 在前端模組內調整，但不得宣稱該 shape 已是 A／B 必須實作的 API 或模型介面。
 - 固定展示點缺值或 Mock 模擬失敗時，UI 必須明確顯示「不可用」，不得插值、複製前一點或用 dynamic ETA 補洞；本 ADR 不規定共同 `error_code` Schema。
 - 前端 Demo 的本地 Mock 可使用 `Asia/Taipei`／`+08:00` 產生可重現的時間範例；這只約束 Mock fixture 與顯示測試，不決定 backend timestamp 格式、欄位 ownership 或全系統時區契約。
-- 沿用 ADR-012 的 MapLibre／Deck.gl／OpenFreeMap 與 `no-basemap`；預測資料不得被送往底圖 provider 或 Google Maps navigation URL。
+- 沿用 ADR-202 的 MapLibre／Deck.gl／OpenFreeMap 與 `no-basemap`；預測資料不得被送往底圖 provider 或 Google Maps navigation URL。
 - 本輪只更新文件，不修改 backend、prediction、共同 Schema、正式 API 或現有調度規則。
 
 ## 理由與判準
@@ -118,4 +118,4 @@ superseded-by:
 
 - 相關 commit：無；`related-commits: []`，目前只有文件決策。
 - 相關 Spec／文件：`.kiro/specs/youbike-dispatch-system/requirements.md`、`design.md`、`tasks.md`。
-- 相關 ADR：ADR-004（AI 只估計、規則引擎決策）、ADR-005（契約先行與 Mock）、ADR-012（三頁地圖架構）。
+- 相關 ADR：ADR-004（AI 只估計、規則引擎決策）、ADR-005（契約先行與 Mock）、ADR-202（三頁地圖架構）。

@@ -5,7 +5,7 @@ import DashboardPage from "./pages/DashboardPage.jsx";
 import OperatorPage from "./pages/OperatorPage.jsx";
 import OverviewPage from "./pages/OverviewPage.jsx";
 
-// 數位孿生戰情室深色主題（ADR-014）：Slate 深藍灰底 + 亮綠主色 + 系統等寬字體。
+// 數位孿生戰情室深色主題（ADR-204）：Slate 深藍灰底 + 亮綠主色 + 系統等寬字體。
 const theme = {
   algorithm: antdTheme.darkAlgorithm,
   token: {

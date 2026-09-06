@@ -135,7 +135,7 @@ youbike-dispatch/
 │   │   │   ├── OperatorApp.jsx    # 調度員（任務佇列+導航+回報）
 │   │   │   └── Overview.jsx       # 長官（全域總覽）
 │   │   ├── components/
-│   │   │   ├── HeatMap.jsx        # 熱點資料層（待依 ADR-012 遷移至共用 MapLibre/Deck.gl 模組）
+│   │   │   ├── HeatMap.jsx        # 熱點資料層（待依 ADR-202 遷移至共用 MapLibre/Deck.gl 模組）
 │   │   │   ├── DimensionSwitch.jsx# 維度切換
 │   │   │   ├── Timeline.jsx       # 時間軸播放
 │   │   │   ├── TaskCard.jsx       # 任務框
@@ -652,7 +652,7 @@ Demo：AWS EC2 跑 docker-compose（主）+ 本機（備案）
 
 ---
 
-## 12. 前端已核准增量設計（ADR-012／ADR-013）
+## 12. 前端已核准增量設計（ADR-202／ADR-203）
 
 ### 12.1 共用地圖模組
 
@@ -681,4 +681,4 @@ frontend-local Mock
 
 ### 12.3 邊界與未決項目
 
-本增量不修改 backend tree、Pydantic Schema、B 的 `predict()`／`calc_urgency()`、Alert flow、fallback、dispatch context 或 SQLite schema。這些跨人契約集中列於 ADR-013「待決策」，在核准前不得轉成 A／B 任務。
+本增量不修改 backend tree、Pydantic Schema、B 的 `predict()`／`calc_urgency()`、Alert flow、fallback、dispatch context 或 SQLite schema。這些跨人契約集中列於 ADR-203「待決策」，在核准前不得轉成 A／B 任務。

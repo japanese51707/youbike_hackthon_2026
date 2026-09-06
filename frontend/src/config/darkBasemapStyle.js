@@ -1,4 +1,4 @@
-// 自帶（bundle 於前端）的暗色骨架化 MapLibre style（ADR-014）。
+// 自帶（bundle 於前端）的暗色骨架化 MapLibre style（ADR-204）。
 // 所有 source／glyph／sprite 仍鎖 OpenFreeMap 同源；origin allowlist 與出向邊界不變。
 // 刻意只保留背景、水域、道路骨架、邊界與少量地名，過濾 POI 噪音，
 // 讓上層 Deck.gl 亮色資料元素在深藍灰底上突出。

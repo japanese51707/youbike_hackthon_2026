@@ -12,12 +12,12 @@ related-commits:
   - 98d3e8e
 retrospective: false
 supersedes:
-superseded-by: ADR-012
+superseded-by: ADR-202
 ---
 
-# ADR-011：React／Vite Mock-first 前端架構
+# ADR-201：React／Vite Mock-first 前端架構
 
-> **取代註記（2026-09-02）**：本決策已由 ADR-012 完整取代。Leaflet 保留為當時已核准並已實作的歷史；ADR-012 改採 MapLibre／Deck.gl／OpenFreeMap，並明確承接本 ADR 的 React／Vite／JSX／Router／Ant Design／ECharts／Mock adapter 與三路由決策。
+> **取代註記（2026-09-02）**：本決策已由 ADR-202 完整取代。Leaflet 保留為當時已核准並已實作的歷史；ADR-202 改採 MapLibre／Deck.gl／OpenFreeMap，並明確承接本 ADR 的 React／Vite／JSX／Router／Ant Design／ECharts／Mock adapter 與三路由決策。
 
 ## 背景與問題
 

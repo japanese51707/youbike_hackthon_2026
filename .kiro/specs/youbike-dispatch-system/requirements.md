@@ -297,7 +297,7 @@
 | 圖表 | **ECharts** |
 | UI 元件 | **Ant Design** |
 
-> 由 C 專責。地圖依 ADR-012 實作：遠端底圖失敗或斷網時切換 local empty style／`no-basemap`，資料圖層與控制面板仍須可用；Google Maps 僅保留不含 key 的 plain navigation URL。若中途 React 太吃力，Streamlit 為備案（介面已與後端解耦，換前端不影響後端）。
+> 由 C 專責。地圖依 ADR-202 實作：遠端底圖失敗或斷網時切換 local empty style／`no-basemap`，資料圖層與控制面板仍須可用；Google Maps 僅保留不含 key 的 plain navigation URL。若中途 React 太吃力，Streamlit 為備案（介面已與後端解耦，換前端不影響後端）。
 
 ### 8.3 基礎設施
 
@@ -380,9 +380,9 @@
 
 ## 14. 已核准的前端獨立修改範圍
 
-- 依 ADR-012 將三頁地圖遷移為共用 MapLibre GL JS + Deck.gl 模組，OpenFreeMap 為唯一免費遠端底圖。
+- 依 ADR-202 將三頁地圖遷移為共用 MapLibre GL JS + Deck.gl 模組，OpenFreeMap 為唯一免費遠端底圖。
 - 遠端底圖失敗或斷網時切換 local empty style／`no-basemap`；站點／路線資料層、清單與控制面板仍可使用，且錯誤必須看得見。
 - 保留不使用 SDK、API key 或計費 API 的 Google Maps plain navigation URL。
-- 依 ADR-013 在 frontend-local Mock／view model 呈現 Past／Live／Predict，Predict 固定展示 +30／+60；這兩點只供 UI，不取代 dynamic ETA，也不得送入派遣操作。
+- 依 ADR-203 在 frontend-local Mock／view model 呈現 Past／Live／Predict，Predict 固定展示 +30／+60；這兩點只供 UI，不取代 dynamic ETA，也不得送入派遣操作。
 - Mock 缺值時顯示不可用，不插值或偽造資料；Mock shape 不宣稱為共同 API／Schema，未來正式整合可在前端 adapter 做 mapping。
 - 本範圍只修改 frontend 與前端文件；backend、prediction、共同 API／Schema、Alert、fallback 與 dispatch 契約不在本輪修改範圍。

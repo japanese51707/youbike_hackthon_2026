@@ -3,7 +3,7 @@ import ReactECharts from "echarts-for-react";
 import { useMemo } from "react";
 import { loadTemporalPresentation } from "../../api/temporalMockAdapter.js";
 
-// 站點未來預測（ADR-013）：以 frontend-local Mock 的 Live → +30 → +60 畫可借車輛預測曲線，
+// 站點未來預測（ADR-203）：以 frontend-local Mock 的 Live → +30 → +60 畫可借車輛預測曲線，
 // 含固定展示的信賴區間。缺站或缺展示值時顯示不可用，不插值、不捏造，也不進派遣 payload。
 
 const AXIS_COLOR = "#8ea0b5";

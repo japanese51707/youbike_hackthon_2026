@@ -48,7 +48,7 @@
 |---|---|---|---|---|
 | 2026-09-02 23:43:49 | `c927cff` | 決策治理＋歷史補記 | ADR-005～010 | 建立強制 ADR 治理、模板、索引與歷史決策補記；屬治理與追溯文件，不作為產品實作證據。 |
 | 2026-09-02 23:30:13 | `ad63e8e` | 局部工具 | 不需 ADR | 新增 S3 歷史流動地圖與一日曲線預覽，沒有改產品 API 或正式前端架構。 |
-| 2026-09-03 21:18:37 | `98d3e8e` | 決策實作 | ADR-005、ADR-007、ADR-008、ADR-010、ADR-011 | 實作 React／Vite Mock-first 三頁前端、可替換 adapter、精確 npm 依賴與 Demo 安全邊界。 |
+| 2026-09-03 21:18:37 | `98d3e8e` | 決策實作 | ADR-005、ADR-007、ADR-008、ADR-010、ADR-201 | 實作 React／Vite Mock-first 三頁前端、可替換 adapter、精確 npm 依賴與 Demo 安全邊界。 |
 
 ## 覆蓋檢查
 
@@ -57,8 +57,24 @@
 - 本表分類筆數：18
 - Legacy 決策：ADR-001～004
 - 歷史補記：ADR-005～010
-- 新決策：ADR-011
+- 新決策：ADR-201
 - 尚未由 commit 證明完成：真實 LightGBM 整合、TDX／官方即時 adapter、前端 FastAPI 整合、EC2 正式部署、production-grade token／OIDC 認證。
 - 更新本表的純追溯文件 commit 可不視為產品實作證據；下一個產品／實作 commit 仍須續接本表。
 
 新增 commit 若形成新決策，建立或更新 ADR 後再把 commit 補到本表；純實作也要標示其沿用的 ADR。
+
+
+## ADR 舊號 → 新號對照表（2026-09-04 分段編號重編，見 ADR-000）
+
+本前端分支（feat/front-end-ver1）原以 ADR-011~014 編號，因與 general-purpose-model
+分支撞號，依 ADR-000 分段編號制改為 ADR-2xx（前端/視覺化/UX 號段）。
+**已推送 commit message 內仍沿用舊號**（不改 git 歷史），對照如下：
+
+| 舊號 | 新號 | 標題 | 相關 commit（message 內為舊號） |
+|------|------|------|------|
+| ADR-011 | ADR-201 | React-Vite-Mock-first 前端架構 | 98d3e8e 前端 Mock-first 實作 |
+| ADR-012 | ADR-202 | MapLibre-DeckGL-OpenFreeMap 地圖架構 | 地圖架構系列 |
+| ADR-013 | ADR-203 | Past-Live-Predict 時序契約 | 時序契約系列 |
+| ADR-014 | ADR-204 | 數位孿生戰情室設計語言與暗色底圖 | 戰情室設計系列 |
+
+註：ADR-001~010 保留原號不動；模型分支 ADR-101~110 由 general-purpose-model 重編（已併 main）。

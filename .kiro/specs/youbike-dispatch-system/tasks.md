@@ -209,23 +209,23 @@ A4 加固清單（已完成 ✅ 已驗證）：
 - **驗收**：總覽數字正確；時間軸拖曳顯示各時間點狀態
 - **依賴**：C0
 
-### C4 — 三頁共用地圖遷移（ADR-012）
+### C4 — 三頁共用地圖遷移（ADR-202）
 - [ ] 建立共用 MapLibre／Deck.gl map module，三頁不得各自管理 OpenFreeMap lifecycle
 - [ ] 將既有 Leaflet 站點、熱點與路線呈現遷移為 Deck.gl data layers
 - [ ] 遠端底圖只使用 OpenFreeMap；保留 attribution，不加入帳務、信用卡、API key 或計費 API
 - [ ] style／tile／glyph／sprite 失敗或斷網時切換 local empty style／`no-basemap`
 - [ ] 底圖不可用時顯示錯誤，資料 layers、清單、控制面板與非地圖操作繼續可用
 - **驗收**：三頁共用同一 map module；無 Leaflet runtime；斷網 smoke test 證明 no-basemap 與業務資料仍可用
-- **依賴**：C0、ADR-012
+- **依賴**：C0、ADR-202
 
-### C5 — Past／Live／Predict frontend-local Mock（ADR-013）
+### C5 — Past／Live／Predict frontend-local Mock（ADR-203）
 - [ ] 建立只屬於 frontend 的 temporal view model／Mock adapter，呈現 Past／Live／Predict
 - [ ] Predict 固定顯示 `+30`、`+60`；與既有 dynamic ETA 使用不同欄位與 UI 標籤
 - [ ] 缺值顯示不可用，不插值、不複製其他點、不以 dynamic ETA 補洞
 - [ ] 固定展示資料不得進入確認派發、任務建立或其他操作 payload
 - [ ] Mock 模式持續顯示 `Mock Demo`；可用 `Asia/Taipei`／`+08:00` 建立可重現 fixture
 - **驗收**：不啟動 backend／prediction 也能展示三段時序；network／payload 檢查證明固定展示值未送入派遣；未宣稱 local shape 是共同 API contract
-- **依賴**：C0、ADR-013
+- **依賴**：C0、ADR-203
 - **不包含**：新增 A／B 任務、修改 API／Schema／prediction／Alert／fallback／dispatch 契約
 
 ---

@@ -3,7 +3,7 @@ status: superseded
 date: 2026-09-02
 decision-makers:
   - project-owner
-approval-evidence: "2026-09-02 Kiro session：owner 核准三頁由 Leaflet 改 MapLibre + Deck.gl，OpenFreeMap 為唯一免費遠端底圖，不使用需帳務／信用卡／按量計費／可能超額扣款的地圖 provider 或 API key；底圖失敗或斷網切換本地 empty MapLibre style／no-basemap，資料層與控制面板繼續運作；並承接 ADR-011 的 React／Vite／JSX／Router／Ant Design／ECharts／Mock adapter／三路由決策"
+approval-evidence: "2026-09-02 Kiro session：owner 核准三頁由 Leaflet 改 MapLibre + Deck.gl，OpenFreeMap 為唯一免費遠端底圖，不使用需帳務／信用卡／按量計費／可能超額扣款的地圖 provider 或 API key；底圖失敗或斷網切換本地 empty MapLibre style／no-basemap，資料層與控制面板繼續運作；並承接 ADR-201 的 React／Vite／JSX／Router／Ant Design／ECharts／Mock adapter／三路由決策"
 scope:
   - frontend
   - map-architecture
@@ -13,17 +13,17 @@ scope:
 related-commits:
   - d1fdb16
 retrospective: false
-supersedes: ADR-011
-superseded-by: ADR-014
+supersedes: ADR-201
+superseded-by: ADR-204
 ---
 
-> **取代註記（2026-09-04）**：本 ADR 的地圖架構已於 commit `d1fdb16` 實作。底圖 style 來源決策（固定載入遠端 liberty）已由 ADR-014 取代為「自帶暗色 style JSON、資料仍鎖 OpenFreeMap 同源」；其餘決策（MapLibre／Deck.gl、無 key／零計費、no-basemap 降級、attribution、出向信任邊界、承接自 ADR-011 的決策）由 ADR-014 完整承接。保留本文件為歷史，不改寫。
+> **取代註記（2026-09-04）**：本 ADR 的地圖架構已於 commit `d1fdb16` 實作。底圖 style 來源決策（固定載入遠端 liberty）已由 ADR-204 取代為「自帶暗色 style JSON、資料仍鎖 OpenFreeMap 同源」；其餘決策（MapLibre／Deck.gl、無 key／零計費、no-basemap 降級、attribution、出向信任邊界、承接自 ADR-201 的決策）由 ADR-204 完整承接。保留本文件為歷史，不改寫。
 
-# ADR-012：MapLibre／Deck.gl／OpenFreeMap 地圖架構
+# ADR-202：MapLibre／Deck.gl／OpenFreeMap 地圖架構
 
 ## 背景與問題
 
-ADR-011 已建立 React／Vite Mock-first 三頁前端，但其 Leaflet 地圖架構不足以支撐三頁共用的數位孿生視覺層、較大量的站點／路線資料層與一致的降級行為。遠端底圖也形成出向信任與可用性邊界；若 provider 要求帳務、信用卡、API key、按量計費或可能超額扣款，會引入本專案不接受的成本與憑證風險。即使遠端底圖失效，業務資料、控制面板及錯誤狀態仍必須可用，不能以空白地圖靜默失敗。
+ADR-201 已建立 React／Vite Mock-first 三頁前端，但其 Leaflet 地圖架構不足以支撐三頁共用的數位孿生視覺層、較大量的站點／路線資料層與一致的降級行為。遠端底圖也形成出向信任與可用性邊界；若 provider 要求帳務、信用卡、API key、按量計費或可能超額扣款，會引入本專案不接受的成本與憑證風險。即使遠端底圖失效，業務資料、控制面板及錯誤狀態仍必須可用，不能以空白地圖靜默失敗。
 
 ## 決策
 
@@ -34,7 +34,7 @@ ADR-011 已建立 React／Vite Mock-first 三頁前端，但其 Leaflet 地圖�
 - 不得把任務、預測、使用者資料、operator／task 識別碼或其他內部狀態放入底圖 style／tile／glyph／sprite URL、query string 或 request header。底圖請求只使用顯示地圖所需的公開範圍資訊。
 - 遠端 style 或其資源載入失敗、逾時或斷網時，必須明確顯示底圖不可用，並切換至內建的 local empty MapLibre style（`no-basemap`）。Deck.gl 資料層、站點／路線資訊、控制面板與非地圖操作繼續運作；不得靜默留下空白或永久 loading。
 - Google Maps 路線導航 URL 繼續保留，因其為使用公開座標組成的 plain navigation URL，不使用 Google Maps API key 或計費 API；不得附帶任務、使用者或預測資料。
-- 完整承接 ADR-011 未被地圖選型取代的決策：JavaScript／JSX、React、Vite、React Router、Ant Design、ECharts、精確釘選直接依賴、Mock-first adapter、in-memory Demo mutation、Mock Demo 標示，以及 `/dashboard`、`/operator`、`/overview` 三路由。
+- 完整承接 ADR-201 未被地圖選型取代的決策：JavaScript／JSX、React、Vite、React Router、Ant Design、ECharts、精確釘選直接依賴、Mock-first adapter、in-memory Demo mutation、Mock Demo 標示，以及 `/dashboard`、`/operator`、`/overview` 三路由。
 - 本 ADR 是文件與架構定案；MapLibre／Deck.gl／OpenFreeMap、no-basemap 與三頁改版尚未在前端實作，backend／prediction 本輪不修改。
 
 ## 理由與判準
@@ -51,7 +51,7 @@ ADR-011 已建立 React／Vite Mock-first 三頁前端，但其 Leaflet 地圖�
 
 - 優點：既有三頁基線已可運作，遷移成本最低。
 - 缺點：資料層、底圖與三頁共用生命週期較難形成一致的 WebGL 數位孿生架構。
-- 未採用原因：owner 已核准改用 MapLibre + Deck.gl；ADR-011 因狀態不支援 partial supersede，須由本 ADR 完整取代並承接其保留決策。
+- 未採用原因：owner 已核准改用 MapLibre + Deck.gl；ADR-201 因狀態不支援 partial supersede，須由本 ADR 完整取代並承接其保留決策。
 
 ### 商業地圖 provider 或有免費額度的計費 API
 
@@ -106,7 +106,7 @@ ADR-011 已建立 React／Vite Mock-first 三頁前端，但其 Leaflet 地圖�
 
 ## 回復或取代方式
 
-可把地圖來源切換為 local empty style 以停止依賴遠端底圖，資料層及控制面板應保持可用。若 MapLibre／Deck.gl 或 OpenFreeMap 不再適用，建立新 ADR 完整 supersede 本決策，明列保留的 React／Vite／Mock-first／三路由決策；不得回頭改寫 ADR-011 或本 ADR 的歷史。
+可把地圖來源切換為 local empty style 以停止依賴遠端底圖，資料層及控制面板應保持可用。若 MapLibre／Deck.gl 或 OpenFreeMap 不再適用，建立新 ADR 完整 supersede 本決策，明列保留的 React／Vite／Mock-first／三路由決策；不得回頭改寫 ADR-201 或本 ADR 的歷史。
 
 ## 驗證方式
 
@@ -121,4 +121,4 @@ ADR-011 已建立 React／Vite Mock-first 三頁前端，但其 Leaflet 地圖�
 
 - 相關 commit：無；`related-commits: []`，目前只有文件決策。
 - 相關 Spec／文件：`.kiro/specs/youbike-dispatch-system/requirements.md`、`design.md`、`tasks.md`。
-- 相關 ADR：完整取代 ADR-011；沿用 ADR-005（契約先行與 Mock）、ADR-007（雙向信任邊界）、ADR-008（依賴釘選）。
+- 相關 ADR：完整取代 ADR-201；沿用 ADR-005（契約先行與 Mock）、ADR-007（雙向信任邊界）、ADR-008（依賴釘選）。

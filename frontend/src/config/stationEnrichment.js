@@ -1,4 +1,4 @@
-// 站點前端補充資料（ADR-013：frontend-local view model，與共同 API 契約分離）。
+// 站點前端補充資料（ADR-203：frontend-local view model，與共同 API 契約分離）。
 //
 // - 海拔為「範例估計值」，非量測資料，僅供 Demo 呈現與站間相對高低比較，
 //   日後應由 DEM／高程 API 取代；不得視為官方高程或送入派遣 payload。

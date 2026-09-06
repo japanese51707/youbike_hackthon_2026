@@ -11,7 +11,7 @@ import BasemapStatus from "./BasemapStatus.jsx";
 
 const BLOCKED_RESOURCE_URL = "data:application/octet-stream;base64,";
 
-// 自訂「2D」控制鈕：一鍵把 pitch/bearing 歸零，回到正北俯視（ADR-014 地圖互動）。
+// 自訂「2D」控制鈕：一鍵把 pitch/bearing 歸零，回到正北俯視（ADR-204 地圖互動）。
 class Reset2DControl {
   onAdd(map) {
     this._map = map;
