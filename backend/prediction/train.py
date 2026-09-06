@@ -167,6 +167,7 @@ def run_full_training(df, tuned=False):
           f"{'覆蓋率':>7} {'交叉率':>6}", flush=True)
     zone_rows = []
     newold_rows = []
+    decision_rows = []
     for h, mins in HORIZON_STEPS.items():
         tgt = f"target_delta_{mins}"
         sub = frame.dropna(subset=[tgt])
@@ -230,6 +231,30 @@ def run_full_training(df, tuned=False):
             mae(yva[~nm], preds["p50"][~nm]) if (~nm).sum() else None,
             mae(yva[nm], preds["p50"][nm]) if nm.sum() else None,
             int(nm.sum())))
+
+        # F-09 決策層指標（precision/recall/F1）：事件=進危險區(可借≤緩衝 或 可還≤緩衝)
+        # 到達存量=現況ab+Δ；可還位=total-到達存量。緩衝=2（config.trigger 安全緩衝）
+        # ★模型判危險用「下界」判(與 rule_engine ADR-111 一致):防空看 P10 下界、防滿看 P90 上界穿頂。
+        #   非用 P50——規則引擎吃悲觀下界(寧可多喊少漏),用 P50 會低估召回(非上線真實行為)。
+        BUF = 2
+        tot = valid["total_docks"].values.astype(float)
+        def _danger_point(delta):  # 點估計(實際/baseline)判危險:到達存量或可還位≤緩衝
+            arr = ab + delta
+            return (arr <= BUF) | ((tot - arr) <= BUF)
+        # 模型:防空看 P10(悲觀車最少)、防滿看 P90(悲觀車最多)——與規則引擎一致
+        arr_lo = ab + preds["p10"]      # 悲觀到達存量下界(防空)
+        arr_hi = ab + preds["p90"]      # 悲觀到達存量上界(防滿)
+        pred_lgb = (arr_lo <= BUF) | ((tot - arr_hi) <= BUF)
+        actual = _danger_point(yva)             # 實際進危險(觀測Δ)
+        pred_base = _danger_point(base_pred)    # baseline 無區間,用點估計判(標明不對等)
+        def _prf(pred_pos):
+            tp = int((pred_pos & actual).sum()); fp = int((pred_pos & ~actual).sum())
+            fn = int((~pred_pos & actual).sum())
+            prec = tp / (tp + fp) if (tp + fp) else 0.0
+            rec = tp / (tp + fn) if (tp + fn) else 0.0
+            f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+            return prec, rec, f1
+        decision_rows.append((mins, int(actual.sum()), _prf(pred_lgb), _prf(pred_base)))
     print("=" * 96, flush=True)
     print("解讀：改善>0=模型贏baseline；覆蓋率應接近名目80%；交叉率應=0", flush=True)
 
@@ -243,6 +268,16 @@ def run_full_training(df, tuned=False):
     for mins, old_m, new_m, new_n in newold_rows:
         ns = f"{new_m:.3f}" if new_m is not None else "—"
         print(f"  {mins:>3}分  老站 {old_m:.3f} / 新站 {ns} (新站樣本 {new_n:,})", flush=True)
+
+    # F-09 決策層指標（ADR-002 補記）：事件=進危險區(可借或可還≤2)，比 MAE 更貼近調度價值
+    print("\n[附3] 決策層 precision/recall/F1（事件=未來進危險區,可借或可還≤2）：", flush=True)
+    print(f"{'視野':>5} {'實際事件數':>10}  {'LGB精確':>8} {'LGB召回':>8} {'LGB_F1':>7}  "
+          f"{'base精確':>8} {'base召回':>8} {'base_F1':>7}", flush=True)
+    for mins, n_evt, (lp, lr, lf), (bp, br, bf) in decision_rows:
+        print(f"{mins:>3}分 {n_evt:>10,}  {lp*100:>7.1f}% {lr*100:>7.1f}% {lf*100:>6.1f}%  "
+              f"{bp*100:>7.1f}% {br*100:>7.1f}% {bf*100:>6.1f}%", flush=True)
+    print("解讀：精確率=派車的站真需要的比例(高=少白跑);召回率=實際出事站被抓到的比例(高=少漏)", flush=True)
+    print("      ★模型用下界判危險(P10防空/P90防滿,與規則引擎ADR-111一致);baseline無區間用點估計(不完全對等,是模型有區間的優勢)", flush=True)
     print("\n註：超參數為未調參預設值(ADR-002)；覆蓋率校準待 P2 conformal", flush=True)
 
 
