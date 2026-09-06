@@ -20,16 +20,32 @@ from typing import Protocol
 
 @dataclass
 class PredictionInterval:
-    """預測區間（B 的 predict 輸出）。
+    """單一視野的預測區間（B 的 predict 輸出）。
 
-    以「調度車到達時」為預測目標時點（前瞻窗口）。
-    point/lower/upper 皆為「預測可借車數（存量）」。
+    point/lower/upper 皆為「該視野目標時點的預測可借車數（存量）」。
+    多視野時回傳多個 PredictionInterval（見 MultiHorizonPrediction）。
     """
     predicted_available: float   # 點估計（僅供顯示，規則引擎不吃）
     lower_bound: float           # 下界（悲觀：車最少）→ 防空站用
     upper_bound: float           # 上界（悲觀：車最多）→ 防滿站用
-    horizon_minutes: int         # 前瞻分鐘數
+    horizon_minutes: int         # 前瞻分鐘數（分鐘數，不綁資料格數，ADR-107）
     source: str = "mock"         # 來源標記（mock / lightgbm / historical_fallback）
+
+
+@dataclass
+class MultiHorizonPrediction:
+    """多視野預測（ADR-107）：一站含多個 horizon 的區間。
+
+    規則引擎依調度員到達時間，用 for_horizon() 挑最接近的視野。
+    """
+    station_id: str
+    intervals: list  # list[PredictionInterval]，各不同 horizon_minutes
+
+    def for_horizon(self, target_minutes: int) -> "PredictionInterval":
+        """挑最接近 target_minutes 的視野（規則引擎依到達時間選）。"""
+        if not self.intervals:
+            raise ValueError("無任何 horizon 預測")
+        return min(self.intervals, key=lambda iv: abs(iv.horizon_minutes - target_minutes))
 
 
 class Predictor(Protocol):

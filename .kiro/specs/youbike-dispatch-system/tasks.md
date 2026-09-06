@@ -153,10 +153,18 @@ A4 加固清單（已完成 ✅ 已驗證）：
 
 ### B2 — 預測模型 predictor（核心）
 - [ ] `prediction/features.py`：特徵工程（時段/lag/潮汐/天氣/地形/區域...）
+- [ ] **`prediction/feature_pipeline.py`：特徵組裝層（待建）** — 把 backend/features/ 的 15+ 因子模組合成訓練表。**此層負責防洩漏強制檢查**（見下方 ⚠️）
 - [ ] `prediction/predictor.py`：LightGBM 訓練 + `predict()`（輸出含區間）
 - **交付物**：訓練好的模型檔（artifacts/）+ predict() 介面
 - **驗收**：時間切分驗證（1~5月訓、6月驗）；MAE < 2 台；區間覆蓋 ~80%；輸出符合 Prediction 格式
 - **依賴**：B1（地理參數當特徵）
+- **⚠️ 進訓練前審查（review_model_pretraining_v1.md）P0 約束，建 pipeline 時必須遵守**：
+  - **F-01 計算窗口**：行為指紋/歷史統計/站型分群只用訓練期資料（或 expanding window），pipeline 層級強制。見 ADR-103/014 補記
+  - **§5-1 缺失值**：只能 forward fill，禁 interpolate（會用到未來）
+  - **F-03 目標截斷**（proposed ADR-105，待核准）：觸底/觸頂樣本標記+排除/降權；評估分區間（健康/接近空/已空）
+  - **§5-2 離線/線上標註**（proposed ADR-106，待核准）：離線標註可用全期、線上偵測只能用過去，不混用
+  - **F-02 baseline**：實作 seasonal naive（該站×day_type×時段歷史中位數）同驗證集對比。ADR-002 數字待此重跑後才更正
+  - pipeline 建好後才能「重跑取得誠實新數字」——目前無數字可宣稱
 
 ### B3 — 緊急度 calc_urgency
 - [ ] `prediction/urgency.py`：緊急度 0~100（校準吻合歷史後續）

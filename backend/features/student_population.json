@@ -1,0 +1,16 @@
+{
+  "_說明": "新北市各級學校學生數（影響人口推估用）。這是初期粗估值（依教育部各級教育統計的公開量級），供特徵模組建立架構用。ADR-011 註明：轉換係數初期粗估、之後以教育部統計處 stats.moe.gov.tw 縣市別學生數校準。數字非精確，勿當官方統計引用。",
+  "_來源": "教育部統計處各級教育統計（縣市別學生數）— 待以正式 dataset 校準",
+  "_縣市": "新北市",
+  "_學年度_參考": "約114學年度量級",
+  "levels": {
+    "elementary": {"label": "國小", "students": 195000, "cycle_influence": 0.7},
+    "junior_high": {"label": "國中", "students": 95000, "cycle_influence": 0.9},
+    "senior_high": {"label": "高中職", "students": 105000, "cycle_influence": 1.0},
+    "university": {"label": "大專", "students": 160000, "cycle_influence": 1.1}
+  },
+  "_欄位說明": {
+    "students": "該級在學學生數（粗估）",
+    "cycle_influence": "騎乘影響係數（粗估）：越高代表該級學生對 YouBike 借還的影響越大。國小低（多由家長接送/年齡限制）、國高中大學遞增（自行通勤比例高）。初期粗估，之後校準。"
+  }
+}

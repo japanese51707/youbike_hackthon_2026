@@ -18,6 +18,7 @@
 
 | 編號 | 決策 | 狀態 | 範圍 | 實作狀態／限制 |
 |---|---|---|---|---|
+| [ADR-000](ADR-000-ADR編號規則與號段配置.md) | ADR 編號規則與號段配置（分段編號制） | accepted | governance, collaboration | 1xx模型/2xx前端/3xx平台;001-010封存;取號前查登記表 |
 | [ADR-001](ADR-001-單一模型分層參數.md) | 單一模型＋分層參數 | accepted | prediction, params | 三層參數已實作；真實模型尚未接入後端 |
 | [ADR-002](ADR-002-LightGBM選型.md) | 預測模型採 LightGBM | accepted | prediction | 選型已定；backend 目前仍使用 MockPredictor |
 | [ADR-003](ADR-003-運算層EC2資料層Serverless.md) | 運算層 EC2、資料層 Serverless | accepted | infra, data | S3／Athena 已規劃；Git 歷史尚無 EC2 部署證據 |
@@ -28,6 +29,16 @@
 | [ADR-008](ADR-008-依賴釘選與關鍵行為測試.md) | 精確釘選依賴＋優先測決策關鍵行為 | accepted（追溯） | backend, testing, dependencies | Python 3.12 為容器基線；CI 尚未建立 |
 | [ADR-009](ADR-009-SQLite持久化與Repository分層.md) | 黑客松階段使用 SQLite＋Repository | accepted（追溯） | database, backend | 單實例適用；多實例前需重評估 |
 | [ADR-010](ADR-010-Demo帳號與後端角色驗證.md) | Demo 本地帳號＋後端角色驗證 | accepted（追溯） | authentication, authorization, security | 無 token/session，只限受控 Demo |
+| [ADR-101](ADR-101-預測特徵因子模組化與資料源.md) | 預測特徵四因子模組化＋公開資料源 | accepted | prediction, features, data | 假日/天氣/地形/學生數各一模組；單因子先行，交叉影響待後續；天氣訓練用歷史、現況預測才接即時 |
+| [ADR-102](ADR-102-擴充特徵時間POI事件特殊天氣.md) | 擴充特徵：時間衍生/POI距離/事件/特殊天氣 | accepted | prediction, features, data | 承接 ADR-101；POI 用 OSM、區域類型自動推導、事件介面先行、特殊天氣異常日標籤 |
+| [ADR-103](ADR-103-時序自身鄰近連動營運面因子.md) | 站點時序自身/鄰近連動/營運面因子 | accepted | prediction, features, data | lag/歷史空滿頻率/波動度/鄰近連動(距離指數衰減)/日出日落/溫度倒U/故障缺口/level shift；含資料洩漏防範約束 |
+| [ADR-104](ADR-104-站點行為指紋與需求密度分層.md) | 站點行為指紋/需求密度分層/外部因子降級 | accepted | prediction, features, data | 六個月行為指紋(日夜比/平假日比/峰型/需求密度)；需求密度分規劃層(柱位建議)與調度層(不進即時觸發)；站型分群行為vsPOI兩套對照；外部人口因子降為冷啟動fallback |
+| [ADR-105](ADR-105-目標變數定義與截斷樣本處理.md) | 目標變數定義與截斷(censored)樣本處理 | accepted | prediction, features, data | 進訓練前審查F-03；截斷=「Δ=0 且同時空/滿站」才排除/降權(正常站Δ=0保留為真實訊號)+分區間評估；需求插補選配 |
+| [ADR-106](ADR-106-調度標註離線與線上分離.md) | 調度介入辨識：離線清訓練資料/上線只事後標註 | accepted | prediction, features, data | 進訓練前審查§5-2；辨識調度僅為清訓練資料(離線用全期合法)；上線不做即時調度偵測,只做事後異常標註供回查 |
+| [ADR-107](ADR-107-多視野預測與累積分位數.md) | 多視野預測(30/60/90/120分)+累積分位數 | accepted | prediction, api, core | 進訓練前審查F-04/F-05；直接多視野非遞迴、分位數對累積Δ訓練;horizon用分鐘定義(粒度落差解法);Prediction改horizons[]陣列(改api_contract,通知B/C) |
+| [ADR-108](ADR-108-資料品質與站點主檔處理.md) | 資料品質與站點主檔處理 | accepted | data, features, prediction | 站數1521→1576(聯集1583);時間戳floor統一;經緯度為主鍵歸併亂碼站(1583→1579);新舊站分報 |
+| [ADR-109](ADR-109-流量加權訓練與決策層信心.md) | 流量加權訓練與決策層信心 | accepted | prediction, features, rules | A樣本權重實測否決(LightGBM已內建);B周轉量保留;C決策層信心分級接dispatcher排序(守ADR-104不進觸發) |
+| [ADR-110](ADR-110-超參數優化與時序交叉驗證.md) | 超參數優化與時序交叉驗證 | accepted | prediction | 時序CV選參(6月不參與防洩漏);選參目標正常區間MAE;調參後模型正常區間全視野贏baseline |
 
 ## 新決策流程
 
@@ -43,8 +54,15 @@
 - [Commit → Decision 時序追溯](commit-decision-map.md)：涵蓋目前完整 15 筆 Git 歷史，逐筆分類並映射至 ADR。
 - ADR-005～010 是依 commit、Spec 與現存程式補記的歷史決策，均標示 `retrospective: true`；沒有證據的當時動機不視為事實。
 
-## 編號規則
+## 編號規則（分段編號制，見 ADR-000）
 
 - 檔名：`ADR-NNN-簡短標題.md`
-- 編號只遞增、不重用；被取代或否決的 ADR 仍保留。
+- **分段編號**（多分支協作防撞號）：
+  - ADR-000 = 編號規則本身
+  - ADR-001~010 = 已封存基礎決策，保留原號、不再新增
+  - **ADR-1xx** = 模型／資料／預測（owner A、B）
+  - **ADR-2xx** = 前端／視覺化／UX（owner C）
+  - **ADR-3xx** = 平台／部署／資安／API 契約（owner A）
+- **取號前先查 [ADR-000](ADR-000-ADR編號規則與號段配置.md) 的登記表**，取該號段最大號 +1，並在同一次變更登記。
+- 各號段內只遞增、不重用；被取代或否決的 ADR 仍保留。
 - 一份 ADR 只記一個核心決策；同一時期多個 commit 可以共同對應一份 ADR。
