@@ -145,10 +145,78 @@ class MockUrgencyCalculator:
         return round(score, 1)
 
 
+class RealUrgencyCalculator:
+    """ADR-112 緊急度分數：分層打底 + 五因素排序，回 0~100。
+
+    分層打底（保證截斷層一定 > 警示層）：
+      censored（穿透邊界）70~100 / warning（快空滿未穿透）30~69。
+    五因素（落在層級區間內排序）：穿透時機/嚴重層級(打底)/時段人流/當下空滿/穿透幅度。
+    ★人流用站×hour 訓練期平均周轉量（station_hour_turnover.json，防洩漏）。
+    ★confidence_tier 不進分數（守 ADR-104）。
+    """
+    _TURNOVER = None  # 類層級快取（站×hour 周轉表）
+
+    def __init__(self):
+        if RealUrgencyCalculator._TURNOVER is None:
+            RealUrgencyCalculator._TURNOVER = self._load_turnover()
+
+    @staticmethod
+    def _load_turnover() -> dict:
+        import json
+        from pathlib import Path
+        p = Path(__file__).parent.parent / "features" / "station_hour_turnover.json"
+        if p.exists():
+            return json.loads(p.read_text(encoding="utf-8"))
+        return {"by_station_hour": {}, "station_avg": {}, "global_p90": 2.5}
+
+    def _flow_score(self, station: dict) -> float:
+        """時段人流分 0~1：該站×該 hour 訓練期平均周轉量，用全市 P90 正規化。"""
+        t = self._TURNOVER
+        sk = station.get("station_key") or station.get("station_id", "")
+        hour = int(station.get("hour", 12))  # 當前小時；未提供預設中午
+        by = t.get("by_station_hour", {}).get(str(sk), {})
+        val = by.get(str(hour))
+        if val is None:  # 退回該站整體平均
+            val = t.get("station_avg", {}).get(str(sk), 0.0)
+        p90 = t.get("global_p90", 2.5) or 2.5
+        return min(1.0, float(val) / p90)   # 用 P90 正規化，超過封頂 1.0
+
+    def calc_urgency(self, station: dict, prediction: PredictionInterval, action: str) -> float:
+        total = float(station.get("total_docks", 1)) or 1.0
+        available = float(station.get("available_bikes", 0) or 0)
+        raw_lo = prediction.raw_lower_bound if prediction else None
+        raw_hi = prediction.raw_upper_bound if prediction else None
+
+        # 判斷層級（與 rule_engine 一致）：raw 穿透邊界=censored
+        breached = (raw_lo is not None and raw_lo < 0) or (raw_hi is not None and raw_hi > total)
+
+        # 時機分（越早穿透/觸發越急）：用 horizon 分鐘，30→1.0 遞減到 120→0.25
+        hm = float(prediction.horizon_minutes) if prediction else 60.0
+        timing = max(0.0, min(1.0, (150.0 - hm) / 120.0))  # 30→1.0, 120→0.25
+        # 人流分
+        flow = self._flow_score(station)
+        # 當下已空滿加成
+        at_limit = 1.0 if (available <= 0 or available >= total) else 0.0
+
+        if breached:
+            # 穿透幅度分：缺口深淺 / 總柱，封頂 1.0
+            if raw_lo is not None and raw_lo < 0:
+                depth = min(1.0, abs(raw_lo) / max(1.0, total * 0.3))
+            else:
+                depth = min(1.0, (raw_hi - total) / max(1.0, total * 0.3))
+            rank = 0.35 * timing + 0.20 * flow + 0.25 * at_limit + 0.20 * depth
+            score = 70.0 + 30.0 * rank   # censored 打底 70
+        else:
+            # warning 層（去幅度後正規化權重）
+            rank = 0.4375 * timing + 0.25 * flow + 0.3125 * at_limit
+            score = 30.0 + 39.0 * rank   # warning 打底 30
+        return round(score, 1)
+
+
 # 預設用 mock（A6 整合時改這裡指向 B 的實作）
 def get_predictor() -> Predictor:
     return MockPredictor()
 
 
 def get_urgency_calculator() -> UrgencyCalculator:
-    return MockUrgencyCalculator()
+    return RealUrgencyCalculator()
