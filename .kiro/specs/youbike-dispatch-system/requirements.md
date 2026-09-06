@@ -292,11 +292,12 @@
 | 層級 | 技術 |
 |------|------|
 | 框架 | **React + Vite** |
-| 地圖 | **Leaflet** |
+| 地圖 | **MapLibre GL JS + Deck.gl** |
+| 遠端底圖 | **OpenFreeMap**（唯一允許的免費遠端底圖；不需 API key／帳務） |
 | 圖表 | **ECharts** |
 | UI 元件 | **Ant Design** |
 
-> 由 C 專責。若中途 React 太吃力，Streamlit 為備案（介面已與後端解耦，換前端不影響後端）。
+> 由 C 專責。地圖依 ADR-202 實作：遠端底圖失敗或斷網時切換 local empty style／`no-basemap`，資料圖層與控制面板仍須可用；Google Maps 僅保留不含 key 的 plain navigation URL。若中途 React 太吃力，Streamlit 為備案（介面已與後端解耦，換前端不影響後端）。
 
 ### 8.3 基礎設施
 
@@ -364,3 +365,24 @@
 - [ ] POI 資料來源（Google Places / OSM / 政府開放資料）
 - [ ] 警示 Demo 是否額外接 LINE/Email（前端顯示為主，加分項）
 - [ ] AI 最適化的具體檢視條件（什麼指標、調多少）
+
+- [ ] backend 是否新增 `ForecastPoint`／`StationForecast`，以及 `GET /stations/{id}` 未來 response shape
+- [ ] B 的 `predict()` 是否改成 `PredictionEstimate`，以及 fixed／default／dynamic horizon 的責任分工
+- [ ] 是否新增 `Alert.error_code`、錯誤代碼 taxonomy、重試與 unavailable 對外方式
+- [ ] historical fallback 採最近一筆 observation、同時段平均或其他策略
+- [ ] default alert 與 dispatch urgency／rule engine 是否分流、如何分流
+- [ ] dynamic dispatch context 由哪個 endpoint／request／控制平面狀態提供
+- [ ] backend timestamp 是否強制帶 offset，以及 `timestamp`／`source_timestamp`／timezone／freshness ownership
+
+> 上述跨人介面在 owner／團隊定案前，不可作為 A／B 實作依據，也不修改 `api_contract.md`、`model_architecture.md` 或 `parameter_groups.md`。
+
+---
+
+## 14. 已核准的前端獨立修改範圍
+
+- 依 ADR-202 將三頁地圖遷移為共用 MapLibre GL JS + Deck.gl 模組，OpenFreeMap 為唯一免費遠端底圖。
+- 遠端底圖失敗或斷網時切換 local empty style／`no-basemap`；站點／路線資料層、清單與控制面板仍可使用，且錯誤必須看得見。
+- 保留不使用 SDK、API key 或計費 API 的 Google Maps plain navigation URL。
+- 依 ADR-203 在 frontend-local Mock／view model 呈現 Past／Live／Predict，Predict 固定展示 +30／+60；這兩點只供 UI，不取代 dynamic ETA，也不得送入派遣操作。
+- Mock 缺值時顯示不可用，不插值或偽造資料；Mock shape 不宣稱為共同 API／Schema，未來正式整合可在前端 adapter 做 mapping。
+- 本範圍只修改 frontend 與前端文件；backend、prediction、共同 API／Schema、Alert、fallback 與 dispatch 契約不在本輪修改範圍。

@@ -1,0 +1,32 @@
+{
+  "scope": "frontend-local-demo",
+  "timezone": "Asia/Taipei",
+  "stations": [
+    {
+      "station_id": "500101001",
+      "station_name": "捷運南勢角站(4號出口)",
+      "past": [
+        { "timestamp": "2026-06-02T07:00:00+08:00", "available_bikes": 20, "available_docks": 44 },
+        { "timestamp": "2026-06-02T07:30:00+08:00", "available_bikes": 10, "available_docks": 54 }
+      ],
+      "live": { "timestamp": "2026-06-02T08:00:00+08:00", "available_bikes": 2, "available_docks": 62 },
+      "fixed_forecasts": [
+        { "offset_minutes": 30, "timestamp": "2026-06-02T08:30:00+08:00", "available": true, "available_bikes": 1, "lower_bound": 0, "upper_bound": 4 },
+        { "offset_minutes": 60, "timestamp": "2026-06-02T09:00:00+08:00", "available": true, "available_bikes": 0, "lower_bound": 0, "upper_bound": 3 }
+      ]
+    },
+    {
+      "station_id": "500101002",
+      "station_name": "捷運景安站",
+      "past": [
+        { "timestamp": "2026-06-02T07:00:00+08:00", "available_bikes": 15, "available_docks": 25 },
+        { "timestamp": "2026-06-02T07:30:00+08:00", "available_bikes": 6, "available_docks": 34 }
+      ],
+      "live": { "timestamp": "2026-06-02T08:00:00+08:00", "available_bikes": 0, "available_docks": 40 },
+      "fixed_forecasts": [
+        { "offset_minutes": 30, "timestamp": "2026-06-02T08:30:00+08:00", "available": true, "available_bikes": 0, "lower_bound": 0, "upper_bound": 2 },
+        { "offset_minutes": 60, "timestamp": "2026-06-02T09:00:00+08:00", "available": false, "reason": "此 frontend-local Mock 未提供 +60 展示值" }
+      ]
+    }
+  ]
+}

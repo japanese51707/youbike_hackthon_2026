@@ -1,0 +1,30 @@
+{
+  "name": "youbike-dispatch-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@ant-design/icons": "6.3.4",
+    "@deck.gl/aggregation-layers": "9.3.11",
+    "@deck.gl/core": "9.3.11",
+    "@deck.gl/layers": "9.3.11",
+    "@deck.gl/mapbox": "9.3.11",
+    "antd": "6.6.2",
+    "d3-delaunay": "6.0.4",
+    "echarts": "6.1.0",
+    "echarts-for-react": "3.0.6",
+    "maplibre-gl": "6.7.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router-dom": "7.18.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.1.1",
+    "vite": "8.2.2"
+  }
+}

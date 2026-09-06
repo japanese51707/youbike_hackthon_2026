@@ -23,7 +23,7 @@
 | [ADR-002](ADR-002-LightGBM選型.md) | 預測模型採 LightGBM | accepted | prediction | 選型已定；backend 目前仍使用 MockPredictor |
 | [ADR-003](ADR-003-運算層EC2資料層Serverless.md) | 運算層 EC2、資料層 Serverless | accepted | infra, data | S3／Athena 已規劃；Git 歷史尚無 EC2 部署證據 |
 | [ADR-004](ADR-004-AI只估計規則引擎決策.md) | AI 只估計、規則引擎決策 | accepted | core, prediction | 規則與人工閘門為不可違反約束 |
-| [ADR-005](ADR-005-契約先行與Mock並行開發.md) | 契約先行＋符合 Schema 的 Mock 解鎖並行 | accepted（追溯） | api, schemas, collaboration | 後端契約與 Mock 已建立；前端尚未完成 |
+| [ADR-005](ADR-005-契約先行與Mock並行開發.md) | 契約先行＋符合 Schema 的 Mock 解鎖並行 | accepted（追溯） | api, schemas, collaboration | 後端契約與 Mock 已建立；Mock-only 前端已完成，FastAPI 整合尚未完成 |
 | [ADR-006](ADR-006-可抽換資料源與明確降級.md) | 可抽換資料源＋明確 freshness／降級 | accepted（追溯） | data, reliability | Mock／Historical 可用；即時 adapter 未實作，雙重失敗回空與 freshness 枚舉仍有缺口 |
 | [ADR-007](ADR-007-API雙向邊界防護.md) | API 入向與出向都視為信任邊界 | accepted（追溯） | api, security | 應用層防護已建；正式 webhook／TLS 尚待部署 |
 | [ADR-008](ADR-008-依賴釘選與關鍵行為測試.md) | 精確釘選依賴＋優先測決策關鍵行為 | accepted（追溯） | backend, testing, dependencies | Python 3.12 為容器基線；CI 尚未建立 |
@@ -39,6 +39,10 @@
 | [ADR-108](ADR-108-資料品質與站點主檔處理.md) | 資料品質與站點主檔處理 | accepted | data, features, prediction | 站數1521→1576(聯集1583);時間戳floor統一;經緯度為主鍵歸併亂碼站(1583→1579);新舊站分報 |
 | [ADR-109](ADR-109-流量加權訓練與決策層信心.md) | 流量加權訓練與決策層信心 | accepted | prediction, features, rules | A樣本權重實測否決(LightGBM已內建);B周轉量保留;C決策層信心分級接dispatcher排序(守ADR-104不進觸發) |
 | [ADR-110](ADR-110-超參數優化與時序交叉驗證.md) | 超參數優化與時序交叉驗證 | accepted | prediction | 時序CV選參(6月不參與防洩漏);選參目標正常區間MAE;調參後模型正常區間全視野贏baseline |
+| [ADR-201](ADR-201-React-Vite-Mock-first前端架構.md) | React／Vite Mock-first 前端＋Leaflet 歷史基線 | superseded（由 ADR-202） | frontend, dependencies, data-adapter | `98d3e8e` 已完成 Mock-only 三頁與 Leaflet 基線；保留歷史，不再作為現行地圖選型 |
+| [ADR-202](ADR-202-MapLibre-DeckGL-OpenFreeMap地圖架構.md) | MapLibre／Deck.gl／OpenFreeMap 三頁地圖架構 | superseded（由 ADR-204） | frontend, map-architecture, outbound-security | 地圖遷移、OpenFreeMap 與 no-basemap 已於 `d1fdb16` 實作；底圖 style 來源條款由 ADR-204 取代，其餘決策由 ADR-204 承接 |
+| [ADR-203](ADR-203-Past-Live-Predict時序契約.md) | Past／Live／Predict 前端呈現與 Mock-first | accepted | frontend, temporal-presentation, mock-data | 前端 UI／Mock 決策已定；API／Schema／prediction／Alert／fallback／dispatch 契約仍待 owner／團隊決策，不可作為 A／B 實作依據 |
+| [ADR-204](ADR-204-數位孿生戰情室設計語言與暗色底圖.md) | 數位孿生戰情室設計語言＋自帶暗色底圖 | accepted | frontend, map-architecture, design-language, dependencies | 取代 ADR-202 底圖 style 來源、承接其餘決策；新增暗色 style 與 ArcLayer／Hexagon／Voronoi 視覺層，尚待實作 |
 
 ## 新決策流程
 
@@ -51,7 +55,7 @@
 
 ## 歷史追溯
 
-- [Commit → Decision 時序追溯](commit-decision-map.md)：涵蓋目前完整 15 筆 Git 歷史，逐筆分類並映射至 ADR。
+- [Commit → Decision 時序追溯](commit-decision-map.md)：涵蓋至 `98d3e8e` 的 18 筆 Git 歷史，逐筆分類並映射至 ADR。
 - ADR-005～010 是依 commit、Spec 與現存程式補記的歷史決策，均標示 `retrospective: true`；沒有證據的當時動機不視為事實。
 
 ## 編號規則（分段編號制，見 ADR-000）
