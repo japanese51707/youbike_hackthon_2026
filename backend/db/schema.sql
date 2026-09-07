@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS operators (
     current_lat           REAL,
     current_lng           REAL,
     current_task_id       TEXT,
+    current_district      TEXT,                     -- ADR-114 動態：當前被指派作業的行政區（隨任務變動，非綁定責任區）
     task_queue_json       TEXT DEFAULT '[]',
     today_completed_tasks INTEGER DEFAULT 0,
     today_bikes_moved     INTEGER DEFAULT 0,
@@ -36,6 +37,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     estimated_fuel_cost         REAL,
     route_map_url               TEXT,
     source_override_station_id  TEXT,                -- 由哪個③覆寫產生（覆寫到期連動取消依據）
+    district                    TEXT,                -- ADR-114 這趟任務的行政區（一趟不跨區的約束落地）
+    assigned_vehicle            TEXT,                -- ADR-114 指派的調度車（vehicle_id）
     cancel_reason               TEXT,
     cancelled_by                TEXT,
     assigned_at                 TEXT,
@@ -107,6 +110,19 @@ CREATE TABLE IF NOT EXISTS events (
     affected_stations_json  TEXT DEFAULT '[]'
 );
 
+-- 8. 調度車主檔（ADR-114：可增刪改，未來由 YouBike 車隊 API 覆蓋 seed）
+--    載運量逐台可不同、可改（車種差異）；current_district 為動態狀態（隨任務指派變動，非綁定責任區）。
+CREATE TABLE IF NOT EXISTS vehicles (
+    vehicle_id        TEXT PRIMARY KEY,
+    max_capacity      INTEGER NOT NULL DEFAULT 15,   -- 最高載運量(台)；預設 15，依車種可改
+    status            TEXT DEFAULT 'available',      -- available/dispatched/maintenance/off_duty
+    current_district  TEXT,                          -- 動態：當前作業行政區（隨任務指派變動）
+    current_task_id   TEXT,                          -- 當前任務
+    is_active         INTEGER DEFAULT 1,             -- 1=啟用 0=停用（停用取代刪除，保留稽核關聯）
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL
+);
+
 -- 索引（常用查詢加速）
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(task_status);
 CREATE INDEX IF NOT EXISTS idx_tasks_operator ON tasks(assigned_operator);
@@ -115,3 +131,5 @@ CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_logs(type);
 CREATE INDEX IF NOT EXISTS idx_audit_station ON audit_logs(station_id);
 CREATE INDEX IF NOT EXISTS idx_params_active ON station_params(station_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_alerts_ack ON alerts(acknowledged);
+CREATE INDEX IF NOT EXISTS idx_vehicles_status ON vehicles(status);
+CREATE INDEX IF NOT EXISTS idx_vehicles_district ON vehicles(current_district);

@@ -18,6 +18,7 @@ _COLUMNS = [
     "estimated_travel_minutes", "estimated_work_minutes", "estimated_total_minutes",
     "estimated_distance_km", "estimated_fuel_cost", "route_map_url",
     "source_override_station_id", "cancel_reason", "cancelled_by", "assigned_at",
+    "district", "assigned_vehicle",   # ADR-114：這趟任務的行政區 + 指派的調度車
 ]
 
 

@@ -71,7 +71,24 @@ def get_connection() -> sqlite3.Connection:
 
 def _init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA_PATH.read_text(encoding="utf-8"))
+    _apply_migrations(conn)
     conn.commit()
+
+
+# 輕量 migration：既有 DB 的表已存在，schema.sql 的 IF NOT EXISTS 不會補新欄位，
+# 這裡用 PRAGMA 檢查後 ADD COLUMN（SQLite 無 ADD COLUMN IF NOT EXISTS）。冪等、重跑安全。
+_MIGRATIONS = [
+    ("operators", "current_district", "TEXT"),   # ADR-114
+    ("tasks", "district", "TEXT"),               # ADR-114
+    ("tasks", "assigned_vehicle", "TEXT"),       # ADR-114
+]
+
+
+def _apply_migrations(conn: sqlite3.Connection) -> None:
+    for table, col, coltype in _MIGRATIONS:
+        cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if col not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}")
 
 
 def init_db() -> None:

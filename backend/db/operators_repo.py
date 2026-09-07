@@ -123,10 +123,34 @@ def set_password(operator_id: str, password: str) -> bool:
     return cur.rowcount > 0
 
 
+# ── ADR-114：動態 current_district（隨任務指派變動，非綁定責任區）──
+def assign_district(operator_id: str, district: str, task_id: Optional[str] = None) -> bool:
+    """指派時回寫調度員當前作業行政區（+任務），狀態轉 busy。回傳是否有更新到。"""
+    conn = get_connection()
+    cur = conn.execute(
+        """UPDATE operators SET current_district = ?, current_task_id = ?,
+           status = 'busy', updated_at = ? WHERE operator_id = ?""",
+        (district, task_id, _now(), operator_id))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def clear_assignment(operator_id: str) -> bool:
+    """任務結束：清空 current_district/current_task_id，狀態回 on_duty。回傳是否有更新到。"""
+    conn = get_connection()
+    cur = conn.execute(
+        """UPDATE operators SET current_district = NULL, current_task_id = NULL,
+           status = 'on_duty', updated_at = ? WHERE operator_id = ?""",
+        (_now(), operator_id))
+    conn.commit()
+    return cur.rowcount > 0
+
+
 def seed_default_operators() -> None:
     """種入 3 個預設帳號（開發/Demo 用）。已存在則跳過。
 
     取代 auth.py 原本寫死的測試帳號。預設密碼供 Demo 登入，正式應改。
+    OP-001~003 為具名登入帳號（有角色/密碼）；大量調度員清單見 seed_dispatch_operators()。
     """
     defaults = [
         ("OP-001", "王小明", "operator", "youbike-op"),
@@ -139,3 +163,20 @@ def seed_default_operators() -> None:
             "SELECT 1 FROM operators WHERE operator_id = ?", (oid,)).fetchone()
         if not exists:
             create_operator(oid, name, role, pw)
+
+
+def seed_dispatch_operators(total: int = 350) -> None:
+    """種入調度員清單（ADR-114：官方 350 名，純流水號無真名）。已存在則跳過。
+
+    OP-001~003 由 seed_default_operators() 建為具名登入帳號；本函式補到 total 名
+    （OP-004 ~ OP-{total}），role=operator、無密碼（純調度人力，非登入帳號）。
+    name 用流水號字串（無真實人名）。seed 只是開發/demo 起始值，未來由 YouBike 人力 API 覆蓋。
+    """
+    conn = get_connection()
+    for i in range(1, total + 1):
+        oid = f"OP-{i:03d}"
+        exists = conn.execute(
+            "SELECT 1 FROM operators WHERE operator_id = ?", (oid,)).fetchone()
+        if not exists:
+            # 純流水號人力（無真名、無密碼、無登入權限），僅供調度指派用
+            create_operator(oid, name=oid, role="operator", password=None)
