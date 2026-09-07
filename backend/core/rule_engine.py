@@ -61,8 +61,14 @@ def evaluate_station(
     station: dict,
     prediction: Optional[PredictionInterval],
     config: Optional[dict] = None,
+    multi=None,
 ) -> Optional[dict]:
-    """判斷單站是否需要調度。需要則回一筆建議 dict，否則回 None。"""
+    """判斷單站是否需要調度。需要則回一筆建議 dict，否則回 None。
+
+    prediction：觸發判斷用的單視野區間（依調度員響應時間挑的視野）。
+    multi：（可選）MultiHorizonPrediction，用來補齊 4 視野 arrival_by_horizon（前端趨勢圖）
+           並掃出「最早穿透邊界的視野」（ADR-107/111/113）。
+    """
     cfg = config or get_config()
     trig = cfg["trigger"]
     target = cfg["target"]
@@ -153,9 +159,22 @@ def evaluate_station(
         quantity = max(1, round(available - target_available))
     quantity = int(min(quantity, fleet["每車容量"]))
 
-    # 各視野到達存量（前端趨勢圖用）——單視野時只有當前 horizon；多視野待接真實 predictor
+    # 各視野到達存量（前端趨勢圖用）：有 multi 就補齊 4 視野；否則只填當前 horizon
     arrival_by_horizon = {}
-    if prediction is not None:
+    if multi is not None and getattr(multi, "intervals", None):
+        for iv in sorted(multi.intervals, key=lambda x: x.horizon_minutes):
+            arrival_by_horizon[str(iv.horizon_minutes)] = round(float(iv.raw_predicted), 1)
+        # 掃最早穿透邊界的視野（ADR-111：raw 穿底/穿頂），比單一響應視野更完整
+        earliest = None
+        for iv in sorted(multi.intervals, key=lambda x: x.horizon_minutes):
+            lo = iv.raw_lower_bound if iv.raw_lower_bound is not None else iv.lower_bound
+            hi = iv.raw_upper_bound if iv.raw_upper_bound is not None else iv.upper_bound
+            if (lo is not None and lo < 0) or (hi is not None and hi > total):
+                earliest = iv.horizon_minutes
+                break
+        if earliest is not None:
+            breach_horizon_min = earliest
+    elif prediction is not None:
         arrival_by_horizon[str(prediction.horizon_minutes)] = round(
             float(prediction.raw_predicted), 1)
 
@@ -181,11 +200,18 @@ def generate_recommendations(
 
     out = []
     for st in stations:
+        interval = None
+        multi = None
         try:
-            interval = pred.predict(st, horizon)
+            # 有 predict_multi（真實 LightGBM）就一次拿 4 視野；觸發用最接近響應時間的視野
+            if hasattr(pred, "predict_multi"):
+                multi = pred.predict_multi(st)
+                interval = multi.for_horizon(horizon)
+            else:
+                interval = pred.predict(st, horizon)
         except NotImplementedError:
             interval = None   # 預測不可用 → 走降級
-        rec = evaluate_station(st, interval, cfg)
+        rec = evaluate_station(st, interval, cfg, multi=multi)
         if rec is not None:
             out.append(rec)
     return out

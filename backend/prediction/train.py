@@ -281,6 +281,55 @@ def run_full_training(df, tuned=False):
     print("\n註：超參數為未調參預設值(ADR-002)；覆蓋率校準待 P2 conformal", flush=True)
 
 
+def run_train_save(df):
+    """ADR-113：訓練上線模型並序列化存檔（4 視野 × P10/P50/P90 = 12 個 booster）。
+
+    ★上線模型用全部資料（1~6 月）訓練（不留驗證集；驗證已在 full 模式做過）。
+    存到 backend/prediction/_models/：每個 booster 一個 .txt + meta.json（特徵欄順序/超參數/視野）。
+    即時預測（LightGBMPredictor）載入這些檔，不重訓。
+    """
+    import lightgbm as lgb
+    import json
+    from prediction.feature_pipeline import HORIZON_STEPS
+    outdir = Path(__file__).parent / "_models"
+    outdir.mkdir(exist_ok=True)
+
+    print("[1/2] 組裝全量特徵（含所有採用因子）...", flush=True)
+    # 上線模型用全部資料訓練：train_end 設未來日期，讓全部列都是 is_train==1
+    frame, feat_cols = build_training_frame(
+        df, "2026-12-31", with_weather=True, with_poi=True,
+        with_profile=True, with_terrain=True)
+    print(f"      特徵數={len(feat_cols)}｜列數={len(frame):,}", flush=True)
+
+    print("[2/2] 訓練 + 序列化 12 個 booster（4 視野 × 3 分位數）...", flush=True)
+    saved = []
+    for h, mins in HORIZON_STEPS.items():
+        tgt = f"target_delta_{mins}"
+        sub = frame.dropna(subset=[tgt])
+        clean = sub[(sub["is_censored"] == 0) & (sub["is_rebalancing"] == 0)]
+        X = clean[feat_cols].astype(float)
+        y = clean[tgt].astype(float)
+        for q, alpha in [("p10", 0.10), ("p50", 0.50), ("p90", 0.90)]:
+            m = lgb.LGBMRegressor(objective="quantile", alpha=alpha, verbose=-1, **TUNED_PARAMS)
+            m.fit(X, y)
+            fn = outdir / f"model_{mins}_{q}.txt"
+            m.booster_.save_model(str(fn))
+            saved.append(fn.name)
+        print(f"      視野 {mins} 分完成（p10/p50/p90）", flush=True)
+
+    meta = {
+        "feature_cols": feat_cols,          # ★特徵欄順序（即時預測組裝要對齊）
+        "horizons": list(HORIZON_STEPS.values()),
+        "quantiles": {"p10": 0.10, "p50": 0.50, "p90": 0.90},
+        "tuned_params": TUNED_PARAMS,
+        "train_rows": int(len(frame)),
+        "note": "ADR-113 上線模型;全量1-6月訓練;quantile;截斷+調度異常排除",
+    }
+    (outdir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2),
+                                      encoding="utf-8")
+    print(f"完成：{len(saved)} 個 booster + meta.json 存於 {outdir}", flush=True)
+
+
 def run_tuning(df, n_trials=20):
     """ADR-110：時序 CV 超參數優化（隨機搜尋，無新依賴）。
 
@@ -367,9 +416,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sample", type=int, default=None, help="只取前 N 站快速驗證")
     ap.add_argument("--weather", action="store_true", help="併入天氣因子（消融對比用）")
-    ap.add_argument("--mode", choices=["ablation", "weight", "full", "tune"], default="ablation",
+    ap.add_argument("--mode", choices=["ablation", "weight", "full", "tune", "train_save"], default="ablation",
                     help="ablation=因子消融 / weight=樣本權重對比 / full=正式訓練 / "
-                         "tune=ADR-110 時序CV超參數優化")
+                         "tune=ADR-110 時序CV超參數優化 / train_save=ADR-113 訓練並序列化上線模型")
     ap.add_argument("--tuned", action="store_true", help="full 模式用 ADR-110 調參後最佳超參數")
     ap.add_argument("--factor", choices=["weather", "holiday", "dayoff", "poi", "profile", "terrain"], default="holiday",
                     help="ablation 模式要測的因子：weather=天氣 / holiday=非週末假日(加料) / "
@@ -448,6 +497,11 @@ def main():
     # ===== ADR-110：時序 CV 超參數優化 =====
     if args.mode == "tune":
         run_tuning(df)
+        return
+
+    # ===== ADR-113：訓練並序列化上線模型 =====
+    if args.mode == "train_save":
+        run_train_save(df)
         return
 
     # 依 --factor 決定本輪消融的因子（名稱 + build_training_frame 的開關）

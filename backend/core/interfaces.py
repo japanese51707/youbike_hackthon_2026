@@ -127,6 +127,155 @@ class MockPredictor:
         )
 
 
+class LightGBMPredictor:
+    """ADR-113 真實 LightGBM 即時預測：載入序列化模型 + 特徵組裝 + 多視野區間。
+
+    ★複用 build_training_frame 的特徵邏輯（訓練/推論一致，防 train-serving skew）。
+    ★做法 B（黑客松階段）：近期歷史序列取自 historical 源（S3），接當下即時快照組 lag；
+      上線時序列來源可換成即時累積快照（可抽換，ADR-006/113），特徵定義不變。
+
+    輸出到達存量 = 現況可借 + 模型預測Δ；出 raw(照實不夾)+bound(夾[0,總柱])兩套（ADR-111）。
+    """
+    _MODELS = None   # 類層級快取：{ (mins, quantile): booster }
+    _META = None
+
+    def __init__(self):
+        if LightGBMPredictor._MODELS is None:
+            self._load_models()
+
+    @classmethod
+    def _load_models(cls):
+        import json
+        import lightgbm as lgb
+        from pathlib import Path
+        mdir = Path(__file__).parent.parent / "prediction" / "_models"
+        meta_p = mdir / "meta.json"
+        if not meta_p.exists():
+            raise FileNotFoundError(
+                f"找不到序列化模型 {meta_p}。請先跑 train.py --mode train_save 產生。")
+        cls._META = json.loads(meta_p.read_text(encoding="utf-8"))
+        cls._MODELS = {}
+        for mins in cls._META["horizons"]:
+            for q in cls._META["quantiles"]:
+                fn = mdir / f"model_{mins}_{q}.txt"
+                cls._MODELS[(mins, q)] = lgb.Booster(model_file=str(fn))
+
+    def predict(self, station: dict, horizon_minutes: int = 30) -> "PredictionInterval":
+        """單視野預測（相容舊介面）：回最接近 horizon 的視野區間。"""
+        multi = self.predict_multi(station)
+        return multi.for_horizon(horizon_minutes)
+
+    def predict_multi(self, station: dict) -> "MultiHorizonPrediction":
+        """多視野預測（ADR-113）：回 4 視野 × P10/P50/P90（raw+bound）。"""
+        feat_row = self._build_feature_row(station)   # 1×45 特徵（對齊 meta.feature_cols）
+        total = float(station.get("total_docks", 1)) or 1.0
+        available = float(station.get("available_bikes", 0) or 0)
+        intervals = []
+        for mins in self._META["horizons"]:
+            # 模型出的是「淨變化 Δ」的分位數；到達存量 = 現況 + Δ
+            d10 = float(self._MODELS[(mins, "p10")].predict(feat_row)[0])
+            d50 = float(self._MODELS[(mins, "p50")].predict(feat_row)[0])
+            d90 = float(self._MODELS[(mins, "p90")].predict(feat_row)[0])
+            raw_lo, raw_mid, raw_hi = available + d10, available + d50, available + d90
+            intervals.append(PredictionInterval(
+                predicted_available=round(max(0.0, min(total, raw_mid)), 1),
+                lower_bound=round(max(0.0, min(total, raw_lo)), 1),
+                upper_bound=round(max(0.0, min(total, raw_hi)), 1),
+                horizon_minutes=mins, source="lightgbm",
+                raw_lower_bound=round(raw_lo, 1),
+                raw_upper_bound=round(raw_hi, 1),
+                raw_predicted=round(raw_mid, 1),
+            ))
+        return MultiHorizonPrediction(
+            station_id=str(station.get("station_id", "")), intervals=intervals)
+
+    def _build_feature_row(self, station: dict):
+        """組單站當下的 45 維特徵（複用 build_training_frame，訓練/推論一致）。
+
+        做法 B：從 historical 源取該站近期序列，接當下即時快照為最新一列，
+        跑特徵管線取「當下即時快照那一列」的特徵。
+        """
+        import numpy as np
+        import pandas as pd
+        feat_cols = self._META["feature_cols"]
+        recent = self._recent_series(station)   # 已含中文欄位 + 當下快照為末列
+        if recent is None or recent.empty:
+            # 無序列時退回：lag 類用 NaN（LightGBM 容忍缺值），仍能出預測（degraded）
+            row = pd.DataFrame([{c: np.nan for c in feat_cols}])
+            row["available_bikes"] = float(station.get("available_bikes", 0) or 0)
+            row["available_docks"] = float(station.get("available_docks", 0) or 0)
+            row["total_docks"] = float(station.get("total_docks", 0) or 0)
+            for c in feat_cols:
+                if c not in row.columns:
+                    row[c] = np.nan
+            return row[feat_cols].astype(float).values
+        from prediction.feature_pipeline import build_training_frame
+        # train_end 設未來 → 全部列都是訓練期（站點識別特徵/周轉量正常算得出）
+        frame, _cols = build_training_frame(
+            recent, "2026-12-31", with_weather=True, with_poi=True,
+            with_profile=True, with_terrain=True)
+        # 取「當下即時快照」對應的那一列（末列 dt 最大）
+        last = frame.sort_values("dt").iloc[[-1]]
+        # 補齊模型期待但 frame 缺的欄（極少數，容錯）
+        for c in feat_cols:
+            if c not in last.columns:
+                last[c] = np.nan
+        return last[feat_cols].astype(float).values
+
+    def _recent_series(self, station: dict):
+        """取該站近期歷史序列 + 當下即時快照，組成 build_training_frame 期待的中文欄位格式（做法 B）。
+
+        - 歷史序列來自 historical 源（S3，英文標準欄位）→ 轉回中文欄位（場站名稱/日期/可借車數…）。
+        - 當下即時快照（station dict）以「歷史序列末時點 + 30 分」為時間戳，接為最新一列，
+          讓 lag 特徵（前 30 分/1 時…）以當下為基準往回取。
+        - 上線時「歷史序列來源」可換成即時累積快照（可抽換，ADR-006/113），本方法邏輯不變。
+        """
+        import pandas as pd
+        sid = str(station.get("station_id", ""))
+        try:
+            from core.data.historical import HistoricalDataSource
+            hist = HistoricalDataSource()
+            rows = hist.get_history(sid)
+        except Exception:
+            rows = None
+        if not rows:
+            return None
+
+        # 英文標準欄位 → build_training_frame 期待的中文欄位
+        def _to_cn(r: dict) -> dict:
+            return {
+                "場站名稱": r.get("station_name", sid),
+                "日期": r.get("timestamp"),
+                "可借車數": r.get("available_bikes", 0),
+                "可還位數": r.get("available_docks", 0),
+                "總車柱數": r.get("total_docks", 0),
+                "經度": r.get("lng", 0.0),
+                "緯度": r.get("lat", 0.0),
+                "行政區": r.get("district", ""),
+            }
+
+        recs = [_to_cn(r) for r in rows]
+        df = pd.DataFrame(recs)
+        df["日期"] = pd.to_datetime(df["日期"])
+        df = df.sort_values("日期")
+
+        # 接當下即時快照為最新一列（時間戳 = 歷史末時點 + 30 分，對齊 30 分格）
+        last_ts = df["日期"].iloc[-1]
+        now_ts = last_ts + pd.Timedelta(minutes=30)
+        snap = {
+            "場站名稱": station.get("station_name", df["場站名稱"].iloc[-1]),
+            "日期": now_ts,
+            "可借車數": station.get("available_bikes", 0),
+            "可還位數": station.get("available_docks", 0),
+            "總車柱數": station.get("total_docks", df["總車柱數"].iloc[-1]),
+            "經度": station.get("lng", df["經度"].iloc[-1]),
+            "緯度": station.get("lat", df["緯度"].iloc[-1]),
+            "行政區": station.get("district", df["行政區"].iloc[-1]),
+        }
+        df = pd.concat([df, pd.DataFrame([snap])], ignore_index=True)
+        return df
+
+
 class MockUrgencyCalculator:
     """簡易緊急度：離安全緩衝越遠、站越小 → 越急。回 0~100。"""
 
@@ -213,9 +362,12 @@ class RealUrgencyCalculator:
         return round(score, 1)
 
 
-# 預設用 mock（A6 整合時改這裡指向 B 的實作）
+# 預設用真實 LightGBM（ADR-113）；序列化模型缺失時退回 mock（測試/無模型環境不中斷）
 def get_predictor() -> Predictor:
-    return MockPredictor()
+    try:
+        return LightGBMPredictor()
+    except FileNotFoundError:
+        return MockPredictor()
 
 
 def get_urgency_calculator() -> UrgencyCalculator:

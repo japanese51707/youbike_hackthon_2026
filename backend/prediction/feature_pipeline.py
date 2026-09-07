@@ -480,9 +480,13 @@ def build_training_frame(
         lo, hi = q.quantile(0.33), q.quantile(0.67)
     else:
         lo, hi = 0.0, 0.0
-    frame["confidence_tier"] = pd.cut(
-        frame["station_turnover"], bins=[-1, lo, hi, float("inf")],
-        labels=["low", "mid", "high"]).astype("string").fillna("low")
+    # 邊界不唯一時（站數少或周轉量退化，如即時單站推論）退回全部標 low，不中斷
+    if lo == hi:
+        frame["confidence_tier"] = "low"
+    else:
+        frame["confidence_tier"] = pd.cut(
+            frame["station_turnover"], bins=[-1, lo, hi, float("inf")],
+            labels=["low", "mid", "high"]).astype("string").fillna("low")
 
     feature_cols = [
         *LAG_SLOTS.keys(), "change_1hr", "change_2hr",
