@@ -588,6 +588,150 @@ body {
   font-size: 12px;
 }
 
+/* 司機手機端（手機優先、固定視窗、卡片式） */
+.driver-frame {
+  width: min(460px, 100%);
+  height: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.driver-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.driver-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #f1f5f9;
+}
+
+.driver-sub {
+  color: var(--ct-text-dim);
+  font-size: 12px;
+}
+
+.driver-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 2px;
+}
+
+.driver-card {
+  padding: 14px;
+  border: 1px solid var(--ct-border);
+  border-radius: 12px;
+  background: linear-gradient(160deg, var(--ct-panel) 0%, var(--ct-bg-soft) 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.driver-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.driver-dist {
+  margin-left: auto;
+  color: var(--ct-text-dim);
+  font-size: 12px;
+}
+
+.driver-card-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.driver-card-reason {
+  color: var(--ct-text-dim);
+  font-size: 13px;
+}
+
+.driver-route-total {
+  color: var(--ct-text-dim);
+  font-size: 12px;
+}
+
+.driver-route-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--ct-border);
+  border-radius: 10px;
+  background: var(--ct-bg-soft);
+}
+
+.driver-route-row.done {
+  opacity: 0.55;
+}
+
+.driver-route-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.driver-seq {
+  flex: none;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ct-primary);
+  color: #04120c;
+  font-family: var(--ct-mono);
+  font-weight: 800;
+}
+
+.driver-now {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--ct-border);
+  border-radius: 14px;
+  background: linear-gradient(160deg, var(--ct-panel) 0%, var(--ct-bg-soft) 100%);
+}
+
+.driver-now-action {
+  align-self: flex-start;
+  font-size: 14px;
+  padding: 2px 10px;
+}
+
+.driver-now-name {
+  font-size: 20px;
+  font-weight: 800;
+  color: #f1f5f9;
+}
+
+.driver-now-actions {
+  display: flex;
+  width: 100%;
+}
+
+.driver-now-actions > * {
+  flex: 1;
+}
+
+.driver-foot {
+  flex: none;
+}
+
 .planner-card {
   border: 1px solid var(--ct-border);
   background: var(--ct-panel);
@@ -683,12 +827,7 @@ body {
   font-size: 11px;
 }
 
-.operator-grid {
-  display: grid;
-  grid-template-columns: minmax(300px, 0.72fr) minmax(0, 1.4fr);
-  gap: 22px;
-  align-items: start;
-}
+/* 註：司機桌機頁已於 ADR-205 修訂中移除，司機僅手機端 `/driver`。 */
 
 .task-item {
   margin: 3px 0;

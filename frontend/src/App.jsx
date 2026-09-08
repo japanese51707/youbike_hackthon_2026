@@ -2,7 +2,7 @@ import { ConfigProvider, theme as antdTheme } from "antd";
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppShell from "./components/layout/AppShell.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
-import OperatorPage from "./pages/OperatorPage.jsx";
+import DriverPage from "./pages/DriverPage.jsx";
 import OverviewPage from "./pages/OverviewPage.jsx";
 
 // 數位孿生戰情室深色主題（ADR-204）：Slate 深藍灰底 + 亮綠主色 + 系統等寬字體。
@@ -28,7 +28,7 @@ export default function App() {
       <AppShell>
         <Routes>
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/operator" element={<OperatorPage />} />
+          <Route path="/driver" element={<DriverPage />} />
           <Route path="/overview" element={<OverviewPage />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

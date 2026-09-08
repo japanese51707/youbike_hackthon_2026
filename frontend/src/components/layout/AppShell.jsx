@@ -1,7 +1,7 @@
 import {
   BarChartOutlined,
-  CarOutlined,
   DashboardOutlined,
+  MobileOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Space, Tag, Typography, message } from "antd";
@@ -10,7 +10,7 @@ import { resetDemoData } from "../../api/operationsApi.js";
 
 const navigation = [
   { key: "/dashboard", icon: <DashboardOutlined />, label: "調度面板" },
-  { key: "/operator", icon: <CarOutlined />, label: "司機面板" },
+  { key: "/driver", icon: <MobileOutlined />, label: "司機手機端" },
   { key: "/overview", icon: <BarChartOutlined />, label: "長官導覽面板" },
 ];
 
