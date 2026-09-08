@@ -14,8 +14,13 @@ import {
   Typography,
   message,
 } from "antd";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import AsyncState from "../components/common/AsyncState.jsx";
+import SharedMap from "../components/map/SharedMap.jsx";
+import {
+  createPlanRouteLayers,
+  createVehicleLayer,
+} from "../components/map/layers/planLayers.js";
 import useDriverData from "../hooks/useDriverData.js";
 import { sequenceDriverRoute } from "../utils/dispatchPlanner.js";
 import { haversineKm } from "../utils/geo.js";
@@ -39,6 +44,18 @@ function toStop(rec) {
 function navUrl(from, to) {
   if (!from || !to) return null;
   return `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}&travelmode=driving`;
+}
+
+// 整條路線導航：起點→各停靠點(途經點)→終點，僅帶公開座標。
+function fullNavUrl(from, route) {
+  if (!from || !Array.isArray(route) || !route.length) return null;
+  const dest = route[route.length - 1];
+  const mids = route.slice(0, -1);
+  const base = `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${dest.lat},${dest.lng}&travelmode=driving`;
+  const waypoints = mids.length
+    ? `&waypoints=${mids.map((s) => `${s.lat},${s.lng}`).join("|")}`
+    : "";
+  return base + waypoints;
 }
 
 export default function DriverPage() {
@@ -76,6 +93,19 @@ export default function DriverPage() {
 
   const currentStop =
     plan.route.find((stop) => !completedIds.includes(stop.station_id)) ?? null;
+
+  const routeLayers = useMemo(() => {
+    if (!start || !plan.route.length) return [];
+    return [
+      ...createPlanRouteLayers({ start, route: plan.route }),
+      createVehicleLayer({ start }),
+    ].filter(Boolean);
+  }, [plan.route, start]);
+
+  const routeTooltip = useCallback(({ object }) => {
+    if (!object?.station_name) return null;
+    return { text: `${object.action} ${object.quantity} 台\n${object.station_name}` };
+  }, []);
 
   const accept = (rec) => {
     setAcceptedIds((ids) => [...ids, rec.recommendation_id]);
@@ -162,6 +192,29 @@ export default function DriverPage() {
               {mode === "route" ? (
                 plan.route.length ? (
                   <>
+                    <div className="driver-map">
+                      <SharedMap
+                        ariaLabel="司機總路線規劃地圖"
+                        className="map-fill"
+                        initialViewState={{
+                          longitude: start.lng,
+                          latitude: start.lat,
+                          zoom: 12,
+                        }}
+                        layers={routeLayers}
+                        getTooltip={routeTooltip}
+                      />
+                    </div>
+                    <Button
+                      block
+                      size="large"
+                      icon={<CompassOutlined />}
+                      href={fullNavUrl(start, plan.route)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      整條路線 Google Maps 導航
+                    </Button>
                     <div className="driver-route-total mono">
                       共 {plan.route.length} 站｜總距離 {plan.totalDistanceKm} km（示意）
                     </div>
