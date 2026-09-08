@@ -1,4 +1,3 @@
-import { Card } from "antd";
 import ReactECharts from "echarts-for-react";
 
 const AXIS_COLOR = "#8ea0b5";
@@ -9,8 +8,11 @@ const darkTooltip = {
   textStyle: { color: "#e5ecf5" },
 };
 
-export default function OverviewCharts({ overview, simulation }) {
-  const operatorOption = {
+const FILL = { height: "100%", width: "100%" };
+
+// 調度人力狀態圓餅（bare chart，填滿容器）
+export function OperatorPieChart({ overview }) {
+  const option = {
     backgroundColor: "transparent",
     textStyle: { color: "#cbd5e1" },
     tooltip: { trigger: "item", ...darkTooltip },
@@ -20,7 +22,7 @@ export default function OverviewCharts({ overview, simulation }) {
         name: "人力狀態",
         type: "pie",
         radius: ["42%", "70%"],
-        center: ["50%", "44%"],
+        center: ["50%", "45%"],
         label: { color: "#cbd5e1" },
         data: [
           { name: "執行中", value: overview.operators.busy },
@@ -31,8 +33,12 @@ export default function OverviewCharts({ overview, simulation }) {
       },
     ],
   };
+  return <ReactECharts option={option} style={FILL} />;
+}
 
-  const simulationOption = {
+// Before / After 模擬成果長條（bare chart，填滿容器）
+export function SimulationChart({ simulation }) {
+  const option = {
     backgroundColor: "transparent",
     textStyle: { color: "#cbd5e1" },
     tooltip: { trigger: "axis", ...darkTooltip },
@@ -66,15 +72,5 @@ export default function OverviewCharts({ overview, simulation }) {
       { name: "本系統模擬", type: "bar", data: simulation["本系統模擬"], itemStyle: { color: "#38d9a9" } },
     ],
   };
-
-  return (
-    <div className="chart-grid">
-      <Card title="調度人力狀態">
-        <ReactECharts option={operatorOption} style={{ height: 300 }} />
-      </Card>
-      <Card title="Before / After 模擬成果">
-        <ReactECharts option={simulationOption} style={{ height: 300 }} />
-      </Card>
-    </div>
-  );
+  return <ReactECharts option={option} style={FILL} />;
 }

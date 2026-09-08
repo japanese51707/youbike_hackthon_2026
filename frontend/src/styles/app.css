@@ -851,6 +851,333 @@ body {
 
 /* 註：司機桌機頁已於 ADR-205 修訂中移除，司機僅手機端 `/driver`。 */
 
+/* 長官導覽：分類統計卡（icon + 主數字 + 次要 + 點開細節） */
+.summary-grid {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.summary-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  text-align: left;
+  border: 1px solid var(--ct-border);
+  border-radius: 12px;
+  background: linear-gradient(160deg, var(--ct-panel) 0%, var(--ct-bg-soft) 100%);
+  color: var(--ct-text);
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.summary-card::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--ct-primary);
+  content: "";
+}
+
+.summary-info::before { background: #4dabf7; }
+.summary-danger::before { background: var(--ct-danger); }
+.summary-warning::before { background: var(--ct-warning); }
+
+.summary-card:hover {
+  border-color: var(--ct-primary);
+  transform: translateY(-1px);
+}
+
+.summary-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ct-text-dim);
+  font-size: 13px;
+}
+
+.summary-icon {
+  font-size: 16px;
+  color: var(--ct-primary);
+}
+
+.summary-info .summary-icon { color: #4dabf7; }
+.summary-danger .summary-icon { color: var(--ct-danger); }
+.summary-warning .summary-icon { color: var(--ct-warning); }
+
+.summary-primary {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #f1f5f9;
+}
+
+.summary-suffix {
+  font-size: 13px;
+  color: var(--ct-text-dim);
+  font-weight: 600;
+}
+
+.summary-primary-label {
+  font-size: 12px;
+  color: var(--ct-text-dim);
+}
+
+.summary-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ct-text-dim);
+}
+
+.summary-item b {
+  color: #e5ecf5;
+}
+
+.summary-more {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ct-primary);
+}
+
+@media (max-width: 1100px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 長官導覽：服務水準頭條（達標燈號、可點開） */
+.service-headline {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.service-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  text-align: left;
+  border: 1px solid var(--ct-border);
+  border-radius: 12px;
+  background: linear-gradient(160deg, var(--ct-panel) 0%, var(--ct-bg-soft) 100%);
+  color: var(--ct-text);
+  cursor: pointer;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.service-stat:hover {
+  border-color: var(--ct-primary);
+  transform: translateY(-1px);
+}
+
+.service-stat-label {
+  color: var(--ct-text-dim);
+  font-size: 13px;
+}
+
+.service-stat-value {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #f1f5f9;
+}
+
+.service-stat-suffix {
+  font-size: 13px;
+  color: var(--ct-text-dim);
+  font-weight: 600;
+}
+
+.service-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.service-badge.ok {
+  color: #69db7c;
+}
+
+.service-badge.warn {
+  color: #ff6b6b;
+}
+
+@media (max-width: 1100px) {
+  .service-headline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 長官導覽面板無捲動：成效圖 / 熱點分頁 兩欄並排（AI 助理改為右下角浮動小籤） */
+.overview-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr);
+  gap: 14px;
+}
+
+.overview-main > .ant-card {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 成效圖填滿其卡，不內捲 */
+.overview-hero > .ant-card-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.overview-pie {
+  height: 200px;
+}
+
+/* AI 營運助理（Demo 規則型）：右下角浮動小籤 → 點開浮出面板 */
+.assistant-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(145deg, #69db7c, #38d9a9);
+  color: #04120c;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(56, 217, 169, 0.4);
+  transition: transform 160ms ease;
+}
+
+.assistant-fab:hover {
+  transform: translateY(-2px);
+}
+
+.assistant-float {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1200;
+  width: min(380px, calc(100vw - 32px));
+  height: min(70vh, 560px);
+}
+
+.assistant-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.assistant {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid var(--ct-border);
+  border-radius: 14px;
+  background: linear-gradient(160deg, var(--ct-panel) 0%, var(--ct-bg-soft) 100%);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
+}
+
+.assistant-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.assistant-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.assistant-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.assistant-msg {
+  max-width: 92%;
+  padding: 8px 11px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.assistant-assistant {
+  align-self: flex-start;
+  background: rgba(56, 217, 169, 0.12);
+  border: 1px solid rgba(56, 217, 169, 0.25);
+  color: #e5ecf5;
+}
+
+.assistant-user {
+  align-self: flex-end;
+  background: rgba(77, 171, 247, 0.15);
+  border: 1px solid rgba(77, 171, 247, 0.3);
+  color: #f1f5f9;
+}
+
+.assistant-suggestions {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.assistant-chip {
+  cursor: pointer;
+  margin: 0;
+}
+
+.assistant-input {
+  flex: none;
+  display: flex;
+  gap: 6px;
+}
+
+.assistant-foot {
+  flex: none;
+  margin-top: 6px;
+  color: var(--ct-text-dim);
+  font-size: 10px;
+}
+
+@media (max-width: 820px) {
+  .overview-main {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+}
+
 .task-item {
   margin: 3px 0;
   padding-inline: 10px !important;
