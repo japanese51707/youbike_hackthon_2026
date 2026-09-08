@@ -78,6 +78,7 @@ superseded-by:
 | ADR-202 | ADR-102（前端） | MapLibre-DeckGL-OpenFreeMap 地圖架構 |
 | ADR-203 | ADR-103（前端） | Past-Live-Predict 時序契約 |
 | ADR-204 | ADR-104（前端） | 數位孿生戰情室設計語言與暗色底圖 |
+| ADR-205 | （新增） | 四頁角色導向資訊架構與無捲動版面 |
 
 **ADR-3xx（平台／部署／資安／API 契約）**：目前尚無，從 ADR-301 起。
 
