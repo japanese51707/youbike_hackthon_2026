@@ -9,9 +9,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { resetDemoData } from "../../api/operationsApi.js";
 
 const navigation = [
-  { key: "/dashboard", icon: <DashboardOutlined />, label: "調度儀表板" },
-  { key: "/operator", icon: <CarOutlined />, label: "調度員任務" },
-  { key: "/overview", icon: <BarChartOutlined />, label: "營運總覽" },
+  { key: "/dashboard", icon: <DashboardOutlined />, label: "調度面板" },
+  { key: "/operator", icon: <CarOutlined />, label: "司機面板" },
+  { key: "/overview", icon: <BarChartOutlined />, label: "長官導覽面板" },
 ];
 
 export default function AppShell({ children }) {

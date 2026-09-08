@@ -48,17 +48,12 @@ function RankRow({ station, metricLabel, metricValue, tone, onFocus }) {
   );
 }
 
-export default function DeficitRankingPanel({ stations, onFocus }) {
+export default function DeficitRankingPanel({ stations, onFocus, embedded = false }) {
   const deficit = useMemo(() => rankDeficit(stations), [stations]);
   const surplus = useMemo(() => rankSurplus(stations), [stations]);
 
-  return (
-    <Card
-      className="ranking-panel"
-      title="缺口 / 溢出排行榜"
-      extra={<Tag>目前狀態</Tag>}
-    >
-      <div className="ranking-columns">
+  const body = (
+    <div className="ranking-columns">
         <div>
           <div className="ranking-heading">
             <Tag color="red">缺車待補</Tag>
@@ -98,6 +93,12 @@ export default function DeficitRankingPanel({ stations, onFocus }) {
           )}
         </div>
       </div>
+  );
+
+  if (embedded) return body;
+  return (
+    <Card className="ranking-panel" title="缺口 / 溢出排行榜" extra={<Tag>目前狀態</Tag>}>
+      {body}
     </Card>
   );
 }

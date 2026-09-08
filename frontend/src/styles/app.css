@@ -40,7 +40,10 @@ body {
 }
 
 .app-shell {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
   background: transparent;
 }
 
@@ -54,9 +57,9 @@ body {
 }
 
 .topbar {
-  position: sticky;
+  position: relative;
   z-index: 1000;
-  top: 0;
+  flex: none;
   display: grid;
   grid-template-columns: minmax(230px, 0.8fr) minmax(430px, 1.4fr) minmax(190px, 0.7fr);
   align-items: center;
@@ -114,16 +117,115 @@ body {
   font-weight: 600;
 }
 
+.mock-notice {
+  flex: none;
+}
+
 .page-content {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  margin: 0 auto;
+  padding: 18px 24px;
+  overflow-y: auto;
+}
+
+/* 捲動型頁面（司機桌機/長官，尚未改為無捲動）內容置中限寬 */
+.scroll-page {
   width: min(1500px, 100%);
   margin: 0 auto;
-  padding: 30px;
+}
+
+/* 無捲動固定視窗頁（ADR-205）：填滿內容區、內部不產生頁面捲軸 */
+.fixed-page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dashboard-toolbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.dashboard-toolbar h2.ant-typography {
+  margin: 0;
+  color: #f1f5f9;
+  letter-spacing: -0.02em;
+}
+
+.dashboard-kpis {
+  flex: none;
+}
+
+.dashboard-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(340px, 1fr);
+  gap: 14px;
+}
+
+.dashboard-map,
+.dashboard-side {
+  min-height: 0;
+}
+
+.dashboard-map {
+  height: 100%;
+}
+
+.dashboard-map .map-card,
+.dashboard-map .shared-map,
+.dashboard-map .map-fill {
+  height: 100%;
+}
+
+.dashboard-side {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-side .ant-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.dashboard-side .ant-card-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dashboard-side .ant-tabs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-side .ant-tabs-content-holder {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .page-stack {
   display: flex;
   flex-direction: column;
   gap: 22px;
+  width: min(1500px, 100%);
+  margin: 0 auto;
 }
 
 .page-heading {

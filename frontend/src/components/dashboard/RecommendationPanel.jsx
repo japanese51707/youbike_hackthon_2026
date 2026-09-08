@@ -14,7 +14,12 @@ import { useState } from "react";
 
 const priorityColors = { high: "red", medium: "orange", low: "blue" };
 
-export default function RecommendationPanel({ recommendations, onConfirm, onFocus }) {
+export default function RecommendationPanel({
+  recommendations,
+  onConfirm,
+  onFocus,
+  embedded = false,
+}) {
   const [preview, setPreview] = useState(null);
   const [confirming, setConfirming] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
@@ -33,8 +38,8 @@ export default function RecommendationPanel({ recommendations, onConfirm, onFocu
     }
   };
 
-  return (
-    <Card title="調度建議" extra={<Tag>{recommendations.length} 筆</Tag>}>
+  const body = (
+    <>
       {contextHolder}
       <List
         dataSource={recommendations}
@@ -97,6 +102,13 @@ export default function RecommendationPanel({ recommendations, onConfirm, onFocu
           </Descriptions>
         ) : null}
       </Modal>
+    </>
+  );
+
+  if (embedded) return body;
+  return (
+    <Card title="調度建議" extra={<Tag>{recommendations.length} 筆</Tag>}>
+      {body}
     </Card>
   );
 }
