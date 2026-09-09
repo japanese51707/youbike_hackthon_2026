@@ -57,6 +57,48 @@ def _mk_rec(station: dict, action: str, quantity: int, reason: str,
     }
 
 
+def _dynamic_target_available(
+    action: str, total: float, available: float, target: dict, multi=None,
+) -> float:
+    """ADR-115：動態目標水位——補/抽到「能吸收後續 60 分最悲觀淨流量」的水位。
+
+    補車（防空）看 P10（悲觀流出）；抽車（防滿）看 P90（樂觀流入）。用比例緩衝當底線
+    （隨站大小縮放），再夾 80/20 護欄。無 multi/無視野時退回固定 預設借用率百分比（降級）。
+    回傳「目標存量（台）」。
+    """
+    fixed = total * float(target.get("預設借用率百分比", 50)) / 100.0
+
+    # 取「撐到視野」（預設 60 分）的累積 Δ = 該視野 raw 界 − 現況
+    view_min = int(target.get("目標水位_視野分鐘", 60))
+    iv = None
+    if multi is not None and getattr(multi, "intervals", None):
+        iv = multi.for_horizon(view_min)
+    if iv is None:
+        return fixed   # 降級：無多視野 → 固定水位（行為同現況）
+
+    # 安全底線：優先用比例（隨站大小縮放）；無柱數資料才退回固定台數 fallback
+    ratio = float(target.get("安全緩衝_比例", 0.12))
+    if total > 0:
+        base = total * ratio
+    else:
+        base = float(target.get("安全緩衝_台數", 2))
+
+    if action == "補車":
+        cum_delta_p10 = float(iv.raw_lower_bound) - available   # 悲觀累積淨流出（通常為負）
+        後續最大流出 = abs(min(0.0, cum_delta_p10))
+        target_raw = base + 後續最大流出
+    else:  # 取車
+        cum_delta_p90 = float(iv.raw_upper_bound) - available   # 樂觀累積淨流入（通常為正）
+        後續最大流入 = max(0.0, cum_delta_p90)
+        target_空位 = base + 後續最大流入
+        target_raw = total - target_空位
+
+    # 80/20 護欄（可配置）
+    lo = total * float(target.get("安全水位_下限", 0.20))
+    hi = total * float(target.get("安全水位_上限", 0.80))
+    return max(lo, min(hi, target_raw))
+
+
 def evaluate_station(
     station: dict,
     prediction: Optional[PredictionInterval],
@@ -151,8 +193,8 @@ def evaluate_station(
     if action is None:
         return None
 
-    # 數量：補/取到預設目標水位，單站不超過一車容量
-    target_available = total * float(target["預設借用率百分比"]) / 100
+    # 數量：補/取到「動態目標水位」（ADR-115），單站不超過一車容量
+    target_available = _dynamic_target_available(action, total, available, target, multi)
     if action == "補車":
         quantity = max(1, round(target_available - available))
     else:
