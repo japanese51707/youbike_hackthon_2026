@@ -1,6 +1,7 @@
 import {
   BarChartOutlined,
   DashboardOutlined,
+  DeploymentUnitOutlined,
   MobileOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
@@ -12,6 +13,7 @@ const navigation = [
   { key: "/dashboard", icon: <DashboardOutlined />, label: "調度面板" },
   { key: "/driver", icon: <MobileOutlined />, label: "司機手機端" },
   { key: "/overview", icon: <BarChartOutlined />, label: "長官導覽面板" },
+  { key: "/twin", icon: <DeploymentUnitOutlined />, label: "數位孿生戰情室" },
 ];
 
 export default function AppShell({ children }) {

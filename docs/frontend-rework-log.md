@@ -123,3 +123,62 @@
 | 7 | 驗證 | 確保未壞 | `npm run build` | 通過，4618 模組 |
 
 **知識落地**：研究筆記 `docs/research/長官儀表板設計研究.md`（executive dashboard 原則＋公共自行車 KPI＋長官需求＋資料盤點＋來源）。
+
+---
+
+## 頁4 · 數位孿生戰情室 `/twin`（空間/交通分析集中頁）
+
+- 狀態：已實作、build 通過；待 owner 瀏覽器確認後 commit。
+- 依據：ADR-205（第四頁＝酷炫/分析集中，服務騎乘者/觀眾/評審）、ADR-204（深色主題與地圖互動）、ADR-004（AI 只估計、規則引擎決策；本頁為分析呈現，不做自動調度決策）。
+- 設計研究：`docs/research/交通與都市空間分析方法研究.md`。
+
+### A. 頁面定位（先討論再做）
+
+| # | 決策 | 目的 | 動作 | 結果 |
+|---|---|---|---|---|
+| A1 | 定位＝空間/交通分析，不只炫技 | owner 要的是「未來的城市設計/規劃/交通規劃」細緻優化 | 先研究交通與都市空間分析方法（空間統計/GIS/網路科學/運輸規劃/都市設計/時空），落地成研究筆記 | 有依據地選 8 個分析，非為炫而炫 |
+| A2 | 每個分析附「這在分析什麼」 | 讓不懂空間分析的人也看得懂 | 建 `config/analysisCatalog.js`：每分析含 name/discipline/dataMode/purpose/白話 `info`；UI 每項旁放問號 Popover | 評審/觀眾點問號即懂 |
+| A3 | 誠實度三態標註 | 守「不捏造」 | dataMode：`real` 實算／`method` 方法展示（站少不可靠）／`pending` 待接資料；UI 用 Tag 標示，並列出待接分析 | 統計方法不冒充可靠推論 |
+
+### B. 分析工具與圖層
+
+| # | 項目 | 目的 | 動作 | 結果 |
+|---|---|---|---|---|
+| B1 | 空間/網路統計工具 | 可重用的確定性算法 | 新增 `utils/spatialStats.js`：`stationPressure`、`getisOrdGiStar`(二元距離權重、母體 SD、z 分數)、`giStarClass`(±1.96/±2.58)、`buildKnnNetwork`(k 近鄰無向邊)、`degreeCentrality`(距離衰減加權、正規化) | 純函式、來自既有站點資料、不呼叫外部服務 |
+| B2 | 分析圖層 | 把方法畫到地圖 | 新增 `components/map/layers/analysisLayers.js`：KDE 熱力、覆蓋缺口(格點到最近站距離)、鄰近網路+中心性(邊+節點)、服務集水區(半徑圓)、Voronoi+Gi\* 著色、流向弧線(取車→補車示意 OD) | 8 分析可切換疊加 |
+| B3 | 復用既有圖層 | 不重造輪子 | 復用 `densityLayer`(Hexagon)、`stationGaugeLayer`(狀態環)、`voronoiLayer` 概念 | 一致的視覺語言 |
+| B4 | 加依賴 | Gi\*/中心性需統計基礎 | 裝 `simple-statistics@7.12.0`（精確釘選，0 vulnerabilities；owner 同意） | mean/standardDeviation 供 Gi\* 用 |
+
+### C. TwinPage 組裝
+
+| # | 項目 | 目的 | 動作 | 結果 |
+|---|---|---|---|---|
+| C1 | 全螢幕暗色地圖 | 戰情室氛圍、無捲動 | `pages/TwinPage.jsx`：`.fixed-page.twin-page` + `SharedMap map-fill` 填滿 | 整頁不捲、地圖填滿 |
+| C2 | 圖層控制盤（左上浮層） | 切換 8 分析、看說明 | overlay 內 Checkbox 清單＋每項問號 Popover(取自 catalog)＋誠實度 Tag；內容過長時控制盤自身內捲 | 頁面不捲、控制盤內捲 |
+| C3 | 時間機器（底部浮層） | 歷史/即時/預測比較 | Segmented Past/Live/Predict：用既有 temporal mock 產站點快照，重算 usage/status；僅少數站有歷史/預測樣本，其餘顯示即時（明確標注） | 可切時間看分析變化，不假造 |
+| C4 | 集水區半徑可調 | 探索服務範圍 | catchment 啟用時顯示 Slider（0.2–2km） | 即時調整半徑 |
+| C5 | Gi\* 圖例 | 看懂顯著性著色 | voronoi 啟用時顯示熱/冷點圖例 | 顏色對照清楚 |
+| C6 | 站點資產卡 | 點站看細節 | 點 gauge/網路節點 → 復用 `StationDrawer`（即時狀態/預測區間/天氣/特徵） | 分析與單站細節打通 |
+| C7 | 導覽與路由 | 第四頁上線 | `App.jsx` 加 `/twin` 路由；`AppShell.jsx` 導覽加「數位孿生戰情室」(DeploymentUnitOutlined) | 可從選單進入 |
+| C8 | 驗證 | 確保未壞 | `npm run build` | 通過 |
+
+### D. 誠實性與邊界（守專案原則）
+- Gi\*、中心性在 mock 僅約 10 站時**不具可靠推論**，全數標「方法展示」；真實全市資料進來即可切換為可靠推論、**不需改介面**。
+- 集水區以直線半徑近似，UI 註明「真正等時圈需路網」。
+- 流向弧線**無真實 trip OD**，僅以調度建議航段示意，標「待接」。
+- 待接分析（真實 OD、公平性/2SFCA、LTS、時空熱點、Space Syntax）於 UI 誠實列出，不以假資料充數。
+- 全部前端純函式、確定性、**不進後端 payload、不改後端契約**；本頁只做分析呈現，不做自動調度決策（守 ADR-004）。
+
+### 新增檔案
+- `frontend/src/config/analysisCatalog.js`、`frontend/src/utils/spatialStats.js`、`frontend/src/components/map/layers/analysisLayers.js`、`frontend/src/pages/TwinPage.jsx`。
+- 研究筆記：`docs/research/交通與都市空間分析方法研究.md`。
+- 依賴：`simple-statistics@7.12.0`（package.json / package-lock.json）。
+
+### 知識落地
+- 研究筆記整理交通/都市空間分析六大學科的方法族、twin 實作對照表、待接清單與取捨結論，含來源連結與合規註記，供未來擴充與交接。
+
+### G. 語意審查與修正
+- 語意審查結論：無 blocker（無捏造、無後端契約破壞、無 ADR-004 違反，Gi\* 數學正確）。
+- 依審查建議補防呆（誠實性）：`analysisLayers.js` 新增 `withFiniteCoords`，在 KDE/覆蓋缺口/網路/集水區/Voronoi+Gi\*/flow 進入幾何運算前先過濾缺經緯度（NaN）的站點；避免接真實 TDX 資料時缺座標站污染 Delaunay/bounds/格點，畫出「看起來像分析、其實是壞掉的幾何」。
+- 其餘為非阻斷建議（flow 笛卡兒積、滑桿全圖層重算、真實規模效能、predict 用點估計著色、時間機器為三態非時間軸、缺 spatialStats 單元測試），留待後續視需要處理。
+- `npm run build` 於修正後再次通過。

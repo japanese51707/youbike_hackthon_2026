@@ -4,6 +4,7 @@ import AppShell from "./components/layout/AppShell.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import DriverPage from "./pages/DriverPage.jsx";
 import OverviewPage from "./pages/OverviewPage.jsx";
+import TwinPage from "./pages/TwinPage.jsx";
 
 // 數位孿生戰情室深色主題（ADR-204）：Slate 深藍灰底 + 亮綠主色 + 系統等寬字體。
 const theme = {
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/driver" element={<DriverPage />} />
           <Route path="/overview" element={<OverviewPage />} />
+          <Route path="/twin" element={<TwinPage />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
