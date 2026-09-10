@@ -1,9 +1,11 @@
 import { Card, Checkbox, Empty } from "antd";
+import { ScatterplotLayer } from "@deck.gl/layers";
 import { useCallback, useMemo, useState } from "react";
 import SharedMap from "../map/SharedMap.jsx";
 import { createStationGaugeLayer } from "../map/layers/stationGaugeLayer.js";
 import { createVoronoiLayer } from "../map/layers/voronoiLayer.js";
 import { createDensityLayer } from "../map/layers/densityLayer.js";
+import { createPlanRouteLayers } from "../map/layers/planLayers.js";
 import presentationConfig from "../../config/presentation.json";
 import { areaTypeLabels, stationStatusLabels } from "../../utils/formatters.js";
 import {
@@ -59,12 +61,22 @@ function buildTooltipHtml(station) {
   `;
 }
 
+const VEHICLE_COLORS = {
+  available: [102, 217, 232],
+  standby: [255, 169, 77],
+  dispatched: [56, 217, 169],
+  maintenance: [120, 130, 148],
+};
+
 export default function StationMap({
   stations,
   dimension,
   onSelectStation,
   focus,
   showLayerControl = false,
+  vehicles = [],
+  onSelectVehicle,
+  draftRoute = null,
 }) {
   const [activeLayers, setActiveLayers] = useState(["stations"]);
 
@@ -91,8 +103,51 @@ export default function StationMap({
         }),
       );
     }
+
+    // 組單草稿路線（先載後放）疊在站點之上。
+    if (draftRoute?.stops?.length) {
+      composed.push(
+        ...createPlanRouteLayers({
+          start: draftRoute.start,
+          route: draftRoute.stops,
+          id: "dispatch-draft",
+        }),
+      );
+    }
+
+    // 調度車位置（mock 示意），可點擊觸發「車找站」。
+    const vehiclePoints = (vehicles ?? []).filter(
+      (v) =>
+        v.current_location &&
+        Number.isFinite(Number(v.current_location.lat)) &&
+        Number.isFinite(Number(v.current_location.lng)),
+    );
+    if (vehiclePoints.length) {
+      composed.push(
+        new ScatterplotLayer({
+          id: "dashboard-vehicles",
+          data: vehiclePoints,
+          pickable: true,
+          getPosition: (v) => [
+            Number(v.current_location.lng),
+            Number(v.current_location.lat),
+          ],
+          getRadius: 10,
+          radiusUnits: "pixels",
+          stroked: true,
+          getFillColor: (v) => VEHICLE_COLORS[v.status] ?? VEHICLE_COLORS.available,
+          getLineColor: [5, 7, 13, 220],
+          getLineWidth: 2,
+          lineWidthUnits: "pixels",
+          onClick: ({ object }) => {
+            if (object && onSelectVehicle) onSelectVehicle(object);
+          },
+        }),
+      );
+    }
+
     return composed.filter(Boolean);
-  }, [activeLayers, dimension, onSelectStation, stations]);
+  }, [activeLayers, dimension, onSelectStation, stations, vehicles, onSelectVehicle, draftRoute]);
 
   const layerControl = showLayerControl ? (
     <div className="map-layer-control">
@@ -106,6 +161,36 @@ export default function StationMap({
   ) : null;
   const getTooltip = useCallback(({ object }) => {
     if (!object) return null;
+    // 調度車標記
+    if (object.vehicle_id) {
+      const statusText = {
+        available: "可調度",
+        standby: "總站待命（預備車）",
+        dispatched: "出勤中",
+        maintenance: "維修中",
+      };
+      return {
+        html: `<div style="font-family:'Noto Sans TC',sans-serif;min-width:150px"><div style="font-weight:700;color:#f1f5f9">${object.vehicle_id}</div><div style="font-size:11px;color:#8ea0b5">${statusText[object.status] ?? object.status}｜載運上限 ${object.max_capacity} 台｜${object.current_district ?? "未分區"}</div><div style="font-size:10px;color:#66d9e8;margin-top:4px">點擊以此車組單（示意）</div></div>`,
+        style: {
+          background: "rgba(10,16,27,0.95)",
+          border: "1px solid #243149",
+          borderRadius: "8px",
+          padding: "8px 10px",
+        },
+      };
+    }
+    // 路線停靠點
+    if (object.seq && object.action) {
+      return {
+        html: `<div style="font-family:'Noto Sans TC',sans-serif"><b style="color:#f1f5f9">${object.seq}. ${object.station_name}</b><div style="font-size:11px;color:#8ea0b5">${object.action} ${object.quantity} 台</div></div>`,
+        style: {
+          background: "rgba(10,16,27,0.95)",
+          border: "1px solid #243149",
+          borderRadius: "8px",
+          padding: "8px 10px",
+        },
+      };
+    }
     return {
       html: buildTooltipHtml(object),
       style: {

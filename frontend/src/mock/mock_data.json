@@ -74,6 +74,15 @@
     {"operator_id": "OP-002", "name": "李主任", "role": "dispatcher", "status": "on_duty", "current_location": {"lat": 25.010, "lng": 121.470}, "current_task_id": null, "task_queue": [], "today_stats": {"completed_tasks": 0, "total_bikes_moved": 0, "total_work_minutes": 120, "on_duty_since": "2026-06-02T06:00:00"}}
   ],
 
+  "vehicles": [
+    {"vehicle_id": "CAR-01", "max_capacity": 15, "status": "available", "current_district": "板橋區", "is_reserve": false, "current_task_id": null, "current_location": {"lat": 25.01380, "lng": 121.46180}},
+    {"vehicle_id": "CAR-02", "max_capacity": 15, "status": "available", "current_district": "中和區", "is_reserve": false, "current_task_id": null, "current_location": {"lat": 24.99510, "lng": 121.49020}},
+    {"vehicle_id": "CAR-03", "max_capacity": 15, "status": "available", "current_district": "三重區", "is_reserve": false, "current_task_id": null, "current_location": {"lat": 25.06720, "lng": 121.48250}},
+    {"vehicle_id": "CAR-04", "max_capacity": 15, "status": "available", "current_district": "新莊區", "is_reserve": false, "current_task_id": null, "current_location": {"lat": 25.03540, "lng": 121.45180}},
+    {"vehicle_id": "CAR-05", "max_capacity": 15, "status": "maintenance", "current_district": "新店區", "is_reserve": false, "current_task_id": null, "current_location": {"lat": 24.98330, "lng": 121.54080}},
+    {"vehicle_id": "STBY-01", "max_capacity": 15, "status": "standby", "current_district": null, "is_reserve": true, "current_task_id": null, "current_location": {"lat": 25.01050, "lng": 121.46980}}
+  ],
+
   "dispatch_overview": {
     "timestamp": "2026-06-02T08:00:00",
     "operators": {"on_duty": 12, "busy": 9, "resting": 2, "off_duty": 1},

@@ -182,3 +182,35 @@
 - 依審查建議補防呆（誠實性）：`analysisLayers.js` 新增 `withFiniteCoords`，在 KDE/覆蓋缺口/網路/集水區/Voronoi+Gi\*/flow 進入幾何運算前先過濾缺經緯度（NaN）的站點；避免接真實 TDX 資料時缺座標站污染 Delaunay/bounds/格點，畫出「看起來像分析、其實是壞掉的幾何」。
 - 其餘為非阻斷建議（flow 笛卡兒積、滑桿全圖層重算、真實規模效能、predict 用點估計著色、時間機器為三態非時間軸、缺 spatialStats 單元測試），留待後續視需要處理。
 - `npm run build` 於修正後再次通過。
+
+---
+
+## 頁1 再造 · 調度面板決策流（ADR-206）
+
+- 狀態：已實作、build 通過；待 owner 瀏覽器確認後 commit。
+- 依據：ADR-206（本頁資訊架構）、對齊 ADR-119（三入口組單）、ADR-114（資源模型）、ADR-118（死結警報）、ADR-004（AI 只估計、規則引擎決策）。
+
+### 目的
+把原本「工具列＋KPI＋地圖＋右側三分頁（建議/警示/缺口榜）」的發散版面，改成**服務調派員決策流的聚焦架構**：
+一張地圖（舞台）＋右欄狀態機（待命態／組單態），對齊後端 ADR-119 的三入口與預覽確認，並加入執行追蹤。
+
+### 動作
+
+| # | 項目 | 目的 | 動作 | 結果 |
+|---|---|---|---|---|
+| 1 | mock 車輛 | 三入口與載運量成立 | `mock_data.json` 加 `vehicles`（對齊 ADR-114：max_capacity 15／status／current_district／is_reserve／current_location），`mockAdapter.getDashboard` 暴露 | 6 台示意車（含 1 台總站待命預備車、1 台維修中） |
+| 2 | 組單演算 | 先載後放示意草稿 | 新增 `utils/tripPlanner.js`：`buildFromVehicle/buildFromStation/buildEmergency`；先載（滿站取車至載運上限）後放（缺車站補車）；候選車序（該區→鄰近→總站待命）；預估（距離/交通+作業時間/載運量/緊急度加總）。參數externalise 到 `fleetMock.js` `tripPlannerConfig` | 純函式、確定性、標示意 |
+| 3 | 地圖擴充 | 車入口＋畫路線 | `StationMap` 加 `vehicles`（可點→車找站）、`draftRoute`（先載後放路線，復用 `planLayers`）、車輛/停靠點 tooltip；向後相容 | 點車組單、草稿路線上圖 |
+| 4 | 待命態 | 發現＋追蹤 | 新增 `dispatch/DispatchSidePanel.jsx`：警報區（critical 可「緊急出車」）／需調度清單（緊急站排行，**缺口榜併入**，點站→站找車）／執行追蹤（狀態生命週期 pill＋逐站進度） | 平常只看「該做什麼／在做什麼」 |
+| 5 | 組單態 | 右欄接管精靈 | 新增 `dispatch/OrderBuilder.jsx`：選資源（改車/改區重算）→ 路線（先載後放）→ 預估卡 → 預覽→確認；跨區示意警告 | 三入口共用一條預覽確認流 |
+| 6 | 頁面狀態機 | 串起決策流 | 重寫 `DashboardPage.jsx`：三入口觸發、送出後進追蹤清單、狀態示意推進（assigned→accepted→in_progress 逐站→completed）、移除三分頁、KPI 站數改動態（`地圖顯示 N 筆`） | 一頁走完 發現→組單→預覽→送出→追蹤 |
+| 7 | 樣式 | 聚焦深色 | `app.css` 加 dispatch-deck／需調度列／追蹤 pill／組單步驟／預估卡樣式 | 右欄內捲、頁面不捲 |
+| 8 | 清理 | 去冗餘 | 刪除已無引用的 `RecommendationPanel.jsx`／`AlertPanel.jsx`／`DeficitRankingPanel.jsx`（功能併入 DispatchSidePanel） | 減少發散 |
+| 9 | 驗證 | 確保未壞 | `npm run build`＋診斷 | 通過、0 錯誤 |
+
+### 誠實邊界（守專案原則）
+- 調度車位置、執行進度皆 mock **示意**；狀態推進是前端示意，不做假 GPS。
+- 「先載後放」為前端**示意排序**，真正最優組單在後端 `dispatch_builder`（守 ADR-004）。
+- 確認送出真環境需 dispatcher 權限；mock 僅本機展示，不進 payload、不寫 DB。
+- **站數完全動態**：後端給幾站畫幾站（地圖／清單／KPI 皆不寫死），不提供站點增刪 UI。
+- 本分支只做調度面板；跨頁「司機接走」與後端串接不在此範圍。
