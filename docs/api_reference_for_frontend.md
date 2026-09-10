@@ -15,7 +15,8 @@
 | `/stations/{id}/params` | GET | 🟢 | 站點參數（三層疊加生效版） | 參數檢視 |
 | `/stations/{id}/params/history` | GET | 🟢 | 參數版本歷史（新→舊） | 參數回溯 |
 | `/stations/{id}/params/rollback` | POST | 🟢 | 回溯結果（需 maintainer） | 參數回溯 |
-| `/stations/heatmap` | GET | 🔴 | 熱點聚合 | 多維熱力圖 |
+| `/stations/{id}/static` | GET | 🟢 | 靜態打包：位置+地形+POI+行為指紋（開場拉一次，不用即時） | 單站分析卡 |
+| `/stations/heatmap?dimension=` | GET | 🟢 | 按 district/status 聚合（count/empty/full/avg_usage） | 多維熱力圖 |
 | `/stations/timeline` | GET | 🔴 | 時間序列 | 時間軸播放 |
 | `/stations` | POST | 🔴 | 新站建立結果 | 新增站別 |
 | `/stations/{id}` | DELETE | 🔴 | 移除結果 | 刪除站別 |
@@ -166,7 +167,7 @@
 
 | 端點 | 方法 | 狀態 | 回傳 | 用途 |
 |---|---|---|---|---|
-| `/kpi` | GET | 🔴 | KPI 指標 | 營運儀表板 |
+| `/kpi` | GET | 🟢 | 全市即時統計（總站/空/滿/健康率/平均借用率） | 營運儀表板 |
 | `/simulation/replay` | GET | 🔴 | Before/After | Demo 成效重放 |
 | `/events` | GET/POST/DELETE | 🔴 | 活動事件 | 活動影響 |
 | `/optimization/daily-review` | GET | 🟡 | 每日最適化待確認摘要 | ②AI 最適化（需人工核准） |

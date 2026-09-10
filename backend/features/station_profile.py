@@ -128,6 +128,30 @@ def _classify_peak_shape(hourly) -> str:
     return "double_peak" if peaks >= 2 else "single_peak"
 
 
+from functools import lru_cache
+
+
+@lru_cache(maxsize=1)
+def load_profile_cache() -> dict:
+    """載入預算好的全站行為指紋快取（tools/build_profile_cache.py 產出）。
+
+    格式：station_id -> compute_profile 結果 + station_type_label。
+    ADR-104/113 靜態層：指紋是六個月歷史算的，API 回快取不每次現算（省資源）。
+    lru_cache：整份只讀一次進記憶體。快取不存在回空 dict。
+    """
+    import json
+    from pathlib import Path
+    p = Path(__file__).parent / "_profile_cache.json"
+    if p.exists():
+        return json.loads(p.read_text(encoding="utf-8"))
+    return {}
+
+
+def get_profile_cached(station_id: str) -> dict | None:
+    """查單站行為指紋快取；查無回 None（供 API 回退現算或標 sparse）。"""
+    return load_profile_cache().get(str(station_id))
+
+
 def classify_station_type(profile: dict) -> str:
     """由行為指紋分站型（人話標籤），供與 POI 推導的地理類型對照（ADR-104）。"""
     if profile.get("sparse"):

@@ -95,7 +95,11 @@
 
 ---
 
-## P2 — 補完（分析佐證 / 簡報）
+## P2 — 補完（分析佐證 / 簡報）　✅ 大部分完成（2026-09-10）
+
+> 站點靜態打包 `/stations/{id}/static`（位置+地形+POI+行為指紋，回快取不現算）、heatmap 聚合、
+> KPI 即時統計 皆已接真實。行為指紋離線批次算存 `_profile_cache.json`（tools/build_profile_cache.py）。
+> 仍 mock：`/simulation/replay`、`/optimization/daily-review`（需 param_optimizer，較複雜，後補）。
 
 ### 9. 地形 / POI / 行為指紋（新增）🟣
 | 建議端點 | 方法 | 呼叫 | 回傳 |

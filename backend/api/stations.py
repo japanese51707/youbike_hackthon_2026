@@ -24,9 +24,29 @@ def list_stations(district: str | None = None, status: str | None = None):
 
 # 靜態路徑要先於 /stations/{station_id} 註冊，否則會被當成 station_id
 @router.get("/stations/heatmap")
-def heatmap(dimension: str = "area_type"):
-    """3.9 多維度熱點聚合"""
-    return get_mock()["heatmap"]
+def heatmap(dimension: str = "district"):
+    """3.9 多維度熱點聚合（接真實站點）。dimension: district / status。
+
+    按維度聚合站數 + 空/滿站數 + 平均借用率，供熱力圖。
+    """
+    stations = get_stations_with_degradation()
+    buckets: dict[str, dict] = {}
+    for s in stations:
+        key = s.get(dimension) or "未知"
+        b = buckets.setdefault(key, {"key": key, "count": 0, "empty": 0, "full": 0,
+                                     "_usage_sum": 0.0})
+        b["count"] += 1
+        if s.get("status") == "empty":
+            b["empty"] += 1
+        if s.get("status") == "full":
+            b["full"] += 1
+        b["_usage_sum"] += float(s.get("usage_rate", 0) or 0)
+    out = []
+    for b in buckets.values():
+        b["avg_usage_rate"] = round(b.pop("_usage_sum") / b["count"], 1) if b["count"] else 0
+        out.append(b)
+    out.sort(key=lambda x: -x["count"])
+    return {"dimension": dimension, "buckets": out}
 
 
 @router.get("/stations/timeline")
@@ -107,6 +127,36 @@ def _with_target_usage_rate(params: dict | None) -> dict | None:
         # 放在外層，明確標為「顯示用同尺度值」，不動內層 target_level
         result["target_usage_rate"] = round(float(target_level) * 100, 1)
     return result
+
+
+@router.get("/stations/{station_id}/static")
+def station_static(station_id: str):
+    """站點靜態/半靜態資料打包（ADR-104/113 靜態層）：位置 + 地形 + POI + 行為指紋。
+
+    這些不常變（地形永不變、POI/位置幾乎不變、指紋每天離線算一次），前端「開場拉一次」快取即可，
+    不用即時輪詢。地形/指紋回預算好的快取；POI 現算（快）。
+    """
+    ds = get_data_source()
+    st = ds.get_station(station_id)
+    if st is None:
+        raise HTTPException(status_code=404, detail=f"找不到站點 {station_id}")
+    lat, lng = st.get("lat"), st.get("lng")
+
+    from features.terrain import get_terrain
+    from features.poi_distance import get_poi_feature
+    from features.station_profile import get_profile_cached
+
+    return {
+        "station_id": station_id,
+        "location": {
+            "station_name": st.get("station_name"), "district": st.get("district"),
+            "lat": lat, "lng": lng, "total_docks": st.get("total_docks"),
+        },
+        "terrain": get_terrain(lat, lng),            # 快取（_elevation_cache）
+        "poi": get_poi_feature(lat, lng),            # 現算（poi_data.json，快）
+        "profile": get_profile_cached(station_id),   # 快取（_profile_cache，離線算）
+        "note": "靜態/半靜態資料，前端開場拉一次即可，不需即時輪詢",
+    }
 
 
 @router.get("/stations/{station_id}/params")
