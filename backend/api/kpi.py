@@ -14,14 +14,21 @@ def kpi():
     total = len(stations)
     empty = sum(1 for s in stations if s.get("status") == "empty")
     full = sum(1 for s in stations if s.get("status") == "full")
-    healthy = total - empty - full
-    avg_usage = round(sum(float(s.get("usage_rate", 0) or 0) for s in stations) / total, 1) if total else 0
+    offline = sum(1 for s in stations if s.get("status") == "offline")
+    # 健康率以「營運中站」為分母（排除故障站，才不會被離線站拉低失真）
+    in_service = total - offline
+    healthy = in_service - empty - full
+    usable = [s for s in stations if s.get("status") != "offline"]
+    avg_usage = (round(sum(float(s.get("usage_rate", 0) or 0) for s in usable) / len(usable), 1)
+                 if usable else 0)
     return {
         "total_stations": total,
+        "in_service_stations": in_service,
+        "offline_stations": offline,      # 故障/未啟用（可借與可還同時 0）
         "empty_stations": empty,
         "full_stations": full,
         "healthy_stations": healthy,
-        "health_rate_pct": round(healthy / total * 100, 1) if total else 0,
+        "health_rate_pct": round(healthy / in_service * 100, 1) if in_service else 0,
         "avg_usage_rate": avg_usage,
         "source": "realtime",
     }

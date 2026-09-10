@@ -35,6 +35,9 @@ def _is_deadlock(st: dict) -> Optional[str]:
         return None
     bikes = float(st.get("available_bikes", 0) or 0)
     docks = float(st.get("available_docks", total - bikes) or 0)
+    # 故障/未啟用站（ADR-108）：可借與可還同時為 0＝離線，不是死結（排除誤判）
+    if bikes <= 0 and docks <= 0:
+        return None
     if bikes <= 0:
         return "empty"
     if docks <= 0:

@@ -120,6 +120,10 @@ def evaluate_station(
     if total <= 0:
         return None
     available = float(station.get("available_bikes", 0) or 0)
+    docks = float(station.get("available_docks", total - available) or 0)
+    # 故障/未啟用站（ADR-108）：可借與可還同時為 0＝離線，不觸發調度（不是真缺車）
+    if station.get("status") == "offline" or (available <= 0 and docks <= 0):
+        return None
     buffer_bikes = float(trig["安全緩衝_台數"])
     sensitivity = float(trig["觸發靈敏度"])
     horizon = fleet["響應時間_分鐘"]

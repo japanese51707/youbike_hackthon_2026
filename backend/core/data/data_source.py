@@ -37,6 +37,10 @@ def classify_status(usage_rate: float, available_bikes: int, available_docks: in
 
     usage_rate 為 0~100（借用率＝可借/總數）。
     """
+    # 故障/未啟用（ADR-108 資料品質）：可借與可還同時為 0＝站點離線/故障
+    # （正常站可借+可還≈總柱數，不會同時 0）。標 offline，不當「空站」誤觸調度。
+    if available_bikes <= 0 and available_docks <= 0:
+        return "offline"
     if available_bikes <= 0:
         return "empty"
     if available_docks <= 0:
