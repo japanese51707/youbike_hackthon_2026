@@ -39,21 +39,57 @@ def timeline(district: str = "中和區", date: str = "2026-06-02", interval: in
 def station_detail(station_id: str, history_range: str = "7d"):
     """3.2 單站詳情 + 預測 + 參數 + 歷史
 
-    current/history 走 data_source 層；prediction/params 仍為 mock（待 B 的模型接上）。
+    current/history 走 data_source 層；prediction 走真實 LightGBM（ADR-113，無模型時降級 mock）；
+    params 走 DB 三層疊加（無則 mock）。
     """
     ds = get_data_source()
     current = ds.get_station(station_id)
     if current is None:
         raise HTTPException(status_code=404, detail=f"找不到站點 {station_id}")
     history = ds.get_history(station_id)
-    # prediction / params 目前仍用 mock 範例（B 的預測模型 A6 接上後取代）
-    mock_detail = get_mock()["station_detail"]
     return {
         "current": current,
         "history": history,
-        "prediction": mock_detail.get("prediction"),
-        "params": _with_target_usage_rate(mock_detail.get("params")),
+        "prediction": _build_prediction(current),
+        "params": _with_target_usage_rate(_get_params(station_id)),
     }
+
+
+def _build_prediction(station: dict) -> dict:
+    """用真實 LightGBM 出 4 視野區間（ADR-113）。模型缺失/失敗時降級回 mock，不中斷。"""
+    try:
+        from core.interfaces import get_predictor
+        pred = get_predictor()
+        if not hasattr(pred, "predict_multi"):
+            raise RuntimeError("predictor 無 predict_multi")
+        multi = pred.predict_multi(station)
+        return {
+            "source": "lightgbm",
+            "horizons": [{
+                "horizon_minutes": iv.horizon_minutes,
+                "raw_lower_bound": iv.raw_lower_bound,
+                "raw_predicted": iv.raw_predicted,
+                "raw_upper_bound": iv.raw_upper_bound,
+                "lower_bound": iv.lower_bound,
+                "predicted_available": iv.predicted_available,
+                "upper_bound": iv.upper_bound,
+            } for iv in sorted(multi.intervals, key=lambda x: x.horizon_minutes)],
+        }
+    except Exception:
+        # 降級：模型未就緒時回 mock 範例（NFR-5：明確標來源，不假裝真實）
+        mock_pred = get_mock()["station_detail"].get("prediction")
+        if isinstance(mock_pred, dict):
+            return {**mock_pred, "source": "mock_fallback"}
+        return {"source": "mock_fallback", "prediction": mock_pred}
+
+
+def _get_params(station_id: str) -> dict | None:
+    """站點參數：優先 DB 生效版（三層疊加），無則 mock。"""
+    from params import get_current
+    current = get_current(station_id)
+    if current is not None:
+        return current
+    return get_mock()["station_detail"]["params"]
 
 
 def _with_target_usage_rate(params: dict | None) -> dict | None:

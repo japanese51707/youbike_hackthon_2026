@@ -11,7 +11,7 @@
 | 端點 | 方法 | 狀態 | 回傳 | 用途 |
 |---|---|---|---|---|
 | `/stations` | GET | 🟢 | 站點陣列 | 地圖畫 1600 站 |
-| `/stations/{id}` | GET | 🟡 | 單站詳情（current/history 真、prediction 待接） | 單站面板 |
+| `/stations/{id}` | GET | 🟢 | 單站詳情（current/history/prediction 皆真實） | 單站面板 |
 | `/stations/{id}/params` | GET | 🟢 | 站點參數（三層疊加生效版） | 參數檢視 |
 | `/stations/{id}/params/history` | GET | 🟢 | 參數版本歷史（新→舊） | 參數回溯 |
 | `/stations/{id}/params/rollback` | POST | 🟢 | 回溯結果（需 maintainer） | 參數回溯 |
@@ -39,7 +39,7 @@
 **`GET /stations/{id}` 結構：** `{ current, history[], prediction, params }`
 - `current`：同上單站格式
 - `history[]`：歷史快照陣列（同格式，時間序）
-- `prediction`：🔴 待接 LightGBM（接上後為 4 視野 P10/P50/P90 到達存量區間）
+- `prediction`：🟢 真實 LightGBM，`{source, horizons[4視野 P10/P50/P90]}`（見 §8.7；降級時 source=mock_fallback）
 - `params`：站點參數 + `target_usage_rate`（目標水位換算成 0~100%）
 
 ---
@@ -49,9 +49,14 @@
 | 端點 | 方法 | 狀態 | 回傳 | 用途 |
 |---|---|---|---|---|
 | `/dispatch/recommendations` | GET | 🟢 | 已排序建議陣列 | 需調度清單（組單起點） |
-| `/dispatch/confirm` | POST | 🔴 | 確認結果（需 dispatcher） | 派發閘門 |
-| `/dispatch/tasks` | GET | 🔴 | 任務陣列 | 任務看板 |
-| `/dispatch/tasks/{id}/report` | POST | 🔴 | 回報+下一任務建議 | 逐站回報 |
+| `/dispatch/tasks` | GET | 🟢 | 任務陣列（接 task_manager，可篩 status/operator） | 任務看板 |
+| `/dispatch/tasks/{id}` | GET | 🟢 | 單一任務詳情（含站級 route） | 任務詳情 |
+| `/dispatch/build/from-vehicle` | POST | 🟢 | 以車組草稿（body: vehicle_id/operator_id/district?） | 組單入口 a |
+| `/dispatch/build/from-station` | POST | 🟢 | 以站組草稿 + vehicle_candidates（body: station_id...） | 組單入口 b |
+| `/dispatch/build/emergency` | POST | 🟢 | 緊急組草稿 + resource_suggestion（body: station_ids[]） | 組單入口 c |
+| `/dispatch/confirm-trip` | POST | 🟢 | 草稿落地（需 dispatcher，body: draft） | 確認派發閘門 |
+| `/dispatch/confirm` | POST | 🔴 | （舊）確認結果 | 舊派發（改用 confirm-trip） |
+| `/dispatch/tasks/{id}/report` | POST | 🔴 | 回報+下一任務建議 | 逐站回報（P1 接） |
 | `/dispatch/overview` | GET | 🔴 | 全域總覽 | 長官儀表板 |
 
 **`GET /dispatch/recommendations` 每筆欄位（查詢參數 `limit` / `priority`）：**
@@ -156,7 +161,8 @@
 | `/events` | GET/POST/DELETE | 🔴 | 活動事件 | 活動影響 |
 | `/optimization/daily-review` | GET | 🟡 | 每日最適化待確認摘要 | ②AI 最適化（需人工核准） |
 | `/optimization/daily-review/*` | POST | 🔴 | 逐站/核准/退回結果（需 maintainer） | 最適化決策 |
-| `/weather` | GET | 🟡 | 天氣現況（端點回 mock，但後端 CWA 已接通） | 天氣顯示 |
+| `/weather/by-location?lat=&lng=` | GET | 🟢 | 該點最近雨量站+氣象站即時（見 §8.3） | 站點天氣/驟雨 |
+| `/weather` | GET | 🟡 | 天氣摘要（相容，回 mock；逐站改用 by-location） | 天氣顯示 |
 | `/health` | GET | 🟢 | 健康檢查 | 服務探活 |
 
 **`/optimization/daily-review` 結構：** `{ review_id, review_date, lookback_days, summary{total_stations_adjusted, avg_change_pct, significant_count}, station_changes[], status }`
