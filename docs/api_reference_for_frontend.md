@@ -33,9 +33,12 @@
 | `available_bikes` | int | 可借車數（柱上現有車） |
 | `available_docks` | int | 可還空位數 |
 | `usage_rate` | float | 借用率 %（0~100） |
-| `status` | str | `empty`（空）/ `full`（滿）/ `low` / `high` / `normal` |
+| `status` | str | `empty`（空）/ `full`（滿）/ `low` / `high` / `normal` / **`offline`（故障/未啟用，可借+可還同時0，不列入調度）** |
 | `service_available` | bool | 是否營運中 |
 | `data_freshness` | str | `realtime` / `historical`（降級時標記來源） |
+
+> ★故障站：可借=0 且 可還=0 → `status=offline`（站點故障/未啟用），系統不對它做調度/緊急度判斷。
+> 前端可用 `GET /stations?status=offline` 列出所有故障/未啟用站顯示。
 
 **`GET /stations/{id}` 結構：** `{ current, history[], prediction, params }`
 - `current`：同上單站格式
