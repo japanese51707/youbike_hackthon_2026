@@ -161,6 +161,14 @@ emergency:
   在途門檻分鐘: 30          # 現有在途車抵達均 > 此值才需動用 standby
   大站柱數門檻: 40          # 「精華大站」的柱數下限（只有大站死結才算數）
 
+# ── 即時天氣源（ADR-118，weather_source 用；比照 data_source.mode 可抽換）──
+# mock = 開發/demo（不打外部 API）；cwa = 中央氣象署開放資料（正式，需 CWA_API_KEY 環境變數）
+weather:
+  mode: mock
+  cwa_api_key: ""          # 正式用中央氣象署時填（勿寫進版控，用環境變數 CWA_API_KEY）
+  timeout_sec: 5           # 出向 API 連線/讀取超時（出向資安）
+  max_retries: 2           # 失敗重試上限（避免無限重試）
+
 # ── 疲勞管理（dispatcher 用）──
 # 「單次」= 單一輪班（whole shift），不是單趟。一個輪班累積搬運超過此值 → 排休息。
 fatigue:

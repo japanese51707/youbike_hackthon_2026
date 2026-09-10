@@ -72,6 +72,53 @@ def detect_deadlocks(stations: list[dict], config: Optional[dict] = None) -> lis
     return out
 
 
+def reserve_bikes_for_station(
+    station: dict, peak_turnover: float, config: Optional[dict] = None,
+) -> dict:
+    """ADR-118 駐點預備車量：該站尖峰要備的總量 = 尖峰週轉量，扣掉柱點上現有車 = 實際要放的預備車。
+
+    - peak_turnover：該站尖峰（早+晚）歷史週轉量（來自 dispatch_ops_analysis）。
+    - 實際預備車 = max(0, 尖峰週轉量 − 站上現有車)，避免備過頭（owner：含站上現有車）。
+    - 再夾「不超過該站空位」（現場放得下）：預備車 ≤ 總柱 − 現有車。
+    回傳：{ station_id, peak_turnover, on_site_bikes, reserve_bikes, capped_by_space }
+    """
+    total = float(station.get("total_docks", 0) or 0)
+    on_site = float(station.get("available_bikes", 0) or 0)
+    raw = max(0.0, peak_turnover - on_site)         # 扣站上車，不過量
+    free_space = max(0.0, total - on_site)          # 現場放得下的空間
+    reserve = min(raw, free_space)
+    return {
+        "station_id": station.get("station_id"),
+        "station_name": station.get("station_name"),
+        "peak_turnover": round(peak_turnover, 1),
+        "on_site_bikes": int(on_site),
+        "reserve_bikes": int(round(reserve)),
+        "capped_by_space": raw > free_space,        # 是否被現場空間夾住
+    }
+
+
+def plan_stationed_reserves(
+    stations: list[dict], turnover_by_station: dict, top_n: int = 15,
+    config: Optional[dict] = None,
+) -> list[dict]:
+    """ADR-118 規劃駐點預備車：對尖峰週轉量最高的 top_n 站算各站要放的預備車。
+
+    turnover_by_station：{station_id: 尖峰週轉量}（來自 dispatch_ops_analysis 離線統計）。
+    回傳依預備車量降序的清單，供後台佈署駐點人員 + 預備車。
+    """
+    st_by_id = {s.get("station_id"): s for s in stations}
+    # 依週轉量取 top_n 候選站
+    ranked = sorted(turnover_by_station.items(), key=lambda kv: -kv[1])[:top_n]
+    out = []
+    for sid, turnover in ranked:
+        st = st_by_id.get(sid)
+        if st is None:
+            continue
+        out.append(reserve_bikes_for_station(st, turnover, config))
+    out.sort(key=lambda x: -x["reserve_bikes"])
+    return out
+
+
 def check_and_dispatch_reserve(
     stations: list[dict],
     in_transit_eta_min: Optional[float] = None,

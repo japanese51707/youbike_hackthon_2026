@@ -230,11 +230,16 @@ def assign_by_district(
     max_stops = int(cfg.get("fleet", {}).get("每趟最大站數", 3))
     default_cap = _default_capacity(cfg)
 
-    # 1. 按行政區分組（保留原排序）
+    # 1. 分組：早/晚班按行政區（一趟不跨區，ADR-114）；大夜班可跨區則全市一組（ADR-116/117）。
+    cross_ok = allow_cross_district(now)
     by_district: dict[str, list[dict]] = {}
-    for r in dispatch_list:
-        d = r.get("district") or "未知區"
-        by_district.setdefault(d, []).append(r)
+    if cross_ok:
+        # 大夜跨區大宗復原：全市不分區，讓 _pack_trips 跨區配對缺車↔滿車、裝滿再跑
+        by_district["全市跨區"] = list(dispatch_list)
+    else:
+        for r in dispatch_list:
+            d = r.get("district") or "未知區"
+            by_district.setdefault(d, []).append(r)
 
     # 可用資源池（車依載運量由大到小，讓大單先有大車；人力平均分配）
     vehicles = sorted(fp.available_vehicles(),
@@ -297,6 +302,132 @@ def assign_by_district(
                 _persist_trip(trip)
 
     return trips_out
+
+
+def assign_peak_shuttle(
+    dispatch_list: list[dict],
+    config: Optional[dict] = None,
+    fleet_provider=None,
+    operator_provider=None,
+    now=None,
+) -> list[dict]:
+    """ADR-117 尖峰折返組排程：同區「狂流出站（缺車）↔ 狂流入站（滿車）」配成折返組，
+    一台車綁定一組，在其間來回循環（收滿→放空→再收），追求尖峰高頻週轉。
+
+    折返組組法（啟發式）：
+      每個行政區內，把取車站（滿站，供給來源）與補車站（空站，需求）配成一組——
+      以「一個取車站 + 依緊急度與鄰近取數個補車站」湊成一組（組總搬運量參考車容量）。
+      早/晚尖峰各區的組數 ≈ 該區需車數（見 dispatch_ops_analysis）。
+
+    回傳 trip（mode=peak_shuttle），每筆帶 shuttle_cluster（該組站清單）。
+    ★不自動派工，供後台佈署尖峰折返車（人在迴圈）。
+    """
+    cfg = config or get_config()
+    fp = fleet_provider or get_fleet_provider()
+    op = operator_provider or get_operator_provider()
+    default_cap = _default_capacity(cfg)
+    max_stops = int(cfg.get("fleet", {}).get("每趟最大站數", 3))
+
+    # 按行政區分組（折返不跨區）
+    by_district: dict[str, list[dict]] = {}
+    for r in dispatch_list:
+        by_district.setdefault(r.get("district") or "未知區", []).append(r)
+
+    vehicles = sorted(fp.available_vehicles(),
+                      key=lambda v: -int(v.get("max_capacity") or default_cap))
+    operators = op.available_operators()
+    vi = oi = 0
+
+    clusters_out: list[dict] = []
+    seq = 0
+    for district, recs in by_district.items():
+        collect = sorted([r for r in recs if r.get("action") == "取車"],
+                         key=lambda r: -float(r.get("priority_score", 0)))
+        supply = sorted([r for r in recs if r.get("action") != "取車"],
+                        key=lambda r: -float(r.get("priority_score", 0)))
+        if not collect and not supply:
+            continue
+
+        # 組折返組：以取車站為核心，配就近/高緊急的補車站；無取車站時純補車組（車需外部帶車進來）
+        cap = (int(vehicles[vi].get("max_capacity") or default_cap)
+               if vi < len(vehicles) else default_cap)
+        # 每組 = 1 取車站 + 依鄰近串接數個補車站（站數 ≤ max_stops、量 ≤ 車容量）
+        cores = collect or [None]   # 無滿站時 core=None（純缺車組）
+        supply_pool = list(supply)
+        for core in cores:
+            seq += 1
+            group = []
+            load = 0
+            if core is not None:
+                group.append(core)
+            # 就近取補車站塞滿這組
+            cur_lat = core.get("lat") if core else (supply_pool[0].get("lat") if supply_pool else None)
+            cur_lng = core.get("lng") if core else (supply_pool[0].get("lng") if supply_pool else None)
+            while supply_pool and len(group) < max_stops:
+                nxt = min(supply_pool, key=lambda s: _haversine_km(
+                    cur_lat, cur_lng, s.get("lat"), s.get("lng")))
+                if load + int(nxt.get("quantity", 0)) > cap and group:
+                    break
+                group.append(nxt)
+                load += int(nxt.get("quantity", 0))
+                supply_pool.remove(nxt)
+                cur_lat, cur_lng = nxt.get("lat"), nxt.get("lng")
+            if not group:
+                continue
+
+            veh = vehicles[vi] if vi < len(vehicles) else None
+            oper = operators[oi] if oi < len(operators) else None
+            for s in group:
+                s.setdefault("target_available",
+                             round(float(s.get("current_available", 0)) + float(s.get("quantity", 0))
+                                   if s.get("action") != "取車"
+                                   else float(s.get("current_available", 0)) - float(s.get("quantity", 0)), 0))
+                s.setdefault("station_status", "pending")
+            clusters_out.append({
+                "trip_id": f"SHUTTLE-{_dt.datetime.now().strftime('%Y%m%d-%H%M%S')}-{seq:03d}",
+                "district": district,
+                "shift": current_shift(now),
+                "mode": "peak_shuttle",
+                "shuttle_cluster": [s.get("station_id") for s in group],   # 折返組站清單
+                "stations": group,
+                "assigned_vehicle": veh.get("vehicle_id") if veh else None,
+                "assigned_operator": oper.get("operator_id") if oper else None,
+                "vehicle_capacity": int(veh.get("max_capacity") or default_cap) if veh else None,
+                "status": "assigned" if (veh and oper) else "unassigned",
+                "note": "尖峰折返：車綁此組站來回循環（收滿放空），非一趟性任務",
+            })
+            if veh:
+                vi += 1
+            if oper:
+                oi += 1
+        # 剩餘沒配到取車站的補車站，仍成組（供給靠外部調入或大站週轉）
+        while supply_pool:
+            seq += 1
+            group = supply_pool[:max_stops]
+            supply_pool = supply_pool[max_stops:]
+            veh = vehicles[vi] if vi < len(vehicles) else None
+            oper = operators[oi] if oi < len(operators) else None
+            for s in group:
+                s.setdefault("target_available",
+                             round(float(s.get("current_available", 0)) + float(s.get("quantity", 0)), 0))
+                s.setdefault("station_status", "pending")
+            clusters_out.append({
+                "trip_id": f"SHUTTLE-{_dt.datetime.now().strftime('%Y%m%d-%H%M%S')}-{seq:03d}",
+                "district": district, "shift": current_shift(now), "mode": "peak_shuttle",
+                "shuttle_cluster": [s.get("station_id") for s in group],
+                "stations": group,
+                "assigned_vehicle": veh.get("vehicle_id") if veh else None,
+                "assigned_operator": oper.get("operator_id") if oper else None,
+                "vehicle_capacity": int(veh.get("max_capacity") or default_cap) if veh else None,
+                "status": "assigned" if (veh and oper) else "unassigned",
+                "note": "尖峰折返（純補車組）：需外部調入車源",
+            })
+            if veh:
+                vi += 1
+            if oper:
+                oi += 1
+
+    return clusters_out
 
 
 def _persist_trip(trip: dict) -> None:
