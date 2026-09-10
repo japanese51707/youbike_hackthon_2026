@@ -37,15 +37,26 @@ def _row_to_public(row) -> dict:
     return d
 
 
+_VALID_ROLE_TYPES = {"driver", "stationed", "controller"}   # ADR-116 營運角色
+
+
 def create_operator(
     operator_id: str,
     name: str,
     role: str,
     password: Optional[str] = None,
+    role_type: Optional[str] = None,
+    stationed_at: Optional[str] = None,
 ) -> dict:
-    """建立帳號。role 需合法；密碼（若給）經 bcrypt 雜湊後才存。"""
+    """建立帳號。role 需合法；密碼（若給）經 bcrypt 雜湊後才存。
+
+    role_type（ADR-116 營運角色 driver/stationed/controller）與 role（登入權限）正交。
+    stationed_at 僅 role_type=stationed 時有意義（駐守站）。
+    """
     if role not in _VALID_ROLES:
         raise ValueError(f"未知角色 '{role}'（合法：{sorted(_VALID_ROLES)}）")
+    if role_type is not None and role_type not in _VALID_ROLE_TYPES:
+        raise ValueError(f"未知營運角色 '{role_type}'（合法：{sorted(_VALID_ROLE_TYPES)}）")
     conn = get_connection()
     existing = conn.execute(
         "SELECT 1 FROM operators WHERE operator_id = ?", (operator_id,)).fetchone()
@@ -56,9 +67,10 @@ def create_operator(
     now = _now()
     conn.execute(
         """INSERT INTO operators
-           (operator_id, name, role, password_hash, status, is_active, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 'off_duty', 1, ?, ?)""",
-        (operator_id, name, role, pw_hash, now, now),
+           (operator_id, name, role, password_hash, status, is_active,
+            role_type, stationed_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 'off_duty', 1, ?, ?, ?, ?)""",
+        (operator_id, name, role, pw_hash, role_type, stationed_at, now, now),
     )
     conn.commit()
     return get_operator(operator_id)
@@ -146,6 +158,26 @@ def clear_assignment(operator_id: str) -> bool:
     return cur.rowcount > 0
 
 
+def set_stationed_at(operator_id: str, station_id: Optional[str]) -> bool:
+    """設定駐點人員駐守站（ADR-116；station_id=None 表示解除駐守）。回傳是否有更新到。"""
+    conn = get_connection()
+    cur = conn.execute(
+        "UPDATE operators SET stationed_at = ?, updated_at = ? WHERE operator_id = ?",
+        (station_id, _now(), operator_id))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def list_by_role_type(role_type: str, active_only: bool = True) -> list[dict]:
+    """依營運角色列出（ADR-116：driver/stationed/controller）。"""
+    conn = get_connection()
+    sql = "SELECT * FROM operators WHERE role_type = ?"
+    params: list = [role_type]
+    if active_only:
+        sql += " AND is_active = 1"
+    return [_row_to_public(r) for r in conn.execute(sql, params).fetchall()]
+
+
 def seed_default_operators() -> None:
     """種入 3 個預設帳號（開發/Demo 用）。已存在則跳過。
 
@@ -166,10 +198,10 @@ def seed_default_operators() -> None:
 
 
 def seed_dispatch_operators(total: int = 350) -> None:
-    """種入調度員清單（ADR-114：官方 350 名，純流水號無真名）。已存在則跳過。
+    """種入調度車人員清單（ADR-114/116：官方 350 名，純流水號無真名，role_type=driver）。已存在則跳過。
 
     OP-001~003 由 seed_default_operators() 建為具名登入帳號；本函式補到 total 名
-    （OP-004 ~ OP-{total}），role=operator、無密碼（純調度人力，非登入帳號）。
+    （OP-004 ~ OP-{total}），role=operator、role_type=driver、無密碼（純調度人力，非登入帳號）。
     name 用流水號字串（無真實人名）。seed 只是開發/demo 起始值，未來由 YouBike 人力 API 覆蓋。
     """
     conn = get_connection()
@@ -178,5 +210,20 @@ def seed_dispatch_operators(total: int = 350) -> None:
         exists = conn.execute(
             "SELECT 1 FROM operators WHERE operator_id = ?", (oid,)).fetchone()
         if not exists:
-            # 純流水號人力（無真名、無密碼、無登入權限），僅供調度指派用
-            create_operator(oid, name=oid, role="operator", password=None)
+            # 純流水號調度車人員（無真名、無密碼、無登入權限），僅供調度指派用
+            create_operator(oid, name=oid, role="operator", password=None, role_type="driver")
+
+
+def seed_stationed_operators(total: int = 30) -> None:
+    """種入駐點人員清單（ADR-116：守熱門站現場調節，role_type=stationed）。已存在則跳過。
+
+    ST-001 ~ ST-{total}，純流水號、無真名無密碼。stationed_at（駐守站）先留空，
+    由後台指派或後續依 dispatch_ops_analysis 的駐點候選站分配。
+    """
+    conn = get_connection()
+    for i in range(1, total + 1):
+        oid = f"ST-{i:03d}"
+        exists = conn.execute(
+            "SELECT 1 FROM operators WHERE operator_id = ?", (oid,)).fetchone()
+        if not exists:
+            create_operator(oid, name=oid, role="operator", password=None, role_type="stationed")

@@ -81,6 +81,8 @@ _MIGRATIONS = [
     ("operators", "current_district", "TEXT"),   # ADR-114
     ("tasks", "district", "TEXT"),               # ADR-114
     ("tasks", "assigned_vehicle", "TEXT"),       # ADR-114
+    ("operators", "role_type", "TEXT"),          # ADR-116 營運角色 driver/stationed/controller
+    ("operators", "stationed_at", "TEXT"),       # ADR-116 駐點人員駐守站(僅 stationed)
 ]
 
 

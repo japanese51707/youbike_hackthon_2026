@@ -28,6 +28,7 @@ from config_loader import get_config
 from .rule_engine import generate_recommendations
 from .interfaces import get_predictor, get_urgency_calculator
 from .providers import get_fleet_provider, get_operator_provider
+from .shift import current_shift, current_mode, allow_cross_district
 
 
 def _level(score: float, cfg: dict) -> str:
@@ -131,12 +132,83 @@ def _pack_trips(region_recs: list[dict], capacity: int, max_stops: int) -> list[
     return trips
 
 
+def _haversine_km(lat1, lng1, lat2, lng2) -> float:
+    """兩點球面距離（公里）。座標缺失回 0。"""
+    import math
+    try:
+        lat1, lng1, lat2, lng2 = float(lat1), float(lng1), float(lat2), float(lng2)
+    except (TypeError, ValueError):
+        return 0.0
+    if 0 in (lat1, lng1, lat2, lng2):
+        return 0.0
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lng2 - lng1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return r * 2 * math.asin(math.sqrt(a))
+
+
+def _order_route(stations: list[dict], start_lat=None, start_lng=None) -> list[dict]:
+    """趟內路徑順序（啟發式，ADR-117）：先取車（滿站，action=取車）再放車（空站，action=補車），
+    各組內用最近鄰串接（從起點或前一站找最近的下一站）。
+
+    理由：一台車先到滿站把車收上來，再到空站放下去，一趟解決兩邊；組內就近跑減少空駛。
+    """
+    collect = [s for s in stations if s.get("action") == "取車"]
+    supply = [s for s in stations if s.get("action") != "取車"]
+
+    def nearest_chain(group, lat, lng):
+        remaining = list(group)
+        ordered = []
+        cur_lat, cur_lng = lat, lng
+        while remaining:
+            if cur_lat is None:
+                nxt = remaining[0]   # 無起點座標 → 保持原序（已按緊急度）
+            else:
+                nxt = min(remaining, key=lambda s: _haversine_km(
+                    cur_lat, cur_lng, s.get("lat"), s.get("lng")))
+            ordered.append(nxt)
+            remaining.remove(nxt)
+            cur_lat, cur_lng = nxt.get("lat"), nxt.get("lng")
+        return ordered, cur_lat, cur_lng
+
+    coll_ordered, lat2, lng2 = nearest_chain(collect, start_lat, start_lng)
+    supp_ordered, _, _ = nearest_chain(supply, lat2 if collect else start_lat,
+                                       lng2 if collect else start_lng)
+    return coll_ordered + supp_ordered
+
+
+def _estimate_trip_kpi(ordered_stations: list[dict], cfg: dict,
+                       start_lat=None, start_lng=None) -> dict:
+    """估一趟的交通/作業/總時間與距離（ADR-117 KPI）。"""
+    travel = cfg.get("travel", {})
+    speed = float(travel.get("平均車速_公里每小時", 20)) or 20
+    per_stop = float(travel.get("每站搬運_分鐘", 5))
+
+    dist = 0.0
+    cur_lat, cur_lng = start_lat, start_lng
+    for s in ordered_stations:
+        if cur_lat is not None:
+            dist += _haversine_km(cur_lat, cur_lng, s.get("lat"), s.get("lng"))
+        cur_lat, cur_lng = s.get("lat"), s.get("lng")
+    travel_min = round(dist / speed * 60, 1)
+    work_min = round(per_stop * len(ordered_stations), 1)
+    return {
+        "est_distance_km": round(dist, 2),
+        "est_travel_min": travel_min,
+        "est_work_min": work_min,
+        "est_total_min": round(travel_min + work_min, 1),
+    }
+
+
 def assign_by_district(
     dispatch_list: list[dict],
     config: Optional[dict] = None,
     fleet_provider=None,
     operator_provider=None,
     persist: bool = False,
+    now=None,
 ) -> list[dict]:
     """ADR-114：把排序好的調度建議清單，按行政區組裝成「不跨區、不超載」的派工單。
 
@@ -188,16 +260,32 @@ def assign_by_district(
             total_q = sum(int(s.get("quantity", 0)) for s in trip_stations)
             veh = vehicles[vi] if vi < len(vehicles) else None
             oper = operators[oi] if oi < len(operators) else None
+            # 車輛當前位置為路徑起點（有的話）
+            start_lat = veh.get("current_lat") if veh else None
+            start_lng = veh.get("current_lng") if veh else None
+            # 趟內路徑順序（先取後放最近鄰，ADR-117）
+            ordered = _order_route(trip_stations, start_lat, start_lng)
+            kpi = _estimate_trip_kpi(ordered, cfg, start_lat, start_lng)
+            # 每站帶「目標存量」為主指令（ADR-115/117：呈現用目標值非增減量）
+            for s in ordered:
+                s.setdefault("target_available",
+                             round(float(s.get("current_available", 0)) + float(s.get("quantity", 0))
+                                   if s.get("action") != "取車"
+                                   else float(s.get("current_available", 0)) - float(s.get("quantity", 0)), 0))
+                s.setdefault("station_status", "pending")   # 站級狀態（Task4 用）
             trip = {
-                "trip_id": f"TRIP-{_dt.datetime.now().strftime('%Y%m%d-%H%M')}-{trip_seq:03d}",
-                "district": district,                       # 一趟不跨區（ADR-114）
-                "stations": trip_stations,
+                "trip_id": f"TRIP-{_dt.datetime.now().strftime('%Y%m%d-%H%M%S')}-{trip_seq:03d}",
+                "district": district,                       # 一趟不跨區（ADR-114；大夜跨區另走 ADR-117 分支）
+                "shift": current_shift(now),                # ADR-116 班別
+                "mode": current_mode(now),                  # ADR-117 排程模式
+                "stations": ordered,
                 "total_quantity": total_q,
-                "stop_count": len(trip_stations),
+                "stop_count": len(ordered),
                 "assigned_vehicle": veh.get("vehicle_id") if veh else None,
                 "assigned_operator": oper.get("operator_id") if oper else None,
                 "vehicle_capacity": int(veh.get("max_capacity") or default_cap) if veh else None,
                 "status": "assigned" if (veh and oper) else "unassigned",
+                **kpi,
             }
             trips_out.append(trip)
             if veh:
@@ -215,6 +303,20 @@ def _persist_trip(trip: dict) -> None:
     """落地一張派工單：建 task（帶 district/assigned_vehicle）+ 回寫車/人的 current_district。"""
     from db import vehicles_repo, operators_repo, tasks_repo
     task_id = trip["trip_id"]
+    # route 存「站物件」（含 target_available/station_status/認領人），供 task_execution 逐站操作（ADR-117）
+    route = []
+    for s in trip["stations"]:
+        route.append({
+            "station_id": s.get("station_id"),
+            "station_name": s.get("station_name"),
+            "district": s.get("district"),
+            "action": s.get("action"),
+            "target_available": s.get("target_available"),
+            "est_quantity": s.get("quantity"),
+            "station_status": s.get("station_status", "pending"),
+            "claimed_by": trip["assigned_operator"],   # 認領標註（ADR-117）
+            "lat": s.get("lat"), "lng": s.get("lng"),
+        })
     task = {
         "task_id": task_id,
         "task_type": "normal",
@@ -222,7 +324,7 @@ def _persist_trip(trip: dict) -> None:
         "assigned_operator": trip["assigned_operator"],
         "district": trip["district"],
         "assigned_vehicle": trip["assigned_vehicle"],
-        "route": [s.get("station_id") for s in trip["stations"]],
+        "route": route,
         "assigned_at": _dt.datetime.now().isoformat(timespec="seconds"),
     }
     if not tasks_repo.exists(task_id):
@@ -230,3 +332,60 @@ def _persist_trip(trip: dict) -> None:
     # 回寫車/人的 current_district（動態，ADR-114）
     vehicles_repo.assign_district(trip["assigned_vehicle"], trip["district"], task_id)
     operators_repo.assign_district(trip["assigned_operator"], trip["district"], task_id)
+
+
+def suggest_next_trip(
+    vehicle_id: str,
+    dispatch_list: list[dict],
+    config: Optional[dict] = None,
+    fleet_provider=None,
+    now=None,
+    top_k: int = 10,
+) -> dict:
+    """ADR-117 離峰滾動排程：車完成一趟後，依「該車當前位置」給下一趟建議（不自動派工）。
+
+    系統做的是「輔助計算」：對每個待調度站算「綜合評分 = 緊急度高、距離近、單位成本低者優先」，
+    排序後回傳候選清單，由後台管理人員拍板（steering §6 人在迴圈）。
+
+    綜合評分（可解釋的啟發式）：score = priority_score − 距離懲罰。
+      距離懲罰 = 距離(km) × 每公里成本權重（config `dispatch_next.每公里扣分`，預設 2 分/km）。
+    早/晚班只在該車當前行政區內找候選（不跨區，ADR-116）；大夜班可跨區。
+
+    回傳：{ vehicle_id, from_district, cross_district_allowed, candidates:[{station+score+距離}...] }
+    """
+    cfg = config or get_config()
+    fp = fleet_provider or get_fleet_provider()
+    veh = fp.get_vehicle(vehicle_id)
+    if veh is None:
+        return {"vehicle_id": vehicle_id, "error": "找不到該車", "candidates": []}
+
+    cur_lat = veh.get("current_lat")
+    cur_lng = veh.get("current_lng")
+    from_district = veh.get("current_district")
+    cross_ok = allow_cross_district(now)
+
+    km_penalty = float(cfg.get("dispatch_next", {}).get("每公里扣分", 2.0))
+    cands = []
+    for r in dispatch_list:
+        # 非大夜（不可跨區）時，只考慮同區候選
+        if not cross_ok and from_district and r.get("district") != from_district:
+            continue
+        dist = _haversine_km(cur_lat, cur_lng, r.get("lat"), r.get("lng"))
+        score = float(r.get("priority_score", 0)) - dist * km_penalty
+        cands.append({
+            "station_id": r.get("station_id"),
+            "station_name": r.get("station_name"),
+            "district": r.get("district"),
+            "action": r.get("action"),
+            "target_available": r.get("target_available"),
+            "priority_score": r.get("priority_score"),
+            "distance_km": round(dist, 2),
+            "suggest_score": round(score, 1),
+        })
+    cands.sort(key=lambda c: -c["suggest_score"])
+    return {
+        "vehicle_id": vehicle_id,
+        "from_district": from_district,
+        "cross_district_allowed": cross_ok,
+        "candidates": cands[:top_k],   # 建議清單，由後台拍板（非自動派工）
+    }

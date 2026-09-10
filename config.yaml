@@ -111,6 +111,55 @@ fleet:
 dispatch_resource:
   mode: db
   調度員總數: 350           # ADR-114：官方公布調度人員數（seed 起始值，純流水號無真名，可增刪改）
+  駐點人員數: 30            # ADR-116：駐點人員數（seed，守熱門站現場調節，可增刪改）
+
+# ── 班別（ADR-116，shift 用）──
+# 三班連續覆蓋（無空窗）；時間為 HH:MM，跨午夜的大夜班 end < start 代表跨日。
+# allow_cross_district：早/晚班綁區(false)、大夜班可跨區(true，大宗跨區復原)。
+# peak_start/peak_end：該班尖峰時段（折返模式），無尖峰留空。
+shifts:
+  morning:                 # 早班
+    start: "06:30"
+    end: "15:30"
+    peak_start: "07:30"
+    peak_end: "09:30"
+    allow_cross_district: false
+  evening:                 # 晚班
+    start: "15:30"
+    end: "22:00"
+    peak_start: "17:00"
+    peak_end: "19:00"
+    allow_cross_district: false
+  night:                   # 大夜班（跨午夜）
+    start: "22:00"
+    end: "06:30"
+    peak_start: ""
+    peak_end: ""
+    allow_cross_district: true
+
+# ── 勞動工時（ADR-116，勞基法硬約束 + 工作警示）──
+labor:
+  連續工時上限_分鐘: 240     # 連續工作滿此值須休息（勞基法：4 小時）
+  休息時間_分鐘: 30         # 休息時長（勞基法：至少 30 分）
+  工時預警_分鐘: 180        # 連續工時達此值開始預警（提前 1 小時提醒該安排休息）
+
+# ── 下一趟建議（ADR-117 離峰滾動排程，dispatcher.suggest_next_trip 用）──
+# 綜合評分 = 緊急度分數 − 距離(km) × 每公里扣分。分數高者建議優先（由後台拍板，非自動派）。
+dispatch_next:
+  每公里扣分: 2.0           # 距離懲罰權重：離越遠扣越多（平衡緊急度與成本）
+
+# ── 車隊靜態保留率（ADR-118，緊急救火用）──
+# 全車隊固定保留一定比例為 standby，不參與常態派單；只由緊急救火觸發轉 active。
+reserve:
+  保留率: 0.12             # standby 比例（10~15%）；41 台 → 約 5 台待命
+
+# ── 緊急救火觸發（ADR-118，emergency 用）──
+# 死結 = 站點 100% 滿載或 0% 空車。某區同時多個大站死結且在途車來不及 → 派 standby 救火（可跨區）。
+emergency:
+  死結站數門檻: 3           # 某行政區同時 ≥ 此數的大站死結才觸發
+  死結持續分鐘: 15          # 死結需持續 ≥ 此值（避免瞬時波動誤觸）
+  在途門檻分鐘: 30          # 現有在途車抵達均 > 此值才需動用 standby
+  大站柱數門檻: 40          # 「精華大站」的柱數下限（只有大站死結才算數）
 
 # ── 疲勞管理（dispatcher 用）──
 # 「單次」= 單一輪班（whole shift），不是單趟。一個輪班累積搬運超過此值 → 排休息。

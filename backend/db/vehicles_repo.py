@@ -25,7 +25,7 @@ from typing import Optional
 
 from db.connection import get_connection
 
-_VALID_STATUS = {"available", "dispatched", "maintenance", "off_duty"}
+_VALID_STATUS = {"available", "dispatched", "maintenance", "off_duty", "standby"}
 # 可由 update_vehicle 更新的欄位（白名單，避免任意欄位注入）
 _UPDATABLE = {"max_capacity", "status", "current_district", "current_task_id", "is_active"}
 
@@ -129,6 +129,34 @@ def deactivate(vehicle_id: str) -> bool:
         (_now(), vehicle_id))
     conn.commit()
     return cur.rowcount > 0
+
+
+def list_standby() -> list[dict]:
+    """列出待命預備車（ADR-118：status=standby，不參與常態派單，緊急救火才動用）。"""
+    return [v for v in list_vehicles(active_only=True) if v.get("status") == "standby"]
+
+
+def set_reserve_fleet(reserve_ratio: float = 0.12) -> int:
+    """ADR-118 車隊靜態保留率：把車隊末端一定比例的車標為 standby（不參與常態派單）。
+
+    以 vehicle_id 排序取末段 ceil(總數×比例) 台設為 standby，其餘設回 available（冪等）。
+    回傳設為 standby 的車數。
+    """
+    import math
+    all_v = sorted(list_vehicles(active_only=True), key=lambda v: v["vehicle_id"])
+    n_reserve = math.ceil(len(all_v) * reserve_ratio)
+    reserve_ids = {v["vehicle_id"] for v in all_v[-n_reserve:]} if n_reserve > 0 else set()
+    for v in all_v:
+        want = "standby" if v["vehicle_id"] in reserve_ids else "available"
+        # 只動 available/standby 的車，不覆蓋 dispatched/maintenance（正在用的不要亂改）
+        if v.get("status") in ("available", "standby") and v.get("status") != want:
+            update_vehicle(v["vehicle_id"], status=want)
+    return len(reserve_ids)
+
+
+def activate_reserve(vehicle_id: str, district: str, task_id: Optional[str] = None) -> Optional[dict]:
+    """ADR-118 緊急救火：把待命預備車轉 active（dispatched）並指派到救火行政區。"""
+    return assign_district(vehicle_id, district, task_id)
 
 
 def seed_default_vehicles(n: int = 41, max_capacity: int = 15) -> None:

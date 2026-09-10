@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS operators (
     current_lng           REAL,
     current_task_id       TEXT,
     current_district      TEXT,                     -- ADR-114 動態：當前被指派作業的行政區（隨任務變動，非綁定責任區）
+    role_type             TEXT,                     -- ADR-116 營運角色：driver/stationed/controller（與登入 role 正交）
+    stationed_at          TEXT,                     -- ADR-116 駐點人員駐守站（僅 stationed；driver/controller 為 NULL）
     task_queue_json       TEXT DEFAULT '[]',
     today_completed_tasks INTEGER DEFAULT 0,
     today_bikes_moved     INTEGER DEFAULT 0,
