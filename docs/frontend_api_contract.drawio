@@ -1,0 +1,187 @@
+<mxfile host="app.diagrams.net" version="24.0.0">
+  <diagram id="frontend-api-contract" name="前端資料契約">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2600" pageHeight="2000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="YouBike 智慧調度系統 — 前端資料契約（後端能提供什麼 API / 前端呈現什麼）　更新：含 ADR-119 互動組單" style="text;html=1;fontSize=20;fontStyle=1;align=center;fontColor=#0d47a1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="2520" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="端點前綴 /api/v1 ｜ X-Operator-Id 標頭辨識身分 ｜ 所有資源都走工廠 get_xxx() 取抽象介面（可抽換、故障隔離）" style="text;html=1;fontSize=13;align=center;fontColor=#455a64;" vertex="1" parent="1">
+          <mxGeometry x="40" y="58" width="2520" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- 圖例 -->
+        <mxCell id="legend_box" value="圖例（接線狀態）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#90a4ae;fontColor=#263238;fontStyle=1;verticalAlign=top;align=left;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="92" width="700" height="92" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_real" value="■ 已接真實系統（可直接串）" style="text;html=1;fontSize=12;align=left;fontColor=#1b5e20;" vertex="1" parent="1">
+          <mxGeometry x="55" y="118" width="240" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_partial" value="■ 部分真實 / 部分 mock（值待接）" style="text;html=1;fontSize=12;align=left;fontColor=#e65100;" vertex="1" parent="1">
+          <mxGeometry x="55" y="143" width="300" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_mock" value="■ mock 骨架，後端邏輯已備待接成 API" style="text;html=1;fontSize=12;align=left;fontColor=#b71c1c;" vertex="1" parent="1">
+          <mxGeometry x="380" y="118" width="320" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_new" value="■ 新後端能力（函式已備，尚無 API 端點，需你包）" style="text;html=1;fontSize=12;align=left;fontColor=#4a148c;" vertex="1" parent="1">
+          <mxGeometry x="380" y="143" width="350" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_note" value="顏色只代表「目前接線」；介面契約不變，接上後前端不用改" style="text;html=1;fontSize=11;align=left;fontColor=#616161;" vertex="1" parent="1">
+          <mxGeometry x="55" y="163" width="640" height="16" as="geometry" />
+        </mxCell>
+
+        <!-- 欄位標頭 -->
+        <mxCell id="col1" value="前端呈現（畫面）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0d47a1;strokeColor=none;fontColor=#ffffff;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="40" y="200" width="520" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="col2" value="API 端點 / 後端函式（/api/v1）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0d47a1;strokeColor=none;fontColor=#ffffff;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="640" y="200" width="1000" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="col3" value="後端系統 / 資料來源（可抽換工廠）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0d47a1;strokeColor=none;fontColor=#ffffff;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="1720" y="200" width="840" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- 列1 地圖 -->
+        <mxCell id="ui_map" value="即時站點地圖（1600 站）&#10;空/滿/正常色階、行政區篩選" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1565c0;fontColor=#0d47a1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="252" width="520" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="api_stations" value="GET /stations　［已接真實］→ list：&#10;station_id / station_name / district / lat,lng /&#10;total_docks(總柱數) / available_bikes(可借車數) /&#10;available_docks(可還空位數) / usage_rate /&#10;status(empty/full/normal) / data_freshness" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#e8f5e9;strokeColor=#2e7d32;fontColor=#1b5e20;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="248" width="1000" height="82" as="geometry" />
+        </mxCell>
+        <mxCell id="be_ds" value="get_data_source()　資料源層（ADR-006 可抽換）&#10;mock / historical(S3) / tdx / youbike_official&#10;+ 降級保護（即時掛掉退歷史，標 data_freshness）" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#e8f5e9;strokeColor=#2e7d32;fontColor=#1b5e20;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1720" y="256" width="840" height="66" as="geometry" />
+        </mxCell>
+
+        <!-- 列2 單站詳情 -->
+        <mxCell id="ui_detail" value="單站詳情面板&#10;歷史曲線 + 未來預測區間 + 參數" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1565c0;fontColor=#0d47a1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="346" width="520" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="api_detail" value="GET /stations/{id}　［部分真實］→&#10;current(即時源,真實) / history(S3六個月,真實) /&#10;prediction(mock,待接 LightGBM) / params(DB,真實)" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#fff3e0;strokeColor=#e65100;fontColor=#e65100;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="342" width="1000" height="74" as="geometry" />
+        </mxCell>
+        <mxCell id="be_model" value="get_predictor() 模型系統（ADR-113）★已完成&#10;LightGBMPredictor.predict_multi(station) →&#10;30/60/90/120 分到達存量區間(P10/P50/P90,raw+bound)&#10;current←即時源 / history←S3 / params←station_params 表" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#fff3e0;strokeColor=#e65100;fontColor=#e65100;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1720" y="338" width="840" height="82" as="geometry" />
+        </mxCell>
+
+        <!-- 列3 緊急度清單 -->
+        <mxCell id="ui_reco" value="需調度清單（緊急度排序）&#10;後台組單的起點畫面" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1565c0;fontColor=#0d47a1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="440" width="520" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="api_reco" value="GET /dispatch/recommendations　［已接真實規則引擎］→ list(已排序)：&#10;station_id / station_name / district / action(補車/取車) / quantity /&#10;target_available(目標存量,主指令) / urgency_tier(censored/warning/normal) /&#10;priority_score(0~100) / priority_level / breach_horizon_min /&#10;arrival_by_horizon{30,60,90,120} / reason / basis / override_active" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#e8f5e9;strokeColor=#2e7d32;fontColor=#1b5e20;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="432" width="1000" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="be_rule" value="規則引擎+緊急度+目標水位（ADR-111/112/115）★已完成&#10;三層判斷 → 緊急度分數 → 動態目標水位(補到能撐過後續60分)&#10;dispatcher.build_dispatch_list(排序+資源限制)" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#e8f5e9;strokeColor=#2e7d32;fontColor=#1b5e20;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1720" y="442" width="840" height="76" as="geometry" />
+        </mxCell>
+
+        <!-- ===== 互動組單流程（ADR-119 重點區）===== -->
+        <mxCell id="builder_zone" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#6a1b9a;fontColor=#4a148c;dashed=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="20" y="548" width="2560" height="360" as="geometry" />
+        </mxCell>
+        <mxCell id="builder_title" value="★ 互動式派工單組建流程（ADR-119）— 這塊是你串接的重點：三入口 → 草稿預覽 → 確認落地 → 執行閉環" style="text;html=1;fontSize=14;fontStyle=1;align=left;fontColor=#4a148c;" vertex="1" parent="1">
+          <mxGeometry x="40" y="556" width="2500" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- 組單畫面 -->
+        <mxCell id="ui_builder" value="後台派工組單台&#10;（三個組單入口按鈕）&#10;+ 草稿預覽卡（顯示預估）&#10;+ 確認派發按鈕" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1565c0;fontColor=#0d47a1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="592" width="520" height="150" as="geometry" />
+        </mxCell>
+
+        <!-- 三入口 -->
+        <mxCell id="api_builder" value="組單三入口（core.dispatch_builder，函式已備 → 需包成 API 端點）　［新能力］&#10;(a) build_from_vehicle(vehicle_id, operator_id, [district]) — 以車為起點；改 district 自動重算&#10;(b) build_from_station(station_id, [operator_id],[vehicle_id]) — 以站為起點；&#10;　　 回 vehicle_candidates{in_district / nearby / depot_standby} 供後台選車&#10;(c) build_emergency(station_ids, [vehicle_id],[operator_id]) — 緊急出車(可跨區)；&#10;　　 回 resource_suggestion{nearest_idle / reserve_standby}（就近閒置車優先，預備車殿後）&#10;→ 三者都回「草稿 draft」：is_draft=true / stations[含 target_available] /&#10;　 estimate{est_distance_km / est_travel_min / est_work_min / est_total_min /&#10;　 total_quantity / stop_count / urgency_sum}　★草稿不落地，僅預覽" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#ede7f6;strokeColor=#6a1b9a;fontColor=#4a148c;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="588" width="1000" height="158" as="geometry" />
+        </mxCell>
+
+        <!-- 確認 -->
+        <mxCell id="api_confirm" value="確認落地（人在迴圈唯一閘門，需 dispatcher/controller 權限）　［新能力，對應 /dispatch/confirm］&#10;confirm_trip(draft, operator) → 草稿轉真任務：&#10;task_status=assigned / 建 task(route 站物件) /&#10;回寫車人 current_district / 站點認領標註 / audit 留痕" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#ede7f6;strokeColor=#6a1b9a;fontColor=#4a148c;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="756" width="1000" height="88" as="geometry" />
+        </mxCell>
+
+        <!-- 後端底層 -->
+        <mxCell id="be_builder" value="調度資源 + 底層演算（ADR-114/116/117/119）★已完成&#10;get_fleet_provider() / get_operator_provider()：&#10;　available_vehicles / depot_standby_vehicles(總站待命,獨立池) /&#10;　available_operators / depot_standby_operators / list_standby(預備車)&#10;底層(dispatcher)：_order_route(先取後放) / _pack_trips(載運量切) /&#10;　_estimate_trip_kpi / suggest_next_trip(下一趟建議)&#10;班別/工時(shift)：current_mode(offpeak/peak_shuttle/night) / 大夜可跨區" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#ede7f6;strokeColor=#6a1b9a;fontColor=#4a148c;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1720" y="592" width="840" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="be_exec" value="task_execution 執行閉環（ADR-117）★已完成 — 確認後接手&#10;report_station(逐站回報實際存量,記目標vs實際落差) /&#10;remove_station(後台抽離,偵測站況決定回池) / add_station /&#10;cancel_by_executor(執行者退回附原因) / station_claim_map(認領地圖)" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#ede7f6;strokeColor=#6a1b9a;fontColor=#4a148c;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1720" y="756" width="840" height="88" as="geometry" />
+        </mxCell>
+
+        <!-- 列 執行看板 -->
+        <mxCell id="ui_exec" value="任務執行看板&#10;派工單 + 認領地圖 + 逐站進度&#10;+ 下一趟建議" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1565c0;fontColor=#0d47a1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="932" width="520" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="api_exec" value="GET /dispatch/tasks　［mock 骨架，task_manager 已備待接］&#10;POST /dispatch/tasks/{id}/report → report_station（逐站回報）&#10;認領地圖 station_claim_map / 抽離增站 remove_station·add_station /&#10;下一趟建議 suggest_next_trip　［新能力，需包 API］&#10;→ task：trip_id/district/shift/mode/assigned_vehicle/assigned_operator/&#10;　 est_*/route[站級:target_available/station_status/actual_available/claimed_by]" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#ffebee;strokeColor=#b71c1c;fontColor=#b71c1c;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="928" width="1000" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="be_exec2" value="task_manager 狀態機（ADR-114）★已完成&#10;pending→assigned→in_progress→completed&#10;（見上「執行閉環」；確認後的任務生命週期）" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#ffebee;strokeColor=#b71c1c;fontColor=#b71c1c;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1720" y="944" width="840" height="66" as="geometry" />
+        </mxCell>
+
+        <!-- 列 警示 -->
+        <mxCell id="ui_alert" value="即時警示面板 / 紅字告警&#10;含死結救火、SSE 即時推播" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1565c0;fontColor=#0d47a1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1042" width="520" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="api_alert" value="GET /alerts　［已接真實］→ alert_id / level(info/warning/critical) /&#10;station_id / station_name / district / message / suggested_action /&#10;triggered_at / acknowledged&#10;POST /alerts/{id}/acknowledge ｜ GET /alerts/stream(SSE) ｜ POST /alerts/subscribe" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#e8f5e9;strokeColor=#2e7d32;fontColor=#1b5e20;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="1038" width="1000" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="be_alert" value="警示+緊急救火（ADR-118）★已完成&#10;alert_service(分級/推播/SSE/webhook 出向 SSRF 防護)&#10;emergency(死結偵測→派 standby 預備車救火,可跨區)" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#e8f5e9;strokeColor=#2e7d32;fontColor=#1b5e20;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1720" y="1046" width="840" height="72" as="geometry" />
+        </mxCell>
+
+        <!-- 列 人力車力 -->
+        <mxCell id="ui_fleet" value="人力/車隊狀態面板&#10;調度員·調度車·駐點·預備車·總站待命" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1565c0;fontColor=#0d47a1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1142" width="520" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="api_fleet" value="GET /operators　［mock 骨架，資料模型已備］→ operator_id / name /&#10;role_type(driver/stationed/controller/depot_standby) / status /&#10;current_district / stationed_at&#10;— 車隊 vehicles 需包 API：vehicle_id / max_capacity / status(含standby) /&#10;　 is_depot(總站待命) / current_district ─ 駐點預備車量 plan_stationed_reserves" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#ffebee;strokeColor=#b71c1c;fontColor=#b71c1c;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="1138" width="1000" height="98" as="geometry" />
+        </mxCell>
+        <mxCell id="be_fleet" value="調度資源（ADR-114/116/118/119）★已完成&#10;operators(四角色 driver/stationed/controller/depot_standby)&#10;vehicles(車輛主檔 + standby 保留率 + is_depot 總站待命)&#10;providers(可抽換：本地 seed / 未來 YouBike API)" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#ffebee;strokeColor=#b71c1c;fontColor=#b71c1c;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1720" y="1146" width="840" height="82" as="geometry" />
+        </mxCell>
+
+        <!-- 列 營運 -->
+        <mxCell id="ui_ops" value="營運儀表板 / 後台操作&#10;KPI·緊急覆寫·每日最適化·天氣" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1565c0;fontColor=#0d47a1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1252" width="520" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="api_ops" value="GET /kpi ［mock］ ｜ GET /simulation/replay ［mock］&#10;POST·DELETE /stations/{id}/emergency-override ［已接真實 override_service］&#10;GET /overrides/active ［真實］ ｜ GET /optimization/daily-review ［②AI 需人工核准］&#10;GET /audit/logs ［已接真實］人為介入留痕 ｜ GET /weather ［mock/可抽換, 突變偵測 ADR-118］" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#fff3e0;strokeColor=#e65100;fontColor=#e65100;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="1248" width="1000" height="104" as="geometry" />
+        </mxCell>
+        <mxCell id="be_ops" value="營運支援模組&#10;override_service(③即時覆寫)★真實 ｜ audit(稽核)★真實&#10;param_optimizer(②每日最適化) ｜ get_weather_source(可抽換)&#10;kpi(營運指標,待接真實統計)" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacing=8;fillColor=#fff3e0;strokeColor=#e65100;fontColor=#e65100;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1720" y="1252" width="840" height="82" as="geometry" />
+        </mxCell>
+
+        <!-- 連線 前端→API -->
+        <mxCell id="e1" style="endArrow=classic;html=1;strokeColor=#546e7a;" edge="1" parent="1" source="ui_map" target="api_stations"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="endArrow=classic;html=1;strokeColor=#546e7a;" edge="1" parent="1" source="ui_detail" target="api_detail"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="endArrow=classic;html=1;strokeColor=#546e7a;" edge="1" parent="1" source="ui_reco" target="api_reco"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" style="endArrow=classic;html=1;strokeColor=#6a1b9a;strokeWidth=2;" edge="1" parent="1" source="ui_builder" target="api_builder"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" style="endArrow=classic;html=1;strokeColor=#546e7a;" edge="1" parent="1" source="ui_exec" target="api_exec"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" style="endArrow=classic;html=1;strokeColor=#546e7a;" edge="1" parent="1" source="ui_alert" target="api_alert"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" style="endArrow=classic;html=1;strokeColor=#546e7a;" edge="1" parent="1" source="ui_fleet" target="api_fleet"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" style="endArrow=classic;html=1;strokeColor=#546e7a;" edge="1" parent="1" source="ui_ops" target="api_ops"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- 草稿→確認 內部流 -->
+        <mxCell id="ef" style="endArrow=classic;html=1;strokeColor=#6a1b9a;strokeWidth=2;" edge="1" parent="1" source="api_builder" target="api_confirm"><mxGeometry relative="1" as="geometry" /><mxPoint as="sourcePoint" /></mxCell>
+        <mxCell id="ef_lbl" value="預覽 OK → 確認" style="text;html=1;fontSize=10;fontColor=#4a148c;" vertex="1" parent="1"><mxGeometry x="1140" y="748" width="120" height="16" as="geometry" /></mxCell>
+
+        <!-- 連線 API→後端 -->
+        <mxCell id="b1" style="endArrow=classic;html=1;strokeColor=#546e7a;dashed=1;" edge="1" parent="1" source="api_stations" target="be_ds"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b2" style="endArrow=classic;html=1;strokeColor=#546e7a;dashed=1;" edge="1" parent="1" source="api_detail" target="be_model"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b3" style="endArrow=classic;html=1;strokeColor=#546e7a;dashed=1;" edge="1" parent="1" source="api_reco" target="be_rule"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b4" style="endArrow=classic;html=1;strokeColor=#6a1b9a;dashed=1;" edge="1" parent="1" source="api_builder" target="be_builder"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b5" style="endArrow=classic;html=1;strokeColor=#6a1b9a;dashed=1;" edge="1" parent="1" source="api_confirm" target="be_exec"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b6" style="endArrow=classic;html=1;strokeColor=#546e7a;dashed=1;" edge="1" parent="1" source="api_exec" target="be_exec2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b7" style="endArrow=classic;html=1;strokeColor=#546e7a;dashed=1;" edge="1" parent="1" source="api_alert" target="be_alert"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b8" style="endArrow=classic;html=1;strokeColor=#546e7a;dashed=1;" edge="1" parent="1" source="api_fleet" target="be_fleet"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="b9" style="endArrow=classic;html=1;strokeColor=#546e7a;dashed=1;" edge="1" parent="1" source="api_ops" target="be_ops"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- 底部說明 -->
+        <mxCell id="footer" value="給你（API 串接）的重點：① 綠色可直接串。② 橙色介面已定、值待接（單站預測接 LightGBM、KPI、天氣）。③ 紅色是 mock 骨架、後端邏輯已完整有測試（任務/人力車力），差包成 API。④ 紫色是 ADR-119 互動組單新能力（dispatch_builder 三入口 + confirm_trip），函式已備測試過、尚無 API 端點——這是你要新增的核心。全部走 get_xxx() 工廠取抽象，換模型/換源不影響你的端點。" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eceff1;strokeColor=#90a4ae;fontColor=#263238;fontSize=12;align=left;spacing=10;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1380" width="2520" height="86" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
