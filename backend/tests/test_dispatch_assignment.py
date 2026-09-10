@@ -8,6 +8,7 @@ ADR-114 調度資源與行政區任務指派測試
   - persist 回寫 current_district 到車/人 + 建 task 帶 district
 """
 from __future__ import annotations
+import datetime as dt
 
 import pytest
 
@@ -17,6 +18,9 @@ from core.providers import (
     get_fleet_provider, get_operator_provider, reset_providers,
 )
 from core import dispatcher
+
+# 固定平日早班離峰時間，避免測試依賴真實時間（大夜班會觸發全市跨區，ADR-119）
+NOW = dt.datetime(2026, 6, 15, 11, 0)
 
 
 # ── vehicles_repo CRUD ──
@@ -99,7 +103,7 @@ def test_assign_by_district_no_cross_district_and_no_overload():
         _rec("B1", "三重區", 5, 85),
         _rec("B2", "三重區", 5, 60),   # 三重共 10 ≤ 15，但每趟最大站數=3 → 1 趟
     ]
-    trips = dispatcher.assign_by_district(dispatch_list)
+    trips = dispatcher.assign_by_district(dispatch_list, now=NOW)
     assert len(trips) >= 3   # 板橋至少 2 趟 + 三重 1 趟
     for t in trips:
         # 每趟同一行政區
@@ -116,7 +120,7 @@ def test_assign_by_district_persist_writes_back():
     orp.seed_dispatch_operators(5)
     reset_providers()
     dispatch_list = [_rec("A1", "新莊區", 8, 88), _rec("A2", "新莊區", 4, 70)]
-    trips = dispatcher.assign_by_district(dispatch_list, persist=True)
+    trips = dispatcher.assign_by_district(dispatch_list, persist=True, now=NOW)
     assert len(trips) == 1
     t = trips[0]
     assert t["status"] == "assigned"
@@ -141,7 +145,7 @@ def test_assign_by_district_unassigned_when_no_vehicle():
     reset_providers()
     # 兩區各 1 趟 → 第 2 趟無車可派
     dispatch_list = [_rec("A1", "板橋區", 10, 90), _rec("B1", "三重區", 10, 85)]
-    trips = dispatcher.assign_by_district(dispatch_list)
+    trips = dispatcher.assign_by_district(dispatch_list, now=NOW)
     assert len(trips) == 2
     statuses = {t["status"] for t in trips}
     assert "assigned" in statuses and "unassigned" in statuses

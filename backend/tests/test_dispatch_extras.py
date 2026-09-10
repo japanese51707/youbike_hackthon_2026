@@ -101,7 +101,9 @@ def test_plan_stationed_reserves_sorted():
 def test_weather_source_factory_and_unknown_mode():
     import pytest
     ws.reset_weather_source()
-    assert ws.get_weather_source().name == "mock"
+    # 明確指定 mock（不打外部 API）；config 預設現為 cwa（正式源）
+    assert ws.get_weather_source(force_mode="mock").name == "mock"
+    assert ws.get_weather_source(force_mode="cwa").name == "cwa"
     with pytest.raises(ValueError):
         ws.get_weather_source(force_mode="unknown")
 
@@ -112,8 +114,15 @@ def test_weather_shift_detection():
     assert ws.detect_weather_shift({"condition": "cloudy"}, {"condition": "rain"}) is None
 
 
-def test_cwa_source_is_skeleton():
-    import pytest
-    cwa = ws.get_weather_source(force_mode="cwa")
-    with pytest.raises(NotImplementedError):
-        cwa.get_weather("板橋區")
+def test_nearest_station_mapping_with_mock():
+    """最近測站對應（用 mock 注入站點，不打外部 API）。"""
+    rain = [
+        {"name": "近站", "town": "板橋區", "lat": 25.01, "lng": 121.46, "now": 0.0, "past10": 8.0, "past1hr": 12.0},
+        {"name": "遠站", "town": "淡水區", "lat": 25.16, "lng": 121.44, "now": 0.0, "past10": 0.0, "past1hr": 0.0},
+    ]
+    src = ws.MockWeatherSource(rain_overrides=rain)
+    # 查板橋座標 → 應對應「近站」
+    r = src.get_rainfall_by_location(25.012, 121.462)
+    assert r["name"] == "近站"
+    assert r["past10"] == 8.0
+    assert "distance_km" in r

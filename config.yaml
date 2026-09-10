@@ -162,10 +162,12 @@ emergency:
   大站柱數門檻: 40          # 「精華大站」的柱數下限（只有大站死結才算數）
 
 # ── 即時天氣源（ADR-118，weather_source 用；比照 data_source.mode 可抽換）──
-# mock = 開發/demo（不打外部 API）；cwa = 中央氣象署開放資料（正式，需 CWA_API_KEY 環境變數）
+# mock = 開發/測試（不打外部 API）；cwa = 中央氣象署開放資料（正式，觀測站級）
+# 精細度：觀測站級。雙資料集——雨量站(密度高,偵測驟雨)+氣象站(氣溫濕度)，最近測站對應。
+# API key 放環境變數 CWA_WEATHER_API_KEY（.env，勿寫進版控）；政府平台憑證問題用 verify=False。
 weather:
-  mode: mock
-  cwa_api_key: ""          # 正式用中央氣象署時填（勿寫進版控，用環境變數 CWA_API_KEY）
+  mode: cwa
+  county: "新北"           # 只取此縣市的測站
   timeout_sec: 5           # 出向 API 連線/讀取超時（出向資安）
   max_retries: 2           # 失敗重試上限（避免無限重試）
 

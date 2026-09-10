@@ -2,115 +2,237 @@
 即時天氣源（core.data.weather_source）— ADR-118
 ================================================
 偵測突發天氣轉變（如驟雨 → 還車率暴增），作為緊急救火的額外觸發訊號。
-比照 ADR-006 DataSource 可抽換：mock（開發/demo）/ cwa（中央氣象署開放資料，正式）。
+比照 ADR-006 DataSource 可抽換：mock（開發/測試）/ cwa（中央氣象署開放資料，正式）。
+換源只改 config.yaml 的 weather.mode。
 
-換源只改 config.yaml 的 weather.mode（比照 data_source.mode）。
+精細度：觀測站級（ADR-118 owner 決定；比行政區級細）。雙資料集：
+  - 雨量站 O-A0002-001（新北約 100 站，Past10Min/Now 雨量）→ 偵測驟雨主力（密度高）
+  - 氣象站 O-A0003-001（新北約 25 站，氣溫/濕度/天氣現象）→ 一般天氣輔助
+任一 YouBike 站（有經緯度）用 haversine 找「最近測站」取值（Voronoi 最近鄰對應）。
 
-出向資安（steering §11 出向信任）：氣象署 API 是「我方主動打第三方」，
-  - 只允許 https、設連線/讀取超時、限制重試次數
-  - 第三方回應當「不可信輸入」：型別/範圍檢查後才用，不直接信任
-  - API key 放環境變數（CWA_API_KEY），不寫進版控、不寫 log（steering §11.1）
-  - 不把內部錯誤細節外流
+出向資安（steering §11）：CWA 是第三方——
+  - API key 從環境變數 CWA_WEATHER_API_KEY 讀（放 .env，不進版控、不寫 log）
+  - 設超時 + 重試上限；政府平台憑證鏈問題用 verify=False（比照 youbike_official）
+  - 第三方回應當「不可信輸入」：欄位缺失/型別容錯，不直接信任
 
 對外暴露：
     get_weather_source() -> WeatherSource        # 依 config 回實作（單例）
     WeatherSource                                 # 抽象基底
-    WeatherSnapshot 欄位契約：
-      district, condition(sunny/cloudy/rain/heavy_rain/typhoon),
-      rainfall_mm, temperature_c, observed_at, source
-
-天氣突變偵測（供 emergency 用）：
-    detect_weather_shift(prev, curr) -> Optional[dict]   # 前後兩快照比對，回突變事件或 None
+    get_rainfall_by_location(lat, lng)            # 最近雨量站的即時雨量（驟雨偵測）
+    get_weather_by_location(lat, lng)             # 最近氣象站的氣溫/濕度/天氣現象
+    get_weather(district)                         # 相容：回該區代表測站（行政區級用途）
+    detect_weather_shift(prev, curr)              # 前後快照比對，偵測天氣突變
 """
 
 from __future__ import annotations
+import math
+import os
 from abc import ABC, abstractmethod
 from typing import Optional
 
-# 天氣狀態嚴重度（數字越大越可能推升還車率）
 _CONDITION_SEVERITY = {
     "sunny": 0, "cloudy": 1, "rain": 2, "heavy_rain": 3, "typhoon": 4,
 }
 
+# CWA 資料集代碼（實測確認，2026-09）
+_CWA_RAIN = "O-A0002-001"     # 自動雨量站（新北約 100 站）
+_CWA_WEATHER = "O-A0003-001"  # 自動氣象站（新北約 25 站）
+_CWA_BASE = "https://opendata.cwa.gov.tw/api/v1/rest/datastore"
 
+
+def _haversine_km(lat1, lng1, lat2, lng2) -> float:
+    try:
+        lat1, lng1, lat2, lng2 = float(lat1), float(lng1), float(lat2), float(lng2)
+    except (TypeError, ValueError):
+        return float("inf")
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = math.radians(lat2 - lat1), math.radians(lng2 - lng1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return r * 2 * math.asin(math.sqrt(a))
+
+
+def _f(v, d=None):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return d
+
+
+# ── 抽象介面 ──
 class WeatherSource(ABC):
-    """即時天氣源介面。實作回傳標準 WeatherSnapshot dict。"""
-
     name: str = "abstract"
 
     @abstractmethod
-    def get_weather(self, district: str) -> Optional[dict]:
-        """回單一行政區當前天氣快照。找不到回 None。"""
+    def rain_stations(self) -> list[dict]:
+        """所有雨量站快照：{name, town, lat, lng, now, past10, past1hr}。"""
         ...
 
     @abstractmethod
-    def get_all(self) -> list[dict]:
-        """回所有行政區當前天氣快照。"""
+    def weather_stations(self) -> list[dict]:
+        """所有氣象站快照：{name, town, lat, lng, condition, temperature_c, humidity, rainfall_mm}。"""
         ...
 
+    # ── 觀測站級查詢（ADR-118：最近測站對應）──
+    def get_rainfall_by_location(self, lat, lng) -> Optional[dict]:
+        stations = self.rain_stations()
+        if not stations:
+            return None
+        s = min(stations, key=lambda x: _haversine_km(lat, lng, x["lat"], x["lng"]))
+        return {**s, "distance_km": round(_haversine_km(lat, lng, s["lat"], s["lng"]), 2)}
 
-# ── 內建 mock（開發/demo；可注入指定天氣供測試突變）──
+    def get_weather_by_location(self, lat, lng) -> Optional[dict]:
+        stations = self.weather_stations()
+        if not stations:
+            return None
+        s = min(stations, key=lambda x: _haversine_km(lat, lng, x["lat"], x["lng"]))
+        return {**s, "distance_km": round(_haversine_km(lat, lng, s["lat"], s["lng"]), 2)}
+
+    def get_weather(self, district: str) -> Optional[dict]:
+        """相容介面（行政區級）：回該區內任一氣象站；無則回 None。"""
+        for s in self.weather_stations():
+            if s.get("town", "").startswith(district) or district in s.get("town", ""):
+                return s
+        return None
+
+
+# ── mock（開發/測試；不打外部 API）──
 class MockWeatherSource(WeatherSource):
     name = "mock"
 
-    def __init__(self, overrides: Optional[dict] = None):
-        # overrides: {district: condition} 供測試指定天氣
-        self._overrides = overrides or {}
+    def __init__(self, rain_overrides=None, wx_overrides=None):
+        self._rain = rain_overrides or []
+        self._wx = wx_overrides or []
 
-    def get_weather(self, district: str) -> Optional[dict]:
-        import datetime as _dt
-        cond = self._overrides.get(district, "cloudy")
-        return {
-            "district": district,
-            "condition": cond,
-            "rainfall_mm": {"heavy_rain": 30.0, "rain": 5.0, "typhoon": 60.0}.get(cond, 0.0),
-            "temperature_c": 26.0,
-            "observed_at": _dt.datetime.now().isoformat(timespec="seconds"),
-            "source": "mock",
-        }
+    def rain_stations(self) -> list[dict]:
+        return self._rain
 
-    def get_all(self) -> list[dict]:
-        # mock 只回 overrides 指定的區（demo/測試用）
-        return [self.get_weather(d) for d in self._overrides] if self._overrides else []
+    def weather_stations(self) -> list[dict]:
+        if self._wx:
+            return self._wx
+        # 預設一個代表站，供測試不為空
+        return [{"name": "mock站", "town": "板橋區", "lat": 25.01, "lng": 121.46,
+                 "condition": "cloudy", "temperature_c": 26.0, "humidity": 80.0,
+                 "rainfall_mm": 0.0}]
 
 
-# ── 中央氣象署（正式；骨架，出向資安框架就位，實際 HTTP 待現場串接）──
+# ── 中央氣象署（正式）──
 class CWAWeatherSource(WeatherSource):
-    """中央氣象署開放資料。骨架先就位出向資安框架；實際 httpx 呼叫待正式環境串接
-    （demo 用 mock，避免開發期打外部 API）。"""
+    """CWA 開放資料。雙資料集 + 最近測站對應。key 由環境變數 CWA_WEATHER_API_KEY 讀。"""
     name = "cwa"
 
-    def get_weather(self, district: str) -> Optional[dict]:
-        # 正式串接：_fetch(district) 帶 CWA_API_KEY(環境變數)、https、超時、重試上限、
-        #           回應做型別/範圍檢查後才回傳（出向不可信輸入）。開發期不實際打 API。
-        raise NotImplementedError("CWAWeatherSource 待正式環境串接（開發/demo 用 mock）")
+    def __init__(self):
+        from config_loader import get_config
+        w = get_config().get("weather", {})
+        self._timeout = int(w.get("timeout_sec", 5))
+        self._retries = int(w.get("max_retries", 2))
+        self._county = w.get("county", "新北")
+        self._key = os.environ.get("CWA_WEATHER_API_KEY", "")
+        self._rain_cache: Optional[list] = None
+        self._wx_cache: Optional[list] = None
 
-    def get_all(self) -> list[dict]:
-        raise NotImplementedError("CWAWeatherSource 待正式環境串接（開發/demo 用 mock）")
+    def _fetch(self, code: str) -> list[dict]:
+        """打 CWA API，回該縣市測站原始列（出向資安：超時/重試/verify=False/回應容錯）。"""
+        import httpx
+        if not self._key:
+            raise RuntimeError("缺 CWA_WEATHER_API_KEY 環境變數（放 .env，勿進版控）")
+        url = f"{_CWA_BASE}/{code}"
+        last_err = None
+        for _ in range(self._retries + 1):
+            try:
+                # 政府平台憑證鏈問題 → verify=False（比照 youbike_official；key 在參數非靠 SSL 保護）
+                r = httpx.get(url, params={"Authorization": self._key, "format": "JSON"},
+                              timeout=self._timeout, verify=False)
+                r.raise_for_status()
+                stations = r.json().get("records", {}).get("Station", [])
+                return [s for s in stations
+                        if self._county in s.get("GeoInfo", {}).get("CountyName", "")]
+            except Exception as e:   # noqa: BLE001 - 第三方不可信，容錯後重試
+                last_err = e
+        raise RuntimeError(f"CWA {code} 取用失敗：{type(last_err).__name__}")
+
+    @staticmethod
+    def _wgs84(geo: dict):
+        for c in geo.get("Coordinates", []):
+            if c.get("CoordinateName") == "WGS84":
+                return _f(c.get("StationLatitude")), _f(c.get("StationLongitude"))
+        cs = geo.get("Coordinates", [])
+        return (_f(cs[0].get("StationLatitude")), _f(cs[0].get("StationLongitude"))) if cs else (None, None)
+
+    def rain_stations(self) -> list[dict]:
+        if self._rain_cache is not None:
+            return self._rain_cache
+        out = []
+        for s in self._fetch(_CWA_RAIN):
+            geo = s.get("GeoInfo", {})
+            lat, lng = self._wgs84(geo)
+            if lat is None or lng is None:
+                continue
+            re = s.get("RainfallElement", {})
+            out.append({
+                "name": s.get("StationName", "?"), "town": geo.get("TownName", ""),
+                "lat": lat, "lng": lng,
+                "now": _f(re.get("Now", {}).get("Precipitation"), 0.0),
+                "past10": _f(re.get("Past10Min", {}).get("Precipitation"), 0.0),
+                "past1hr": _f(re.get("Past1hr", {}).get("Precipitation"), 0.0),
+            })
+        self._rain_cache = out
+        return out
+
+    def weather_stations(self) -> list[dict]:
+        if self._wx_cache is not None:
+            return self._wx_cache
+        out = []
+        for s in self._fetch(_CWA_WEATHER):
+            geo = s.get("GeoInfo", {})
+            lat, lng = self._wgs84(geo)
+            if lat is None or lng is None:
+                continue
+            we = s.get("WeatherElement", {})
+            out.append({
+                "name": s.get("StationName", "?"), "town": geo.get("TownName", ""),
+                "lat": lat, "lng": lng,
+                "condition": _map_condition(we.get("Weather", "")),
+                "raw_weather": we.get("Weather", ""),
+                "temperature_c": _f(we.get("AirTemperature")),
+                "humidity": _f(we.get("RelativeHumidity")),
+                "rainfall_mm": _f(we.get("Now", {}).get("Precipitation"), 0.0),
+            })
+        self._wx_cache = out
+        return out
+
+
+def _map_condition(raw: str) -> str:
+    """CWA 中文天氣現象 → 標準 condition（供 detect_weather_shift 嚴重度比對）。"""
+    if not raw:
+        return "cloudy"
+    if "颱" in raw:
+        return "typhoon"
+    if "大雨" in raw or "豪雨" in raw or "雷" in raw:
+        return "heavy_rain"
+    if "雨" in raw:
+        return "rain"
+    if "晴" in raw:
+        return "sunny"
+    return "cloudy"
 
 
 def detect_weather_shift(prev: dict, curr: dict) -> Optional[dict]:
-    """比對同區前後兩快照，偵測「天氣突變（惡化）」→ 回突變事件；無突變回 None。
-
-    突變 = 嚴重度上升 ≥ 2 級（如 sunny→rain、cloudy→heavy_rain），
-    這種驟變最可能引發還車率暴增（雨來大家趕快騎回家/改搭車）。
-    """
+    """比對同區前後快照，偵測天氣突變（惡化 ≥2 級）→ 回突變事件，否則 None。"""
     if not prev or not curr:
         return None
     sp = _CONDITION_SEVERITY.get(prev.get("condition"), 0)
     sc = _CONDITION_SEVERITY.get(curr.get("condition"), 0)
     if sc - sp >= 2:
         return {
-            "district": curr.get("district"),
-            "from": prev.get("condition"),
-            "to": curr.get("condition"),
+            "from": prev.get("condition"), "to": curr.get("condition"),
             "severity_jump": sc - sp,
             "hint": "天氣驟變惡化，還車率可能暴增，建議該區提前備援（駐點/預備車）",
         }
     return None
 
 
-# ── 工廠（依 config 切換，單例；比照 get_data_source）──
+# ── 工廠（依 config 切換，單例）──
 _instance: Optional[WeatherSource] = None
 _mode: Optional[str] = None
 
