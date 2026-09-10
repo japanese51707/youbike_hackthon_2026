@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS vehicles (
     current_district  TEXT,                          -- 動態：當前作業行政區（隨任務指派變動）
     current_task_id   TEXT,                          -- 當前任務
     is_active         INTEGER DEFAULT 1,             -- 1=啟用 0=停用（停用取代刪除，保留稽核關聯）
+    is_depot          INTEGER DEFAULT 0,             -- ADR-119 總站待命車（1=總站待命，可調派各區支援）
     created_at        TEXT NOT NULL,
     updated_at        TEXT NOT NULL
 );

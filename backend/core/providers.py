@@ -38,12 +38,21 @@ class OperatorProvider(ABC):
         ...
 
     def available_operators(self) -> list[dict]:
-        """可派遣的調度員（啟用中且非忙碌/休息）。預設用 status 篩，實作可覆寫。"""
+        """可派遣的一般調度員（啟用中、非忙碌/休息，且非總站待命）。
+        總站待命人力（ADR-119 depot_standby）為獨立資源池，用 depot_standby_operators() 取。"""
         out = []
         for o in self.list_operators(active_only=True):
+            if o.get("role_type") == "depot_standby":
+                continue   # 總站待命獨立，不進一般池
             if o.get("status") in (None, "on_duty", "off_duty"):
                 out.append(o)
         return out
+
+    def depot_standby_operators(self) -> list[dict]:
+        """總站待命人力（ADR-119，可調派各區支援）。"""
+        return [o for o in self.list_operators(active_only=True)
+                if o.get("role_type") == "depot_standby"
+                and o.get("status") in (None, "on_duty", "off_duty")]
 
 
 class FleetProvider(ABC):
@@ -60,9 +69,15 @@ class FleetProvider(ABC):
         ...
 
     def available_vehicles(self) -> list[dict]:
-        """可派遣的調度車（啟用中且 status=available）。"""
+        """可派遣的一般調度車（啟用中、status=available，且非總站待命）。
+        總站待命車（ADR-119 is_depot）與預備車（standby）為獨立池，各有專屬取法。"""
         return [v for v in self.list_vehicles(active_only=True)
-                if v.get("status") == "available"]
+                if v.get("status") == "available" and not v.get("is_depot")]
+
+    def depot_standby_vehicles(self) -> list[dict]:
+        """總站待命車（ADR-119，is_depot 且 available，可調派各區）。"""
+        return [v for v in self.list_vehicles(active_only=True)
+                if v.get("is_depot") and v.get("status") == "available"]
 
 
 # ── 內建實作：讀本地 SQLite（開發/demo；含 seed）──

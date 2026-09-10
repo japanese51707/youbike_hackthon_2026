@@ -83,6 +83,7 @@ _MIGRATIONS = [
     ("tasks", "assigned_vehicle", "TEXT"),       # ADR-114
     ("operators", "role_type", "TEXT"),          # ADR-116 營運角色 driver/stationed/controller
     ("operators", "stationed_at", "TEXT"),       # ADR-116 駐點人員駐守站(僅 stationed)
+    ("vehicles", "is_depot", "INTEGER"),         # ADR-119 總站待命車(1=總站待命,可調派各區)
 ]
 
 

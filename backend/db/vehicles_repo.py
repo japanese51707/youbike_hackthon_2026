@@ -27,7 +27,8 @@ from db.connection import get_connection
 
 _VALID_STATUS = {"available", "dispatched", "maintenance", "off_duty", "standby"}
 # 可由 update_vehicle 更新的欄位（白名單，避免任意欄位注入）
-_UPDATABLE = {"max_capacity", "status", "current_district", "current_task_id", "is_active"}
+_UPDATABLE = {"max_capacity", "status", "current_district", "current_task_id",
+              "is_active", "is_depot"}
 
 
 def _now() -> str:
@@ -37,6 +38,7 @@ def _now() -> str:
 def _row_to_public(row) -> dict:
     d = dict(row)
     d["is_active"] = bool(d.get("is_active", 1))
+    d["is_depot"] = bool(d.get("is_depot", 0))
     return d
 
 
@@ -134,6 +136,24 @@ def deactivate(vehicle_id: str) -> bool:
 def list_standby() -> list[dict]:
     """列出待命預備車（ADR-118：status=standby，不參與常態派單，緊急救火才動用）。"""
     return [v for v in list_vehicles(active_only=True) if v.get("status") == "standby"]
+
+
+def list_depot_standby() -> list[dict]:
+    """列出總站待命車（ADR-119：is_depot=1 且可用，可調派各區支援；獨立於一般閒置車）。"""
+    return [v for v in list_vehicles(active_only=True)
+            if v.get("is_depot") and v.get("status") == "available"]
+
+
+def seed_depot_vehicles(n: int = 5, max_capacity: int = 15) -> None:
+    """種入總站待命車（ADR-119：DEPOT-001~00N，is_depot=1，可調派各區）。已存在則跳過。"""
+    conn = get_connection()
+    for i in range(1, n + 1):
+        vid = f"DEPOT-{i:03d}"
+        exists = conn.execute(
+            "SELECT 1 FROM vehicles WHERE vehicle_id = ?", (vid,)).fetchone()
+        if not exists:
+            create_vehicle(vid, max_capacity=max_capacity, status="available")
+            update_vehicle(vid, is_depot=1)
 
 
 def set_reserve_fleet(reserve_ratio: float = 0.12) -> int:

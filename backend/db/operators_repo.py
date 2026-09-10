@@ -37,7 +37,8 @@ def _row_to_public(row) -> dict:
     return d
 
 
-_VALID_ROLE_TYPES = {"driver", "stationed", "controller"}   # ADR-116 營運角色
+# ADR-116 營運角色 + ADR-119 depot_standby（總站待命人力，獨立資源類別，可調派各區）
+_VALID_ROLE_TYPES = {"driver", "stationed", "controller", "depot_standby"}
 
 
 def create_operator(
@@ -212,6 +213,21 @@ def seed_dispatch_operators(total: int = 350) -> None:
         if not exists:
             # 純流水號調度車人員（無真名、無密碼、無登入權限），僅供調度指派用
             create_operator(oid, name=oid, role="operator", password=None, role_type="driver")
+
+
+def seed_depot_standby_operators(total: int = 10) -> None:
+    """種入總站待命人力（ADR-119：DEP-001~0NN，role_type=depot_standby，可調派各區）。已存在則跳過。
+
+    總站待命為獨立資源類別（非一般 driver），供派工單三入口在「該區無閒置人力」時調派支援。
+    """
+    conn = get_connection()
+    for i in range(1, total + 1):
+        oid = f"DEP-{i:03d}"
+        exists = conn.execute(
+            "SELECT 1 FROM operators WHERE operator_id = ?", (oid,)).fetchone()
+        if not exists:
+            create_operator(oid, name=oid, role="operator", password=None,
+                            role_type="depot_standby")
 
 
 def seed_stationed_operators(total: int = 30) -> None:
