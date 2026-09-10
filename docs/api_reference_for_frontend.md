@@ -56,7 +56,12 @@
 | `/dispatch/build/emergency` | POST | 🟢 | 緊急組草稿 + resource_suggestion（body: station_ids[]） | 組單入口 c |
 | `/dispatch/confirm-trip` | POST | 🟢 | 草稿落地（需 dispatcher，body: draft） | 確認派發閘門 |
 | `/dispatch/confirm` | POST | 🔴 | （舊）確認結果 | 舊派發（改用 confirm-trip） |
-| `/dispatch/tasks/{id}/report` | POST | 🔴 | 回報+下一任務建議 | 逐站回報（P1 接） |
+| `/dispatch/tasks/{id}/report` | POST | 🟢 | 逐站回報（body: station_id/actual_available） | 逐站回報 |
+| `/dispatch/tasks/{id}/stations/{sid}` | DELETE | 🟢 | 後台抽離個別站（需 dispatcher） | 後台介入 |
+| `/dispatch/tasks/{id}/stations` | POST | 🟢 | 後台增加個別站（需 dispatcher） | 後台介入 |
+| `/dispatch/tasks/{id}/return` | POST | 🟢 | 執行者退回（附原因） | 退回任務 |
+| `/dispatch/claim-map` | GET | 🟢 | 站點認領地圖（防重複接） | 認領地圖 |
+| `/dispatch/next-trip?vehicle_id=` | GET | 🟢 | 下一趟建議（緊急度-距離評分） | 滾動排程 |
 | `/dispatch/overview` | GET | 🔴 | 全域總覽 | 長官儀表板 |
 
 **`GET /dispatch/recommendations` 每筆欄位（查詢參數 `limit` / `priority`）：**
@@ -88,6 +93,8 @@
 | `/alerts/{id}/acknowledge` | POST | 🟢 | 標記已讀結果 | 確認警示 |
 | `/alerts/subscribe` | POST | 🟢 | webhook 訂閱結果 | 機關訂閱 |
 | `/alerts/stream` | GET | 🟢 | `{events:[...]}` 待推佇列 | 即時推播（輪詢/SSE） |
+| `/emergency/deadlocks` | GET | 🟢 | 各區死結大站清單 | 死結警報 |
+| `/emergency/check` | POST | 🟢 | `{triggered, dispatched[], alerts[]}`（body: in_transit_eta_min/persist） | 死結救火 |
 
 **警示每筆欄位：**
 
@@ -107,8 +114,11 @@
 
 | 端點 | 方法 | 狀態 | 回傳 | 用途 |
 |---|---|---|---|---|
-| `/operators` | GET | 🔴 | 調度員陣列 | 人力面板 |
-| `/operators/{id}` | GET | 🔴 | 單一調度員 | 調度員詳情 |
+| `/operators` | GET | 🟢 | 調度員陣列（可篩 role_type） | 人力面板 |
+| `/operators/{id}` | GET | 🟢 | 單一調度員 | 調度員詳情 |
+| `/vehicles` | GET | 🟢 | 車隊陣列（max_capacity/status/is_depot/current_district） | 車隊面板 |
+| `/vehicles/standby` | GET | 🟢 | `{reserve_standby, depot_standby}` 待命車 | 預備車/總站待命 |
+| `/vehicles/{id}` | GET | 🟢 | 單一調度車 | 車輛詳情 |
 | `/operators/{id}/stream` | GET | 🔴 | 即時更新 | SSE 推播 |
 
 **調度員欄位（資料模型已備，端點待接真實）：**

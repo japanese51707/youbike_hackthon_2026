@@ -57,12 +57,67 @@ def task_detail(task_id: str):
 
 @router.post("/dispatch/tasks/{task_id}/report")
 def report(task_id: str, body: dict = Body(...), operator: dict = Depends(get_operator)):
-    """3.6/3.13 回報任務 + 取下一任務（依位置）。只能回報自己的任務。"""
-    # A0 骨架：實際「只能回報自己任務」的驗證在 A2 接 task_manager 後補
-    return {
-        "next_task": get_mock()["tasks"][0],
-        "assignment_reason": "mock：距您最近的最優先站已安排",
-    }
+    """3.6/3.13 逐站完成回報（ADR-117）。body: {station_id, actual_available}。
+
+    現場人員回報「該站實際存量」；系統記目標 vs 實際落差，回剩餘站數/是否全完成。
+    """
+    from core import task_execution as tx
+    if "station_id" not in body or "actual_available" not in body:
+        raise HTTPException(status_code=400, detail="需 station_id 與 actual_available")
+    try:
+        return tx.report_station(
+            task_id, str(body["station_id"]), float(body["actual_available"]),
+            operator=operator["operator_id"])
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.delete("/dispatch/tasks/{task_id}/stations/{station_id}")
+def remove_station(
+    task_id: str, station_id: str, reason: str = "",
+    operator: dict = Depends(require_role("dispatcher", "maintainer")),
+):
+    """ADR-119 後台抽離任務內個別站（緊急用，需 dispatcher）。偵測站況決定回池/視為完成。"""
+    from core import task_execution as tx
+    try:
+        return tx.remove_station(task_id, station_id, operator["operator_id"], reason)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/dispatch/tasks/{task_id}/stations")
+def add_station(
+    task_id: str, body: dict = Body(...),
+    operator: dict = Depends(require_role("dispatcher", "maintainer")),
+):
+    """ADR-119 後台增加個別站到任務（緊急用，需 dispatcher）。body: {station 物件}。"""
+    from core import task_execution as tx
+    station = body.get("station") or body
+    try:
+        return tx.add_station(task_id, station, operator["operator_id"],
+                              body.get("reason", ""))
+    except (KeyError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/dispatch/tasks/{task_id}/return")
+def return_task(task_id: str, body: dict = Body(...), operator: dict = Depends(get_operator)):
+    """ADR-119 執行者退回整張任務（須附原因）。使任務脫離 in_progress，後台可重排。"""
+    from core import task_execution as tx
+    reason = body.get("reason", "")
+    if not reason:
+        raise HTTPException(status_code=400, detail="退回任務必須說明原因")
+    try:
+        return tx.cancel_by_executor(task_id, operator["operator_id"], reason)
+    except (KeyError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/dispatch/claim-map")
+def claim_map(district: str | None = None):
+    """ADR-119 站點認領地圖：哪些站已被某任務認領（防重複接/漏做）。"""
+    from core import task_execution as tx
+    return tx.station_claim_map(district=district)
 
 
 @router.get("/dispatch/overview")
@@ -111,6 +166,13 @@ def build_emergency(body: dict = Body(...)):
     return db.build_emergency(
         body["station_ids"], _current_dispatch_list(),
         vehicle_id=body.get("vehicle_id"), operator_id=body.get("operator_id"))
+
+
+@router.get("/dispatch/next-trip")
+def next_trip(vehicle_id: str, top_k: int = 10):
+    """ADR-117 離峰滾動：車完成任務後，依車當前位置給下一趟建議（緊急度-距離評分，非自動派）。"""
+    from core.dispatcher import suggest_next_trip
+    return suggest_next_trip(vehicle_id, _current_dispatch_list(), top_k=top_k)
 
 
 @router.post("/dispatch/confirm-trip")

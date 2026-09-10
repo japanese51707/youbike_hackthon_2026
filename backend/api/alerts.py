@@ -49,3 +49,28 @@ def subscribe(body: dict = Body(...)):
 def alert_stream():
     """3.11 前端即時警示串流（骨架：回傳待推佇列。正式改 SSE EventSource）"""
     return {"events": get_alert_service().drain_sse()}
+
+
+# ── ADR-118 死結警報 / 緊急救火 ──
+
+@router.get("/emergency/deadlocks")
+def deadlocks():
+    """ADR-118 偵測各行政區死結大站（≥門檻 個大站連續滿/空）。"""
+    from core import emergency
+    stations = get_stations_with_degradation()
+    return emergency.detect_deadlocks(stations)
+
+
+@router.post("/emergency/check")
+def emergency_check(body: dict = Body(default={})):
+    """ADR-118 死結救火檢查：死結 + 在途來不及 → 派 standby 預備車 + 產 critical 警報。
+
+    body: {in_transit_eta_min?, persist?}。persist=true 才真的派車（預設只回報建議）。
+    """
+    from core import emergency
+    stations = get_stations_with_degradation()
+    return emergency.check_and_dispatch_reserve(
+        stations,
+        in_transit_eta_min=body.get("in_transit_eta_min"),
+        persist=bool(body.get("persist", False)),
+    )
