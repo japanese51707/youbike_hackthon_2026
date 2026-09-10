@@ -170,8 +170,10 @@
 | `/kpi` | GET | 🟢 | 全市即時統計（總站/空/滿/健康率/平均借用率） | 營運儀表板 |
 | `/simulation/replay` | GET | 🔴 | Before/After | Demo 成效重放 |
 | `/events` | GET/POST/DELETE | 🔴 | 活動事件 | 活動影響 |
-| `/optimization/daily-review` | GET | 🟡 | 每日最適化待確認摘要 | ②AI 最適化（需人工核准） |
-| `/optimization/daily-review/*` | POST | 🔴 | 逐站/核准/退回結果（需 maintainer） | 最適化決策 |
+| `/optimization/daily-review` | GET | 🟢 | optimizer 分情境偏差建議（調整係數）；做法Y建議層 | ②AI 最適化 |
+| `/optimization/daily-review/station/{id}` | POST | 🟢 | 逐站決定 accept/keep/re_adjust（需 maintainer） | 最適化決策 |
+| `/optimization/daily-review/approve` | POST | 🟢 | 核准→存 ai_optimized 版本（需 maintainer） | 套用最適化 |
+| `/optimization/daily-review/reject` | POST | 🟢 | 退回不留版本（需 maintainer） | 退回 |
 | `/weather/by-location?lat=&lng=` | GET | 🟢 | 該點最近雨量站+氣象站即時（見 §8.3） | 站點天氣/驟雨 |
 | `/weather` | GET | 🟡 | 天氣摘要（相容，回 mock；逐站改用 by-location） | 天氣顯示 |
 | `/health` | GET | 🟢 | 健康檢查 | 服務探活 |

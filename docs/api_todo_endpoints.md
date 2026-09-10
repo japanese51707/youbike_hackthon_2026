@@ -99,7 +99,11 @@
 
 > 站點靜態打包 `/stations/{id}/static`（位置+地形+POI+行為指紋，回快取不現算）、heatmap 聚合、
 > KPI 即時統計 皆已接真實。行為指紋離線批次算存 `_profile_cache.json`（tools/build_profile_cache.py）。
-> 仍 mock：`/simulation/replay`、`/optimization/daily-review`（需 param_optimizer，較複雜，後補）。
+> `/optimization/daily-review` 已接 optimizer（ADR-120 做法 Y：建議層真實+核准存版本閉環，
+>   調整係數生效接線待系統穩定後補）。
+> 仍 mock/暫緩：`/simulation/replay`（模擬引擎，概念記錄於 docs/analysis/future_simulation_replay_concept.md，
+>   放最後有餘裕再做）。
+> 另修：故障站偵測（可借+可還=0→offline，排除調度誤判，commit 7665594）。
 
 ### 9. 地形 / POI / 行為指紋（新增）🟣
 | 建議端點 | 方法 | 呼叫 | 回傳 |
