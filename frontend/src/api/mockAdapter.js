@@ -139,6 +139,7 @@ export const mockAdapter = {
     const state = readMockState();
     return {
       overview: requireObject(state.dispatch_overview, "dispatch_overview"),
+      kpi: requireObject(state.kpi, "kpi"),
       simulation: requireObject(state.simulation_replay, "simulation_replay"),
       timeline: requireObject(state.timeline, "timeline"),
       stations: requireArray(state.stations, "stations"),

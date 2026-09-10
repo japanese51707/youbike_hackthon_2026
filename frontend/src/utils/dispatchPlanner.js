@@ -45,6 +45,44 @@ export function availableVehicles(operators) {
   );
 }
 
+// 司機接單後的停靠序列（示意）：先取車後補車，各自從目前位置就近串接。
+// 純操作型排序，非派工決策（守 ADR-004）；不進派遣 payload。
+export function sequenceDriverRoute(start, acceptedStops) {
+  if (!start || !Array.isArray(acceptedStops) || !acceptedStops.length) {
+    return { start, route: [], totalDistanceKm: 0 };
+  }
+
+  const chainNearest = (items, from) => {
+    const remaining = [...items];
+    const ordered = [];
+    let cursor = from;
+    while (remaining.length) {
+      remaining.sort(
+        (a, b) =>
+          haversineKm(cursor, { lat: a.lat, lng: a.lng }) -
+          haversineKm(cursor, { lat: b.lat, lng: b.lng }),
+      );
+      const next = remaining.shift();
+      const legKm = haversineKm(cursor, { lat: next.lat, lng: next.lng });
+      ordered.push({ ...next, leg_km: Number(legKm.toFixed(2)) });
+      cursor = { lat: next.lat, lng: next.lng };
+    }
+    return { ordered, cursor };
+  };
+
+  const pickups = acceptedStops.filter((s) => s.action === "取車");
+  const dropoffs = acceptedStops.filter((s) => s.action !== "取車");
+
+  const first = chainNearest(pickups, start);
+  const second = chainNearest(dropoffs, first.cursor);
+  const route = [...first.ordered, ...second.ordered];
+  const totalDistanceKm = Number(
+    route.reduce((sum, stop) => sum + stop.leg_km, 0).toFixed(2),
+  );
+
+  return { start, route, totalDistanceKm };
+}
+
 export function planRouteForVehicle(vehicle, stations, config) {
   const { serviceRadiusKm, maxStops, targetRatio } = config;
   const start = {

@@ -4,7 +4,7 @@ import { formatDateTime } from "../../utils/formatters.js";
 
 const levelColors = { critical: "red", warning: "orange", info: "blue" };
 
-export default function AlertPanel({ alerts, onAcknowledge }) {
+export default function AlertPanel({ alerts, onAcknowledge, embedded = false }) {
   const [messageApi, contextHolder] = message.useMessage();
 
   const handleAcknowledge = async (alertId) => {
@@ -16,8 +16,8 @@ export default function AlertPanel({ alerts, onAcknowledge }) {
     }
   };
 
-  return (
-    <Card title="即時警示" extra={<Tag color="red">{alerts.filter((item) => !item.acknowledged).length} 未確認</Tag>}>
+  const body = (
+    <>
       {contextHolder}
       <List
         dataSource={alerts}
@@ -47,6 +47,13 @@ export default function AlertPanel({ alerts, onAcknowledge }) {
           </List.Item>
         )}
       />
+    </>
+  );
+
+  if (embedded) return body;
+  return (
+    <Card title="即時警示" extra={<Tag color="red">{alerts.filter((item) => !item.acknowledged).length} 未確認</Tag>}>
+      {body}
     </Card>
   );
 }

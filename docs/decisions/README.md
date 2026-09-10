@@ -42,7 +42,9 @@
 | [ADR-201](ADR-201-React-Vite-Mock-first前端架構.md) | React／Vite Mock-first 前端＋Leaflet 歷史基線 | superseded（由 ADR-202） | frontend, dependencies, data-adapter | `98d3e8e` 已完成 Mock-only 三頁與 Leaflet 基線；保留歷史，不再作為現行地圖選型 |
 | [ADR-202](ADR-202-MapLibre-DeckGL-OpenFreeMap地圖架構.md) | MapLibre／Deck.gl／OpenFreeMap 三頁地圖架構 | superseded（由 ADR-204） | frontend, map-architecture, outbound-security | 地圖遷移、OpenFreeMap 與 no-basemap 已於 `d1fdb16` 實作；底圖 style 來源條款由 ADR-204 取代，其餘決策由 ADR-204 承接 |
 | [ADR-203](ADR-203-Past-Live-Predict時序契約.md) | Past／Live／Predict 前端呈現與 Mock-first | accepted | frontend, temporal-presentation, mock-data | 前端 UI／Mock 決策已定；API／Schema／prediction／Alert／fallback／dispatch 契約仍待 owner／團隊決策，不可作為 A／B 實作依據 |
-| [ADR-204](ADR-204-數位孿生戰情室設計語言與暗色底圖.md) | 數位孿生戰情室設計語言＋自帶暗色底圖 | accepted | frontend, map-architecture, design-language, dependencies | 取代 ADR-202 底圖 style 來源、承接其餘決策；新增暗色 style 與 ArcLayer／Hexagon／Voronoi 視覺層，尚待實作 |
+| [ADR-204](ADR-204-數位孿生戰情室設計語言與暗色底圖.md) | 數位孿生戰情室設計語言＋自帶暗色底圖 | superseded（由 ADR-205） | frontend, map-architecture, design-language, dependencies | 暗色主題與地圖視覺已實作；資訊架構（三頁）由 ADR-205 取代為四頁，設計語言/地圖決策由 ADR-205 承接 |
+| [ADR-205](ADR-205-四頁角色導向資訊架構與無捲動版面.md) | 四頁角色導向資訊架構＋無捲動固定視窗版面 | accepted | frontend, information-architecture, ux | 調度/司機手機端/長官/戰情室；預設落地調度面板、炫技集中戰情室；2026-09-05 修訂：移除桌機司機頁（與調度面板重疊），司機僅手機端 |
+| [ADR-301](ADR-301-AI營運助理定位與LLM接入決策.md) | AI 營運助理定位與 LLM 接入決策（advisory-only） | proposed | platform, ai-advisory, security, api-contract | 助理僅輔助理解與建議、不自行決策（守 ADR-004）；是否接 LLM 及接法留給後端/owner 決定，尚不可作為實作依據 |
 
 ## 新決策流程
 

@@ -59,7 +59,13 @@ function buildTooltipHtml(station) {
   `;
 }
 
-export default function StationMap({ stations, dimension, onSelectStation, focus }) {
+export default function StationMap({
+  stations,
+  dimension,
+  onSelectStation,
+  focus,
+  showLayerControl = false,
+}) {
   const [activeLayers, setActiveLayers] = useState(["stations"]);
 
   const layers = useMemo(() => {
@@ -88,7 +94,7 @@ export default function StationMap({ stations, dimension, onSelectStation, focus
     return composed.filter(Boolean);
   }, [activeLayers, dimension, onSelectStation, stations]);
 
-  const layerControl = (
+  const layerControl = showLayerControl ? (
     <div className="map-layer-control">
       <div className="map-layer-control-title">圖層</div>
       <Checkbox.Group
@@ -97,7 +103,7 @@ export default function StationMap({ stations, dimension, onSelectStation, focus
         onChange={setActiveLayers}
       />
     </div>
-  );
+  ) : null;
   const getTooltip = useCallback(({ object }) => {
     if (!object) return null;
     return {
@@ -121,10 +127,10 @@ export default function StationMap({ stations, dimension, onSelectStation, focus
   }
 
   return (
-    <Card className="map-card" styles={{ body: { padding: 0 } }}>
+    <Card className="map-card" styles={{ body: { padding: 0, height: "100%" } }}>
       <SharedMap
         ariaLabel="站點即時壓力地圖"
-        className="station-map"
+        className="map-fill"
         initialViewState={presentationConfig.maps.dashboard}
         layers={layers}
         getTooltip={getTooltip}
