@@ -80,8 +80,9 @@ superseded-by:
 | ADR-122 | （新增） | 時序評估協議與標籤完整性(逐fold擬合/目標時間切分/補值與介入遮罩/輸出語意) | accepted |
 | ADR-123 | （新增） | 路線載量守恆與逐站到達可行性(車輛初始載量/逐站視野/工時重疊) | accepted |
 | ADR-124 | （新增） | 最適化調整係數的生效接線(off/shadow/on三態+絕對護欄) | accepted |
-| ADR-125 | （新增） | 預測區間的conformal校準(CQR+分組條件覆蓋率) | accepted |
+| ADR-125 | （新增） | 預測區間的conformal校準(CQR+分組條件覆蓋率) | superseded by ADR-127 |
 | ADR-126 | （新增） | 未受供給限制的需求估計(站內自比,獨立輸出不進決策) | accepted |
+| ADR-127 | （新增） | 不採用conformal校準與覆蓋率判讀規則(反證紀錄;禁以標籤選子集判校準) | accepted |
 
 **ADR-2xx（保留給 C，前端分支自行落實，本次不建立檔案）**：
 

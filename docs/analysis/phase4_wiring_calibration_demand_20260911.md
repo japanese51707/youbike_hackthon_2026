@@ -2,7 +2,8 @@
 
 日期：2026-09-11。分支：`feature/A-dispatch-safety-lifecycle`。未 push。
 決策：[ADR-124](../decisions/ADR-124-最適化調整係數的生效接線.md)、
-[ADR-125](../decisions/ADR-125-預測區間的conformal校準.md)、
+[ADR-125](../decisions/ADR-125-預測區間的conformal校準.md)（已由
+[ADR-127](../decisions/ADR-127-不採用conformal校準與覆蓋率判讀規則.md) 取代）、
 [ADR-126](../decisions/ADR-126-未受供給限制的需求估計.md)，前端沿用 ADR-205/206/304。
 
 **設計原則：全部 default-off。** 四項都加了開關且預設關閉，合併後不改變任何現有行為。
@@ -20,7 +21,7 @@
 
 決策邊界（ADR-004）：係數只改「目標水位」這一個量，測試固定住「係數不改變是否觸發、也不改變動作方向」。
 
-## 二、ADR-125 conformal 校準：**機制做完了，但實測證明這裡沒有東西要修**
+## 二、conformal 校準：**做完了、量測了、然後整條拆掉**（ADR-125 → ADR-127）
 
 ### 2.1 原本的判斷
 
@@ -68,10 +69,14 @@
 ### 2.4 結論與現況
 
 - **第三批把 67.9～75.3% 判讀為「校準問題」是錯的**，本批已用 430 萬列驗證資料推翻。
-- ADR-125 的機制（CQR、分組偏移、成套 `conformal.json`、`calibration` 標記）**已實作並通過測試**，
-  預設關閉。它在未來模型真的校準不良時仍然有用，但**對現行模型沒有東西可修**。
-- 因此**不建議開啟**，也不建議為此重訓（ADR-125 §2 要求校準集不得與訓練集重疊，現行 `_models/` 沒有保留校準窗口）。
-- **ADR-125 的狀態需要 owner 裁示**（見文末）。
+- owner 裁示：ADR-125 不留。改以 **[ADR-127](../decisions/ADR-127-不採用conformal校準與覆蓋率判讀規則.md)**
+  取代，把反證與判讀規則正式記錄下來——「不得以標籤本身選出來的子集判斷校準」。
+- 已拆除的接線：`LightGBMPredictor._calibration()` / `_CONFORMAL`、`PredictionInterval.calibration`
+  欄位、`config.prediction` 的四個校準設定、`run_train_save` 的校準窗口切分與 `conformal.json` 產出。
+  拆除後 `run_train_save` 恢復用全部乾淨列訓練（原本會白白少掉尾端 14 天）。
+- **保留**：`backend/prediction/conformal.py` 作為**沒有開關的離線量測庫**
+  （`tools/fullscale_eval/conformal_check.py` 需要它）。要重新啟用必須先立新 ADR；
+  `test_conformal.py::test_serving_has_no_conformal_wiring` 就是守住這條界線的閘門。
 
 證據：[`phase4_conformal/`](phase4_conformal/)；重現：`tools/fullscale_eval/{conformal_check,grouping_probe}.py`。
 
@@ -110,15 +115,15 @@ cd frontend && npm run build && node --test src/api/httpClient.test.js \
 | 第三批結束 | 262 passed | 11 passed + build |
 | +ADR-124 | 282 passed（+20 係數三態／護欄／批次） | — |
 | +ADR-125 | 293 passed（+11 CQR 保證／分組／成套檢查） | — |
+| +ADR-127（拆接線） | 301 passed（−3 旗標語意 +1 無接線閘門） | 11 passed + build 通過 |
 | +審核畫面 | 294 passed（+1 `coefficient_mode` 外露） | 11 passed + build 通過 |
 | +ADR-126 | **303 passed**（+9 估計語意／決策邊界／容錯） | — |
 
 ## 六、剩餘限制與待裁示
 
-1. **ADR-125 的狀態待 owner 裁示**。機制已實作且測試通過，但其「背景與問題」所依據的判斷已被本批證據推翻。
-   選項：(a) 維持 `accepted`，當作未來模型若失準時的備用機制（程式保留、旗標關閉）；
-   (b) 另立 ADR supersede，把「Δ≠0 覆蓋率不足是依變數選樣、不是校準缺陷」正式記錄為決策。
-   我建議 (b)，因為讓一份以錯誤前提寫成的 accepted ADR 留著，未來會有人照它去開啟校準。
+1. **（已裁示）ADR-125 由 ADR-127 取代**，可被開啟的部分已全數拆除，見第二節。
+   現行模型的區間未經任何後處理；若日後換模型，覆蓋率要重新量測，
+   且只能看邊際覆蓋率與「上線時算得出來的變數」分組覆蓋率。
 2. **ADR-124 的係數本身仍未經驗證**：係數是「近 N 日 vs 全期流出比值」，沒有任何預測品質驗證。
    建議先跑 `shadow` 模式累積差異資料，再決定要不要切 `on`。切換是營運決定，不在程式內自動升級。
 3. **ADR-126 對現行模型回 null**：`_models/` 的特徵包沒有 `demand` 區塊，要到下次依新流程重訓才有數字。

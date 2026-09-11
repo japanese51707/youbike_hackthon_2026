@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded
 date: 2026-09-11
 decision-makers:
   - project-owner
@@ -10,8 +10,14 @@ scope:
 related-commits: []
 retrospective: false
 supersedes:
-superseded-by:
+superseded-by: ADR-127
 ---
+
+> **本決策已被 ADR-127 取代（2026-09-11）。**
+> 實測證明本文「背景與問題」所依據的判斷有誤：conformal 偏移在四個視野皆為 0，
+> 原先觀察到的「條件覆蓋率不足」是以標籤本身選子集（selection on the outcome）造成的假象。
+> 實測數據與判讀規則見 [ADR-127](./ADR-127-不採用conformal校準與覆蓋率判讀規則.md)。
+> 以下內容保留作為歷史紀錄，**不得作為現行依據**。
 
 # ADR-125：預測區間的 conformal 校準
 

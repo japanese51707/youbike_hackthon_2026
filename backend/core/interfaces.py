@@ -41,8 +41,6 @@ class PredictionInterval:
     raw_lower_bound: Optional[float] = None
     raw_upper_bound: Optional[float] = None
     raw_predicted: Optional[float] = None
-    # ADR-125：這個區間有沒有經過 conformal 校準（"none" / "conformal"），永遠看得出來
-    calibration: str = "none"
 
     def __post_init__(self):
         # raw 未提供時退回夾過值（向後相容：舊 predictor 不會壞，只是失去穿透偵測能力）
@@ -140,7 +138,6 @@ class LightGBMPredictor:
     _MODELS = None
     _META = None
     _BUNDLE = None
-    _CONFORMAL = None          # ADR-125 校準偏移表；False 代表查過但沒有
     _CACHE = {}
     _LOCK = RLock()
 
@@ -163,25 +160,10 @@ class LightGBMPredictor:
         if any(m.feature_name() != meta["feature_cols"] for m in models.values()):
             raise ValueError("模型特徵順序與 meta 不符")
         cls._META, cls._BUNDLE, cls._MODELS = meta, bundle, models
-        cls._CONFORMAL = None
         cls._CACHE = {}
 
     def predict(self, station, horizon_minutes=30):
         return self.predict_multi(station).for_horizon(horizon_minutes)
-
-    @classmethod
-    def _calibration(cls):
-        """ADR-125：旗標開啟且校準檔與本模型成套時才回傳偏移表，否則 None（未校準）。"""
-        from config_loader import get_config
-        if not get_config().get("prediction", {}).get("套用conformal校準", False):
-            return None
-        if cls._CONFORMAL is None:
-            from pathlib import Path
-            from prediction.conformal import load
-            from prediction.serving_features import model_fingerprint
-            model_dir = Path(__file__).parent.parent / "prediction" / "_models"
-            cls._CONFORMAL = load(model_dir, model_fingerprint(model_dir)) or False
-        return cls._CONFORMAL or None
 
     def unconstrained_demand(self, station, action):
         """ADR-126：被供給壓抑的需求估計（獨立輸出，不進觸發判斷）。回 (值或 None, 依據)。"""
@@ -203,28 +185,18 @@ class LightGBMPredictor:
             if key in self._CACHE:
                 return deepcopy(self._CACHE[key])
         total, available = float(station["total_docks"]), float(station["available_bikes"])
-        calibration = self._calibration()          # ADR-125：旗標關或無成套校準檔 → None
+        # ADR-127：不對區間做 conformal 校準（實測偏移為 0，原判斷係以標籤選子集造成的假象）
         intervals = []
         for mins in self._META["horizons"]:
             lo, mid, hi = [available + float(self._MODELS[(mins, q)].predict(features, num_threads=1)[0])
                            for q in ("p10", "p50", "p90")]
             if not all(math.isfinite(x) for x in (lo, mid, hi)) or not lo <= mid <= hi:
                 raise PredictionUnavailable("模型分位數無效或交叉，暫停提供此站預測")
-            calibrated = "none"
-            if calibration:
-                from prediction.conformal import offset_for
-                entry = calibration.get("horizons", {}).get(str(mins))
-                offset = offset_for(entry, abs(mid - available)) if entry else 0.0
-                if offset > 0:
-                    # 只動 raw 界、不動 P50；夾值規則不變，截斷訊號語意保留（ADR-111）
-                    lo, hi = lo - offset, hi + offset
-                    calibrated = "conformal"
             clip = lambda value: round(max(0., min(total, value)), 1)
             intervals.append(PredictionInterval(
                 predicted_available=clip(mid), lower_bound=clip(lo), upper_bound=clip(hi),
                 horizon_minutes=mins, source="lightgbm",
-                raw_lower_bound=round(lo, 1), raw_upper_bound=round(hi, 1), raw_predicted=round(mid, 1),
-                calibration=calibrated))
+                raw_lower_bound=round(lo, 1), raw_upper_bound=round(hi, 1), raw_predicted=round(mid, 1)))
         result = MultiHorizonPrediction(station_id=station["station_id"], intervals=intervals, **quality)
         from config_loader import get_config
         with self._LOCK:

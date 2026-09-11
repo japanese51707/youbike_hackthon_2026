@@ -254,13 +254,10 @@ dispatch_drafts:
   max_entries: 256
 
 # 線上特徵／快取（ADR-121）
-# ── 預測輸出（ADR-125 conformal 校準 / ADR-126 需求估計）──
+# ── 預測輸出（ADR-126 需求估計；conformal 校準已於 ADR-127 否決）──
 prediction:
-  # ADR-125：是否把 conformal 偏移套在 P10/P90 上。預設關；開啟且模型包內有成套 conformal.json 才生效
-  套用conformal校準: false
-  校準窗口天數: 14          # 訓練期尾端切出來當校準集，這段不參與訓練
-  分組桶數: 4               # 依 |P50 − 現況| 分桶，各桶各自算偏移（條件覆蓋率）
-  分組最小樣本數: 500        # 桶內樣本不足就退回全域偏移
+  # ADR-127：不對區間做 conformal 校準（實測偏移全為 0），故此處沒有校準開關；
+  #          要重新評估須先立新 ADR，離線量測用 tools/fullscale_eval/conformal_check.py
   # ADR-126：是否輸出「未受供給限制的需求估計」（獨立欄位，不進觸發判斷）
   輸出未受限需求估計: false
   需求估計最小樣本數: 8    # 該站同時段「未觸底」的樣本數門檻；不足就回 null，不給看似確定的數字

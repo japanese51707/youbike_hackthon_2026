@@ -1,4 +1,9 @@
-"""第四批（ADR-125）：conformal 校準的數學保證、分組退回、成套檢查與旗標語意。"""
+"""第四批：conformal 校準的數學保證、分組退回與成套檢查（離線量測庫）。
+
+ADR-127 已否決把 conformal 接到上線路徑：430 萬列實測偏移全為 0。
+本檔保留 CQR 的數學測試，因為 tools/fullscale_eval/conformal_check.py 仍用這個庫做離線量測；
+最後一項測試則守住「上線不得有校準接線」這條界線。
+"""
 
 import json
 
@@ -108,32 +113,17 @@ def test_load_missing_or_broken_file_is_none(tmp_path):
     assert conformal.load(tmp_path, None) is None
 
 
-# ── serving 旗標語意 ──
+# ── ADR-127：serving 不得有校準接線 ──
 
-def test_flag_off_means_predictor_never_reads_the_file(monkeypatch):
-    """旗標關閉時連讀檔都不做，輸出標記為未校準。"""
+def test_serving_has_no_conformal_wiring():
+    """ADR-127：conformal 只留為離線量測庫；上線路徑不得有開關、快取或輸出欄位。
+
+    要重新啟用必須先立新 ADR，不是把旗標打開——這個測試就是那道閘門。
+    """
+    from core.interfaces import LightGBMPredictor, PredictionInterval
     from config_loader import get_config
-    from core.interfaces import LightGBMPredictor
-    monkeypatch.setitem(get_config()["prediction"], "套用conformal校準", False)
-    LightGBMPredictor._CONFORMAL = None
-    monkeypatch.setattr("prediction.conformal.load",
-                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("不該讀檔")))
-    assert LightGBMPredictor._calibration() is None
-
-
-def test_flag_on_without_bundle_is_not_an_error(monkeypatch):
-    """旗標開著但模型包裡沒有校準檔 → 視為未校準，不拋錯。"""
-    from config_loader import get_config
-    from core.interfaces import LightGBMPredictor
-    monkeypatch.setitem(get_config()["prediction"], "套用conformal校準", True)
-    LightGBMPredictor._CONFORMAL = None
-    monkeypatch.setattr("prediction.conformal.load", lambda *a, **k: None)
-    assert LightGBMPredictor._calibration() is None
-    LightGBMPredictor._CONFORMAL = None
-
-
-def test_default_interval_is_marked_uncalibrated():
-    from core.interfaces import PredictionInterval
-    iv = PredictionInterval(predicted_available=5, lower_bound=3, upper_bound=7,
-                            horizon_minutes=30)
-    assert iv.calibration == "none"
+    assert not hasattr(LightGBMPredictor, "_calibration")
+    assert not hasattr(LightGBMPredictor, "_CONFORMAL")
+    assert not hasattr(PredictionInterval(predicted_available=5, lower_bound=3,
+                                          upper_bound=7, horizon_minutes=30), "calibration")
+    assert not [k for k in get_config().get("prediction", {}) if "校準" in k]
