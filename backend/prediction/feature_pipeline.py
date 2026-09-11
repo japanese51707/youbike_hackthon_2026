@@ -4,6 +4,16 @@
 把 backend/features/ 的因子 + 站點歷史存量，組裝成可訓練/推論的特徵表。
 這一層是**防洩漏約束的強制執行點**（ADR-103~016）。
 
+★ADR-122（第三批）補強——與下列既有約束並存：
+  A. 擬合窗口以 fit_mask 為單位：所有由資料擬合而來的量（station_slot_p50、station_turnover
+     與其衍生權重/信心分級、行為指紋、調度介入判定的同時段 mean/std）只在 fit_mask 為真的列
+     擬合，再 transform 到全表。時序 CV 每折各自重新擬合，不重用跨折統計。
+  B. 切分依「目標時間」：is_train_{mins} 由 dt + 視野 是否落在訓練期決定；輸入時間在訓練期
+     但標籤跨進驗證期的列不得進訓練集。相容欄位 is_train 沿用舊定義（僅供既有呼叫端）。
+  C. 補值可辨識：forward fill 產生的列標 is_imputed；補值列不得當評估答案。
+  D. 遮罩涵蓋整個視野：is_censored_{mins} 逐視野判定；is_rebalancing_{mins} 只要 t+1..t+h
+     任一格被判為調度介入就排除（不是只排除起始列）。
+
 ★強制約束（不可繞過）：
   1. 計算窗口（ADR-103/014）：歷史統計/行為指紋/站點識別特徵，只用「目標時點之前」的資料。
      訓練時用訓練期；每列的站點識別特徵用「該列時點之前」的歷史（避免用到未來）。
@@ -67,6 +77,8 @@ def _forward_fill_grid(g: pd.DataFrame) -> pd.DataFrame:
     g = g.sort_values("dt").set_index("dt")
     full = pd.date_range(g.index.min(), g.index.max(), freq="30min")
     g = g.reindex(full)
+    # ADR-122 C：補值前先記下哪些列是真實觀測，補出來的存量不得當成評估答案
+    g["is_imputed"] = g["available_bikes"].isna().astype(int)
     # 只 forward fill（用過去值補，不用未來）
     for col in ["available_bikes", "available_docks", "total_docks"]:
         g[col] = g[col].ffill()
@@ -101,12 +113,19 @@ def _add_lag_and_target(g: pd.DataFrame) -> pd.DataFrame:
     for h, mins in HORIZON_STEPS.items():
         g[f"target_delta_{mins}"] = ab.shift(-h) - ab
 
-    # 截斷標記（ADR-105）：以「30分視野目標」判定（可借=0 或 可還=0 且 Δ=0）
-    # 注意 target_delta_30 末格為 NaN（shift(-1)），fillna(False) 讓其不算截斷（之後 dropna 會移除）
+    # 截斷標記（ADR-105 + ADR-122 D）：逐視野各自判定，不再用 30 分視野套用到所有視野。
+    # 注意末幾格的 target 為 NaN（shift(-h)），fillna(False) 讓其不算截斷（之後 dropna 會移除）
     at_empty = (g["available_bikes"] <= 0)
     at_full = (g["available_docks"] <= 0)
-    censored = (g["target_delta_30"] == 0) & (at_empty | at_full)
-    g["is_censored"] = censored.fillna(False).astype(int)
+    for h, mins in HORIZON_STEPS.items():
+        censored = (g[f"target_delta_{mins}"] == 0) & (at_empty | at_full)
+        g[f"is_censored_{mins}"] = censored.fillna(False).astype(int)
+        # ADR-122 C：目標時點本身是補值 → 該視野的標籤不是真實觀測
+        if "is_imputed" in g.columns:
+            g[f"target_imputed_{mins}"] = (
+                g["is_imputed"].shift(-h).fillna(1).astype(int) | g["is_imputed"])
+    # 相容欄位：既有呼叫端沿用 is_censored（＝30 分視野）
+    g["is_censored"] = g["is_censored_30"]
 
     return g
 
@@ -361,6 +380,20 @@ def attach_terrain(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.merge(ttab, on="station_key", how="left")
 
 
+def _resolve_fit_mask(frame: pd.DataFrame, fit_mask) -> pd.Series:
+    """ADR-122 A：解析擬合窗口。
+
+    fit_mask 可為 None（預設）、callable(frame)->bool Series，或 index 對齊的 bool 序列。
+    預設用最嚴格的 is_train_120——該列所有視野的標籤都落在訓練期內才拿來擬合統計量，
+    避免用到標籤落在驗證期的列（station_slot_p50 等統計量本身就是由標籤算出來的）。
+    """
+    if fit_mask is None:
+        base = frame["is_train_120"] if "is_train_120" in frame.columns else frame["is_train"]
+        return base == 1
+    value = fit_mask(frame) if callable(fit_mask) else fit_mask
+    return pd.Series(value, index=frame.index).fillna(False).astype(bool)
+
+
 def build_training_frame(
     df: pd.DataFrame,
     train_end: str,
@@ -371,6 +404,7 @@ def build_training_frame(
     with_profile: bool = False,
     with_terrain: bool = False,
     dayoff_mode: bool = True,   # ADR-101 定案：is_weekend 升級 is_dayoff 為預設行為（消融可關）
+    fit_mask=None,              # ADR-122 A：統計量的擬合窗口（時序 CV 每折各自傳入）
 ):
     """組裝訓練特徵表。
 
@@ -424,9 +458,14 @@ def build_training_frame(
                   for dk in dks.dropna().unique()}
         frame["is_weekend"] = dks.map(offmap).fillna(frame["is_weekend"]).astype(int)
 
-    # 訓練/驗證切分（時間切分，ADR-002）
+    # 訓練/驗證切分（時間切分，ADR-002 + ADR-122 B）
     train_end_ts = pd.to_datetime(train_end) + pd.Timedelta(days=1)
+    # 相容欄位：依「輸入時間」切（舊定義，僅供既有呼叫端；不可用於挑訓練樣本）
     frame["is_train"] = (frame["dt"] < train_end_ts).astype(int)
+    # ADR-122 B：依「標籤的目標時間」切——輸入在訓練期但答案跨進驗證期的列不得進訓練集
+    for _h, _mins in HORIZON_STEPS.items():
+        frame[f"is_train_{_mins}"] = (
+            (frame["dt"] + pd.Timedelta(minutes=_mins)) < train_end_ts).astype(int)
 
     # ADR-108 ③：新舊站標記。以 station_key 首次出現時間 ≥ 訓練期結束 → 新站(冷啟動)。
     # 用於評估分報「老站/新站」MAE，讓新站表現不被整體平均掩蓋（owner 核准分界=訓練期結束）。
@@ -439,10 +478,14 @@ def build_training_frame(
     # ★基準用「站×平假日×時段(hour)」而非全時段站均（owner 洞察）：否則通勤尖峰的「規律大流量」
     #   （如住宅區早上固定大量流入、商業區傍晚固定流出）會被誤判成調度。用同時段歷史比才準。
     # ★防洩漏：基準均/std 只用訓練期(is_train==1)算；★只標「該格當目標時」排除，存量照常當特徵。
+    # ★ADR-122 A：同時段基準只用 fit_mask 的列擬合（時序 CV 每折各自算，不吃到驗證月）
+    fit = _resolve_fit_mask(frame, fit_mask)
+    frame["is_fit"] = fit.astype(int)
     frame["_hh"] = frame["dt"].dt.hour
-    tp_d = frame[frame["is_train"] == 1].groupby(["station_key", "is_weekend", "_hh"])["delta_1step"]
+    tp_d = frame[fit].groupby(["station_key", "is_weekend", "_hh"])["delta_1step"]
     d_stats = pd.DataFrame({"_dmean": tp_d.mean(), "_dstd": tp_d.std()}).reset_index()
     frame = frame.merge(d_stats, on=["station_key", "is_weekend", "_hh"], how="left")
+    fit = frame["is_fit"] == 1            # merge 會重建 index，重新取 mask
     frame["_dstd"] = frame["_dstd"].fillna(0.0)
     reversal = (frame["_dstd"] > 0) & (
         (frame["delta_1step"] - frame["_dmean"]).abs() > REBAL_SIGMA * frame["_dstd"])
@@ -450,10 +493,22 @@ def build_training_frame(
     frame["is_rebalancing"] = (reversal & bulk).fillna(False).astype(int)
     frame = frame.drop(columns=["_dmean", "_dstd", "_hh"])
 
+    # ★ADR-122 D：遮罩涵蓋整個視野——t..t+h 任一格被判為調度介入，該視野的標籤就不可用。
+    frame = frame.sort_values(["station_key", "dt"]).reset_index(drop=True)
+    by_station = frame.groupby("station_key")["is_rebalancing"]
+    shifted = {k: by_station.shift(-k).fillna(0).astype(int)
+               for k in range(1, max(HORIZON_STEPS) + 1)}
+    for _h, _mins in HORIZON_STEPS.items():
+        acc = frame["is_rebalancing"].copy()
+        for k in range(1, _h + 1):
+            acc = acc | shifted[k]
+        frame[f"is_rebalancing_{_mins}"] = acc.astype(int)
+    fit = frame["is_fit"] == 1
+
     # 站點識別特徵（F-06）：該站 × day_type × time_slot 的「訓練期」歷史 P50 淨流量
     # ★只用訓練期算，避免洩漏（ADR-103/014 窗口約束）
     # ★以 station_key（歸併後主鍵）分組，避免亂碼站名把同站拆成兩份稀釋（ADR-108）
-    train_part = frame[frame["is_train"] == 1].copy()
+    train_part = frame[fit].copy()
     train_part["dtype"] = train_part["is_weekend"]
     profile = (train_part.groupby(["station_key", "dtype", "time_slot"])["target_delta_30"]
                .median().rename("station_slot_p50").reset_index())
@@ -463,7 +518,7 @@ def build_training_frame(
     # ADR-109：訓練期周轉量 + 樣本權重 + 決策層信心分級
     # ★防洩漏鐵律：turnover 只用訓練期(is_train==1)算，6 月驗證期不參與。
     #   turnover = 該站訓練期「逐格絕對變化 |ab(t)-ab(t-1)|」的平均（每格平均周轉量）。
-    tp = frame[frame["is_train"] == 1]
+    tp = frame[fit]
     turnover = (tp.groupby("station_key")["abs_change_1step"]
                 .mean().rename("station_turnover").reset_index())
     frame = frame.merge(turnover, on="station_key", how="left")
@@ -513,7 +568,7 @@ def build_training_frame(
 
     # 消融用：可選擇性併入站點行為指紋（ADR-104，訓練期算，防洩漏）
     if with_profile:
-        frame = attach_profile(frame, frame["is_train"] == 1)
+        frame = attach_profile(frame, frame["is_fit"] == 1)
         feature_cols += _PROFILE_COLS
 
     # 消融用：可選擇性併入地形因子（ADR-101，靜態海拔+坡度）

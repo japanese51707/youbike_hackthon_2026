@@ -52,6 +52,11 @@ def mae(y_true, y_pred) -> float:
     return float(np.mean(np.abs(np.asarray(y_true) - np.asarray(y_pred))))
 
 
+def _target_month(frame, horizon_min: int):
+    """ADR-122 B：標籤的目標時間所屬月份（切折／切訓練驗證都依這個，不依輸入時間）。"""
+    return (frame["dt"] + pd.Timedelta(minutes=horizon_min)).dt.month
+
+
 def evaluate_by_zone(frame, y_true, y_pred_lgb, y_pred_base):
     """分區間評估（ADR-105）：健康/接近空/已空，各報 MAE。"""
     ab = frame["available_bikes"].values
@@ -82,9 +87,9 @@ def run_weight_experiment(df):
     frame, feat_cols = build_training_frame(df, TRAIN_END, with_weather=True)
 
     # 防洩漏印證：turnover 應只由訓練期算 → 驗證期(6月)站若訓練期沒資料應為 0
-    va6 = frame[frame["is_train"] == 0]
-    tr = frame[frame["is_train"] == 1]
-    print(f"      [防洩漏印證] turnover 由訓練期 {tr['station_key'].nunique()} 站算；"
+    va6 = frame[frame["is_fit"] == 0]
+    tr = frame[frame["is_fit"] == 1]
+    print(f"      [防洩漏印證] turnover 由擬合窗口 {tr['station_key'].nunique()} 站算；"
           f"驗證期 turnover=0 的列比={float((va6['station_turnover']==0).mean())*100:.1f}%"
           f"（僅新站/無訓練資料站應為 0）", flush=True)
 
@@ -97,10 +102,12 @@ def run_weight_experiment(df):
     for h, mins in HORIZON_STEPS.items():
         tgt = f"target_delta_{mins}"
         sub = frame.dropna(subset=[tgt])
-        train = sub[sub["is_train"] == 1]
-        valid = sub[sub["is_train"] == 0]
-        # 訓練排除截斷樣本(ADR-105)+調度介入異常點(ADR-106,當目標時排除)
-        train_clean = train[(train["is_censored"] == 0) & (train["is_rebalancing"] == 0)]
+        train = sub[sub[f"is_train_{mins}"] == 1]          # ADR-122 B 依目標時間
+        valid = sub[sub[f"is_train_{mins}"] == 0]
+        # ADR-122 C/D：逐視野截斷 + 整段視野介入遮罩 + 補值標籤不進訓練
+        train_clean = train[(train[f"is_censored_{mins}"] == 0)
+                            & (train[f"is_rebalancing_{mins}"] == 0)
+                            & (train.get(f"target_imputed_{mins}", 0) == 0)]
 
         Xtr = train_clean[feat_cols].astype(float)
         ytr = train_clean[tgt].astype(float)
@@ -171,10 +178,13 @@ def run_full_training(df, tuned=False):
     for h, mins in HORIZON_STEPS.items():
         tgt = f"target_delta_{mins}"
         sub = frame.dropna(subset=[tgt])
-        train = sub[sub["is_train"] == 1]
-        valid = sub[sub["is_train"] == 0]
-        # 訓練排除截斷樣本(ADR-105)+調度介入異常點(ADR-106,當目標時排除)
-        train_clean = train[(train["is_censored"] == 0) & (train["is_rebalancing"] == 0)]
+        # ADR-122 B：依標籤的目標時間切分，不用輸入時間
+        train = sub[sub[f"is_train_{mins}"] == 1]
+        valid = sub[sub[f"is_train_{mins}"] == 0]
+        # ADR-122 D：逐視野截斷 + 整段視野的調度介入遮罩；ADR-122 C：補值標籤不進訓練
+        train_clean = train[(train[f"is_censored_{mins}"] == 0)
+                            & (train[f"is_rebalancing_{mins}"] == 0)
+                            & (train.get(f"target_imputed_{mins}", 0) == 0)]
 
         # baseline: seasonal naive
         table, gmed = fit_seasonal_naive(train_clean, target_col=tgt)
@@ -281,18 +291,19 @@ def run_full_training(df, tuned=False):
     print("\n註：超參數為未調參預設值(ADR-002)；覆蓋率校準待 P2 conformal", flush=True)
 
 
-def run_train_save(df):
-    """ADR-113：訓練上線模型並序列化存檔（4 視野 × P10/P50/P90 = 12 個 booster）。
+def run_train_save(df, out_dir: str = "_models_candidate"):
+    """ADR-113/121：訓練上線模型並序列化存檔（4 視野 × P10/P50/P90 = 12 個 booster）。
 
     ★上線模型用全部資料（1~6 月）訓練（不留驗證集；驗證已在 full 模式做過）。
-    存到 backend/prediction/_models/：每個 booster 一個 .txt + meta.json（特徵欄順序/超參數/視野）。
-    即時預測（LightGBMPredictor）載入這些檔，不重訓。
+    ★ADR-122 §6：預設寫入 _models_candidate/，**不覆蓋** 現行 serving 的 _models/。
+      要換版須由 owner 決定並另行搬移，serving 仍依 ADR-121 成套載入既有版本。
     """
     import lightgbm as lgb
     import json
     from prediction.feature_pipeline import HORIZON_STEPS
-    outdir = Path(__file__).parent / "_models"
+    outdir = Path(__file__).parent / out_dir
     outdir.mkdir(exist_ok=True)
+    print(f"      輸出目錄：{outdir}（ADR-122：預設不覆蓋現行 _models/）", flush=True)
 
     print("[1/2] 組裝全量特徵（含所有採用因子）...", flush=True)
     # 上線模型用全部資料訓練：train_end 設未來日期，讓全部列都是 is_train==1
@@ -306,7 +317,9 @@ def run_train_save(df):
     for h, mins in HORIZON_STEPS.items():
         tgt = f"target_delta_{mins}"
         sub = frame.dropna(subset=[tgt])
-        clean = sub[(sub["is_censored"] == 0) & (sub["is_rebalancing"] == 0)]
+        clean = sub[(sub[f"is_censored_{mins}"] == 0)
+                    & (sub[f"is_rebalancing_{mins}"] == 0)
+                    & (sub.get(f"target_imputed_{mins}", 0) == 0)]
         X = clean[feat_cols].astype(float)
         y = clean[tgt].astype(float)
         for q, alpha in [("p10", 0.10), ("p50", 0.50), ("p90", 0.90)]:
@@ -327,32 +340,51 @@ def run_train_save(df):
     }
     (outdir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2),
                                       encoding="utf-8")
-    print(f"完成：{len(saved)} 個 booster + meta.json 存於 {outdir}", flush=True)
+    from prediction.serving_features import export_frame, save_bundle
+    save_bundle(outdir, feat_cols, export_frame(frame, feat_cols),
+                str(frame["dt"].min()), str(frame["dt"].max()), {"kind": "training_frame"})
+    print(f"完成：{len(saved)} 個 booster + meta.json + serving_features.json 存於 {outdir}", flush=True)
 
 
 def run_tuning(df, n_trials=20):
-    """ADR-110：時序 CV 超參數優化（隨機搜尋，無新依賴）。
+    """ADR-110 + ADR-122：時序 CV 超參數優化（隨機搜尋，無新依賴）。
 
-    ★防洩漏鐵律：只用訓練期(1~5月)做 expanding window 時序 CV，6 月完全不參與選參。
-      折：1-3月訓/4月驗、1-4月訓/5月驗（月份用 dt.month）。
+    ★ADR-122 A（第三批修正）：每一折各自呼叫 build_training_frame(fit_mask=該折訓練月)，
+      站點統計、行為指紋、station_slot_p50 與介入基準都只用該折訓練資料擬合。
+      修正前是整段 1~5 月擬合一次再切折，驗證月的資訊已經進到統計量裡。
+    ★ADR-122 B：折的切分依「標籤的目標時間」，不是輸入時間；跨月界的標籤不進該折訓練集。
     ★選參目標：正常區間(可借≥1 且 可還≥1，未截斷)的 P50 MAE，CV 折平均（owner 定）。
-    以 60 分視野為代表選參（成本考量；ADR-110 已註各視野最佳參數可能不同待實驗）。
+    以 60 分視野為代表選參（成本考量）。
     """
     import lightgbm as lgb
     import random
 
     print("[2/3] 時序 CV 超參數優化（隨機搜尋 %d 組；6 月不參與選參）..." % n_trials, flush=True)
-    frame, feat_cols = build_training_frame(
-        df, TRAIN_END, with_weather=True, with_poi=True,
-        with_profile=True, with_terrain=True)
     TGT = "target_delta_60"   # 代表視野
-    sub = frame.dropna(subset=[TGT])
-    # 只用訓練期(1~5月)，6 月排除
-    tr = sub[sub["is_train"] == 1].copy()
-    tr["m"] = tr["dt"].dt.month
-    # expanding window 折
+    HORIZON = 60
     folds = [([1, 2, 3], 4), ([1, 2, 3, 4], 5)]
-    print(f"      折：{[(f[0], '→驗'+str(f[1])) for f in folds]}；選參目標=正常區間P50 MAE", flush=True)
+    print(f"      折：{[(f[0], '→驗'+str(f[1])) for f in folds]}；"
+          f"每折獨立擬合統計量；切分依目標時間", flush=True)
+
+    # 每折各自組一份 frame（fit_mask = 該折訓練月），避免跨折統計洩漏
+    fold_frames = []
+    for train_months, valid_month in folds:
+        frame, feat_cols = build_training_frame(
+            df, TRAIN_END, with_weather=True, with_poi=True,
+            with_profile=True, with_terrain=True,
+            fit_mask=lambda f, m=train_months: _target_month(f, HORIZON).isin(m))
+        tgt_month = _target_month(frame, HORIZON)
+        sub = frame.dropna(subset=[TGT])
+        tgt_month = tgt_month.loc[sub.index]
+        train = sub[tgt_month.isin(train_months)]
+        valid = sub[tgt_month == valid_month]
+        # 訓練排除截斷樣本與整段視野內的調度介入；補值標籤不進訓練
+        clean = train[(train[f"is_censored_{HORIZON}"] == 0)
+                      & (train[f"is_rebalancing_{HORIZON}"] == 0)
+                      & (train.get(f"target_imputed_{HORIZON}", 0) == 0)]
+        fold_frames.append((clean, valid, feat_cols))
+        print(f"      折 {train_months}→{valid_month}：訓練 {len(clean):,} 列 / "
+              f"驗證 {len(valid):,} 列", flush=True)
 
     # 搜尋空間
     space = {
@@ -370,20 +402,16 @@ def run_tuning(df, n_trials=20):
 
     def cv_score(params):
         scores = []
-        for train_months, valid_month in folds:
-            trf = tr[tr["m"].isin(train_months)]
-            vaf = tr[tr["m"] == valid_month]
-            trc = trf[(trf["is_censored"] == 0) & (trf["is_rebalancing"] == 0)]
-            Xtr, ytr = trc[feat_cols].astype(float), trc[TGT].astype(float)
-            Xva = vaf[feat_cols].astype(float)
-            yva = vaf[TGT].astype(float).values
+        for clean, valid, feat_cols in fold_frames:
+            Xtr, ytr = clean[feat_cols].astype(float), clean[TGT].astype(float)
             m = lgb.LGBMRegressor(objective="quantile", alpha=0.5, verbose=-1, **params)
             m.fit(Xtr, ytr)
-            pred = m.predict(Xva)
-            # 正常區間
-            ab = vaf["available_bikes"].values
-            ad = vaf["available_docks"].values
-            nz = (ab >= 1) & (ad >= 1)
+            pred = m.predict(valid[feat_cols].astype(float))
+            yva = valid[TGT].astype(float).values
+            ab = valid["available_bikes"].values
+            ad = valid["available_docks"].values
+            observed = (valid.get(f"target_imputed_{HORIZON}", 0) == 0).values
+            nz = (ab >= 1) & (ad >= 1) & observed   # 正常區間且標籤為真實觀測
             scores.append(mae(yva[nz], pred[nz]) if nz.sum() else float("nan"))
         return float(np.mean(scores))
 
@@ -420,6 +448,8 @@ def main():
                     help="ablation=因子消融 / weight=樣本權重對比 / full=正式訓練 / "
                          "tune=ADR-110 時序CV超參數優化 / train_save=ADR-113 訓練並序列化上線模型")
     ap.add_argument("--tuned", action="store_true", help="full 模式用 ADR-110 調參後最佳超參數")
+    ap.add_argument("--out-dir", default="_models_candidate",
+                    help="train_save 的輸出目錄（ADR-122：預設候選目錄，不覆蓋現行 _models）")
     ap.add_argument("--factor", choices=["weather", "holiday", "dayoff", "poi", "profile", "terrain"], default="holiday",
                     help="ablation 模式要測的因子：weather=天氣 / holiday=非週末假日(加料) / "
                          "dayoff=is_weekend 升級 is_dayoff(修正既有特徵,非加料) / poi=POI距離(14類) / "
@@ -450,10 +480,12 @@ def main():
         for h, mins in HORIZON_STEPS.items():
             tgt = f"target_delta_{mins}"
             sub = frame.dropna(subset=[tgt])
-            train = sub[sub["is_train"] == 1]
-            valid = sub[sub["is_train"] == 0]
-            # 截斷排除(ADR-105)+調度異常排除(ADR-106)
-            train_clean = train[(train["is_censored"] == 0) & (train["is_rebalancing"] == 0)]
+            train = sub[sub[f"is_train_{mins}"] == 1]      # ADR-122 B 依目標時間
+            valid = sub[sub[f"is_train_{mins}"] == 0]
+            # ADR-122 C/D：逐視野截斷 + 整段視野介入遮罩 + 補值標籤不進訓練
+            train_clean = train[(train[f"is_censored_{mins}"] == 0)
+                                & (train[f"is_rebalancing_{mins}"] == 0)
+                                & (train.get(f"target_imputed_{mins}", 0) == 0)]
 
             yva = valid[tgt].astype(float).values
             Xtr = train_clean[feat_cols].astype(float)
@@ -501,7 +533,7 @@ def main():
 
     # ===== ADR-113：訓練並序列化上線模型 =====
     if args.mode == "train_save":
-        run_train_save(df)
+        run_train_save(df, out_dir=args.out_dir)
         return
 
     # 依 --factor 決定本輪消融的因子（名稱 + build_training_frame 的開關）
