@@ -1,0 +1,9 @@
+# LightGBM 序列化模型：內含數值樹結構，換行必須維持 LF，
+# 否則 Windows 檢出時被轉成 CRLF 會導致 lightgbm 解析失敗（Model format error）。
+# 標為二進位，讓 Git 不做任何換行正規化。
+backend/prediction/_models/*.txt -text
+
+# 其他明確的二進位資產（避免換行正規化破壞）
+*.parquet binary
+*.pkl binary
+*.joblib binary
