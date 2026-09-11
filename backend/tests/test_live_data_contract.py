@@ -201,3 +201,49 @@ def test_historical_month_boundary_and_timezone(tmp_path, monkeypatch):
     assert len(rows) == 2
     assert all(r["source"] == "historical" and r["timestamp"].endswith("+08:00") for r in rows)
     assert rows[0]["identity_source"] == "unmapped_historical_name"
+
+
+# ── ADR-305：開發模式資料源降級到 mock（正式路徑不變）──
+
+def test_adr305_no_snapshot_no_switch_still_503(monkeypatch):
+    """開關 false（預設）→ 真實源失敗且無快照仍回 503（維持 ADR-303）。"""
+    src = use_source(monkeypatch, [])
+    src.failed = True
+    monkeypatch.setitem(get_config()["data_source"], "dev_fallback_to_mock", False)
+    with pytest.raises(observations.DataUnavailable):
+        degradation.get_stations_with_degradation()
+
+
+def test_adr305_production_env_never_falls_back_to_mock(monkeypatch):
+    """開關 true 但 APP_ENV=production → 正式環境不降級，仍回 503。"""
+    src = use_source(monkeypatch, [])
+    src.failed = True
+    monkeypatch.setitem(get_config()["data_source"], "dev_fallback_to_mock", True)
+    monkeypatch.setenv("APP_ENV", "production")
+    with pytest.raises(observations.DataUnavailable):
+        degradation.get_stations_with_degradation()
+
+
+def test_adr305_dev_env_falls_back_to_mock_marked_and_not_dispatchable(monkeypatch):
+    """開發環境 + 開關 true + 真實源失敗且無快照 → 回 mock，且每筆標記且不可派工。"""
+    src = use_source(monkeypatch, [])
+    src.failed = True
+    monkeypatch.setitem(get_config()["data_source"], "dev_fallback_to_mock", True)
+    monkeypatch.setenv("APP_ENV", "development")
+    rows = degradation.get_stations_with_degradation()
+    assert len(rows) > 0
+    for r in rows:
+        assert r["data_freshness"] == "mock"
+        assert r["dispatch_eligible"] is False
+        assert "upstream_unavailable_using_mock" in r["quality_reasons"]
+
+
+def test_adr305_status_reports_degrading_to_mock(monkeypatch):
+    """/data/status 在降級時回 degrading_to_mock=true 與 mock_fallback_reason。"""
+    src = use_source(monkeypatch, [])
+    src.failed = True
+    monkeypatch.setitem(get_config()["data_source"], "dev_fallback_to_mock", True)
+    monkeypatch.setenv("APP_ENV", "development")
+    status = degradation.degradation_status()
+    assert status["degrading_to_mock"] is True
+    assert status["mock_fallback_reason"]

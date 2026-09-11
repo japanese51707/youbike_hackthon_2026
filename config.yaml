@@ -13,7 +13,11 @@
 
 # ── 資料源（NFR-7 可抽換）──
 data_source:
-  mode: "mock"              # mock / historical / tdx / youbike_official（現場改這裡切換）
+  mode: "youbike_official"  # mock / historical / tdx / youbike_official（現場改這裡切換）
+  # ADR-305：開發模式資料源降級。正式模式(youbike_official)永遠維持 ADR-303（失敗→同源 stale→503，不碰 mock）。
+  # 只有把 mode 設成非正式源做本機開發、且此開關為 true 時，真實源完全取不到快照才降級到 mock；
+  # 降級 mock 一律標 data_freshness=mock、dispatch_eligible=false，不進調度決策。預設 false。
+  dev_fallback_to_mock: false
   tdx_api_key: ""           # 若用 TDX，正式環境填（勿寫進版控，用環境變數）
   youbike_official_url: ""  # 留空使用新北官方 HTTPS；其他來源需新增 adapter
   historical_local_dir: output/youbike_parquet  # 相對 repo；空字串才使用 S3，可用 YOUBIKE_HISTORY_DIR 覆寫

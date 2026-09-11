@@ -59,6 +59,7 @@
 | [ADR-125](ADR-125-預測區間的conformal校準.md) | 預測區間的 conformal 校準 | superseded（由 ADR-127） | prediction, dispatch | 第四批；實測反證：偏移全為 0，原判斷「條件覆蓋率不足」係以標籤選子集造成；保留歷史，不得作為現行依據 |
 | [ADR-126](ADR-126-未受供給限制的需求估計.md) | 未受供給限制的需求估計 | accepted | prediction, data | 第四批；站內自比（不跨站外推）；獨立欄位輸出、不進觸發與派工量；凍結統計進模型包；預設關 |
 | [ADR-127](ADR-127-不採用conformal校準與覆蓋率判讀規則.md) | 不採用 conformal 校準，並訂定覆蓋率判讀規則 | accepted | prediction, evaluation | 第四批；supersedes ADR-125；430 萬列實測偏移全為 0、七種可觀測分組覆蓋率皆 79.5~83.0%；訂定「不得以標籤本身選出的子集判斷校準」；conformal.py 僅留為離線量測庫、無開關 |
+| [ADR-305](ADR-305-開發模式資料源降級與逐筆新鮮度標記.md) | 開發模式資料源降級與逐筆新鮮度標記 | accepted | data, api, reliability | 正式模式維持 ADR-303（失敗→同源 stale→503，不碰 mock）；新增開發專用開關 dev_fallback_to_mock（預設 false，正式模式不生效）；降級 mock 標記 data_freshness=mock、dispatch_eligible=false，不進調度；逐筆新鮮度標記明文化 |
 
 ## 新決策流程
 

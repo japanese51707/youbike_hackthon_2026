@@ -104,6 +104,7 @@ superseded-by:
 | ADR-302 | 派工確認與任務結案一致性 | accepted |
 | ADR-303 | 觀測時間與資料可用性契約 | accepted |
 | ADR-304 | 派工可行性閘門與最適化套用一致性 | accepted |
+| ADR-305 | 開發模式資料源降級與逐筆新鮮度標記（正式模式不變，僅開發情境可降 mock 且不可派工） | accepted |
 
 ### 取號流程（新增 ADR 前必做）
 

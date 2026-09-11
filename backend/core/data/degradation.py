@@ -8,12 +8,34 @@ from .observations import DataUnavailable, normalize, parse_time, record
 _lock = RLock()
 _last = None
 _last_source = None
+# ADR-305：記錄最近一次是否降級到 mock 及原因，供 /data/status 呈現「目前顯示模擬資料」。
+_mock_fallback_reason = None
 
 
 def _cfg():
+    import os
     from config_loader import get_config
     ds = get_config().get("data_source", {})
-    return {"mode": ds.get("mode", "mock"), "stale_after_sec": ds.get("stale_after_sec", 600)}
+    # ADR-305：開發環境(APP_ENV != production)且開關 true 才允許降級 mock；正式環境一律不降。
+    dev_env = os.environ.get("APP_ENV", "development") != "production"
+    return {
+        "mode": ds.get("mode", "mock"),
+        "stale_after_sec": ds.get("stale_after_sec", 600),
+        "dev_fallback_to_mock": bool(ds.get("dev_fallback_to_mock", False)) and dev_env,
+    }
+
+
+def _mark_mock_fallback(row):
+    """ADR-305：把降級用的 mock 站點標記為「上游失敗改用 mock」且不可派工。
+
+    MockDataSource 回傳的 row 已 normalize（data_freshness=mock）。這裡再補上降級原因，
+    並強制 dispatch_eligible=False，確保降級 mock 資料不會進入調度決策（守 ADR-303/004 底線）。
+    """
+    reasons = sorted(set(list(row.get("quality_reasons", [])) + ["upstream_unavailable_using_mock"]))
+    row = deepcopy(row)
+    row["quality_reasons"] = reasons
+    row["dispatch_eligible"] = False
+    return row
 
 
 def _is_stale(source_timestamp, stale_after_sec):
@@ -25,22 +47,37 @@ def _is_stale(source_timestamp, stale_after_sec):
 
 
 def get_stations_with_degradation(district=None, status=None):
-    global _last, _last_source
+    global _last, _last_source, _mock_fallback_reason
     cfg = _cfg()
     primary = get_data_source()
     source_key = (cfg["mode"], primary)
     with _lock:
         failed = False
+        mock_fallback = False
         try:
             rows = primary.get_stations()
             if not rows:
                 raise DataUnavailable("資料來源未提供站點快照")
             _last, _last_source = deepcopy(rows), source_key
+            _mock_fallback_reason = None
         except Exception as exc:
-            if _last_source != source_key or not _last:
+            if _last_source == source_key and _last:
+                # ADR-303：同來源最後成功快照，標 stale。
+                rows, failed = deepcopy(_last), True
+            elif cfg["dev_fallback_to_mock"]:
+                # ADR-305：僅開發環境且開關開，真實源完全取不到時降級到 mock。
+                # 降級資料一律標記且不可派工（下方 _mark_mock_fallback）。
+                from .mock import MockDataSource
+                rows = MockDataSource().get_stations()
+                mock_fallback = True
+                _mock_fallback_reason = str(exc) or "真實資料來源無法取得"
+            else:
+                # 正式路徑：無快照回 503，不碰 mock（ADR-303）。
                 raise DataUnavailable("站點資料暫時無法取得，請稍後重試") from exc
-            rows, failed = deepcopy(_last), True
-        rows = [normalize(r, cfg["mode"], cfg["stale_after_sec"], failed=failed) for r in rows]
+        if mock_fallback:
+            rows = [_mark_mock_fallback(r) for r in rows]
+        else:
+            rows = [normalize(r, cfg["mode"], cfg["stale_after_sec"], failed=failed) for r in rows]
         record(rows)
     if district:
         rows = [r for r in rows if r.get("district") == district]
@@ -56,16 +93,23 @@ def degradation_status():
         rows = get_stations_with_degradation()
         counts = {key: sum(r["data_freshness"] == key for r in rows)
                   for key in ("live", "stale", "historical", "mock")}
+        # ADR-305：是否正處於「真實源失敗改用 mock」的降級狀態
+        degrading_to_mock = any(
+            "upstream_unavailable_using_mock" in r["quality_reasons"] for r in rows)
         return {**cfg, "source": cfg["mode"], "primary_available": not any(
             "upstream_unavailable" in r["quality_reasons"] for r in rows),
             "freshness_counts": counts, "degrading_to_historical": False,
+            "degrading_to_mock": degrading_to_mock,
+            "mock_fallback_reason": _mock_fallback_reason if degrading_to_mock else None,
             "dispatch_eligible_count": sum(r["dispatch_eligible"] for r in rows)}
     except DataUnavailable:
         return {**cfg, "source": cfg["mode"], "primary_available": False,
-                "data_freshness": "unavailable", "degrading_to_historical": False}
+                "data_freshness": "unavailable", "degrading_to_historical": False,
+                "degrading_to_mock": False, "mock_fallback_reason": None}
 
 
 def reset():
-    global _last, _last_source
+    global _last, _last_source, _mock_fallback_reason
     with _lock:
         _last = _last_source = None
+        _mock_fallback_reason = None
