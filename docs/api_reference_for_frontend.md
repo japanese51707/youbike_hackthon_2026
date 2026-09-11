@@ -133,6 +133,41 @@ build 三入口的回傳除了原有欄位，另帶：
 
 ---
 
+### 第四批新增（ADR-124/125/126）：預設全部關閉
+
+這三項都有 config 開關且**預設關閉**，關閉時回傳欄位不會出現，行為與第三批完全相同。
+
+**最適化係數（ADR-124）** —— `daily-review` 回應新增 `coefficient_mode`：
+
+| 值 | 意義 | 前端該怎麼說 |
+|---|---|---|
+| `off` | 核准只存參數版本 | 「不會改變任何一次派工」 |
+| `shadow` | 算出差異但不採用 | 「會記錄差異，實際派工仍用基準值」 |
+| `on` | 實際影響目標水位 | 「會改變建議的補／取車數量」 |
+
+模式非 `off` 時，`/dispatch/recommendations` 每筆多帶 `coefficient_mode`、`param_version`、
+`applied_coefficients`、`coefficient_clamped`；`shadow` 另帶 `shadow_target_available`、
+`shadow_quantity`、`shadow_quantity_delta`。
+
+> ★ADR-304 §7：**不得把「已套用」呈現成「調度行為已改變」**。這句話由後端的 `coefficient_mode`
+> 決定，不要在前端寫死。`/optimization` 頁面的頂部橫幅就是這樣做的。
+
+**區間校準（ADR-125）** —— 預測區間新增 `calibration` 欄位：`"none"`（未校準）或 `"conformal"`（已校準）。
+目前全部為 `"none"`——實測證明現行模型在所有可觀測切面上覆蓋率都合格（79.5～83.0%），沒有東西要修。
+
+**需求估計（ADR-126）** —— 建議新增 `unconstrained_demand` 與 `demand_basis`：
+
+| `demand_basis` | 意義 |
+|---|---|
+| `station_slot_uncensored` | 有估計值：該站「沒空時」同時段的流出／流入中位數 |
+| `not_censored` | 站況正常，觀測沒被壓抑，不需要估計（值為 null） |
+| `insufficient_samples` | 樣本不足，值為 null——**不要顯示成 0** |
+
+> ★這個值**不參與**任何調度決定（action／quantity／目標水位／緊急度都不受影響）。
+> 它的用途是說明「空站看到的缺口是低估的」，不是拿來派車的數量。
+
+---
+
 ## 3. 警示 Alerts
 
 | 端點 | 方法 | 狀態 | 回傳 | 用途 |

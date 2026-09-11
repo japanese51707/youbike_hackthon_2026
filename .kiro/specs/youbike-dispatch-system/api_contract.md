@@ -1005,8 +1005,15 @@ POST /optimization/daily-review/reject     # 全部退回，維持原參數
 - 一次 approve 內所有站在**單一交易**提交，任一站失敗整批回滾並回錯誤，**不回傳「部分成功」**。
 - `station/{id}` 可選帶 `review_id` 綁定該份建議；已結案的建議不可再改。
 - `rollback` 完成後會重讀當前生效參數並驗證等於目標版本，不一致視為失敗。
-- **調整係數目前仍未被 `rule_engine`／`dispatcher`／`prediction` 讀取**（ADR-120 做法 Y），
-  回應的 `effective_note` 為誠實標記；此事實由 `tests/test_optimizer_apply.py` 固定為可回歸的測試。
+- **ADR-124（第四批）**：`daily-review` 回應新增 `coefficient_mode ∈ {off, shadow, on}`，
+  說明核准後係數會不會真的影響調度。預設 `off`——此時係數仍只存版本、不被 `rule_engine` 讀取，
+  `effective_note` 的誠實標記繼續成立，並由 `tests/test_optimizer_apply.py` 固定為可回歸的測試。
+  模式非 `off` 時，`/dispatch/recommendations` 每筆會帶 `coefficient_mode`／`param_version`／
+  `applied_coefficients`／`coefficient_clamped`，`shadow` 另帶 `shadow_target_available`／
+  `shadow_quantity`／`shadow_quantity_delta`。係數只影響動態目標水位，不改觸發判斷與動作方向。
+- **ADR-125／126（第四批，預設關閉）**：預測區間新增 `calibration ∈ {none, conformal}`；
+  建議可新增 `unconstrained_demand` 與 `demand_basis ∈ {station_slot_uncensored, not_censored,
+  insufficient_samples}`。需求估計不參與任何調度決定，樣本不足時為 null，不得顯示為 0。
 
 **② 參數版本回溯：**
 ```
