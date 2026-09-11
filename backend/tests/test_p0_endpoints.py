@@ -45,7 +45,7 @@ def test_build_from_station_returns_draft(client):
     stations = client.get("/api/v1/stations").json()
     sid = stations[0]["station_id"]
     # 需先有需調度站；mock 源不一定觸發，但端點應正常回應（草稿或錯誤訊息）
-    r = client.post("/api/v1/dispatch/build/from-station", json={"station_id": sid})
+    r = client.post("/api/v1/dispatch/build/from-station", json={"station_id": sid}, headers={"X-Operator-Id": "OP-002"})
     assert r.status_code == 200
     body = r.json()
     # 該站若在需調度清單→回草稿；否則回 error 提示（兩者都不該 500）
@@ -53,13 +53,13 @@ def test_build_from_station_returns_draft(client):
 
 
 def test_build_from_vehicle_needs_params(client):
-    r = client.post("/api/v1/dispatch/build/from-vehicle", json={})
-    assert r.status_code == 400
+    r = client.post("/api/v1/dispatch/build/from-vehicle", json={}, headers={"X-Operator-Id": "OP-002"})
+    assert r.status_code == 422
 
 
 def test_build_emergency_needs_station_ids(client):
-    r = client.post("/api/v1/dispatch/build/emergency", json={})
-    assert r.status_code == 400
+    r = client.post("/api/v1/dispatch/build/emergency", json={}, headers={"X-Operator-Id": "OP-002"})
+    assert r.status_code == 422
 
 
 def test_confirm_trip_requires_auth(client):
@@ -69,8 +69,8 @@ def test_confirm_trip_requires_auth(client):
 
 
 def test_confirm_trip_empty_draft_rejected(client):
-    """帶合法身分但空草稿 → 400（走 dispatcher 帳號 OP-002）。"""
+    """帶合法身分但空草稿 → 422（走 dispatcher 帳號 OP-002）。"""
     r = client.post("/api/v1/dispatch/confirm-trip",
                     json={"draft": {}},
                     headers={"X-Operator-Id": "OP-002"})
-    assert r.status_code == 400
+    assert r.status_code == 422

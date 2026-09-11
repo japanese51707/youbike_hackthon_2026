@@ -15,9 +15,17 @@
 data_source:
   mode: "mock"              # mock / historical / tdx / youbike_official（現場改這裡切換）
   tdx_api_key: ""           # 若用 TDX，正式環境填（勿寫進版控，用環境變數）
-  youbike_official_url: ""  # 若現場用 YouBike 公司自己的即時源，填這裡
-  refresh_interval_sec: 60  # 多久抓一次即時資料
-  stale_after_sec: 180      # 即時資料超過幾秒視為過期（觸發降級標記）
+  youbike_official_url: ""  # 留空使用新北官方 HTTPS；其他來源需新增 adapter
+  historical_local_dir: output/youbike_parquet  # 相對 repo；空字串才使用 S3，可用 YOUBIKE_HISTORY_DIR 覆寫
+  refresh_interval_sec: 300  # 多久抓一次即時資料
+  stale_after_sec: 600      # 即時資料超過幾秒視為過期（觸發降級標記）
+  future_tolerance_sec: 60
+  timeout_sec: 10
+  max_response_bytes: 5000000
+  min_refresh_sec: 60
+  retry_backoff_sec: 30
+  observation_max_stations: 3000
+  observation_max_points: 2100  # 約一週五分鐘觀測；有界記憶體，重啟需重新累積
   # 歷史資料源（S3 Parquet，A1）
   s3_bucket: "youbike-hackathon-2026"
   s3_prefix: "youbike_data"           # 分區：youbike_data/year_month=YYYY-MM/data.parquet
@@ -105,6 +113,7 @@ fleet:
   每時段最大調度站數: 15     # 時段 = 30 分鐘（對齊資料解析度）；= 調度車數量 × 每趟最大站數 的合理上限內
   響應時間_分鐘: 30          # 從派發到到達的平均時間，規劃與 KPI 用的基準值
   彈性緩衝分鐘: 10          # 調度到達時間的緩衝
+  車上載量有效期_分鐘: 240   # ADR-123：車上台數回報超過此時間視為過期，須重新回報才可確認派工
 
 # ── 調度資源清單來源（ADR-114，providers 用；比照 data_source.mode 可抽換）──
 # db = 本地 SQLite seed（開發/demo）；youbike_api = 未來接 YouBike 人力/車隊 API（尚未實作）
@@ -234,3 +243,15 @@ security:
   allowed_headers: ["Content-Type", "X-Operator-Id"]
   rate_limit_per_min: 120         # 每 IP 每分鐘請求上限（入向 DoS 防護）
   rate_limit_exempt_paths: ["/health"]  # 健康檢查不限流
+
+# ADR-302：未確認草稿只在單程序記憶體，重啟後需重新預覽。
+dispatch_drafts:
+  ttl_seconds: 300
+  max_entries: 256
+
+# 線上特徵／快取（ADR-121）
+serving:
+  lag_tolerance_minutes: 5
+  weather_max_age_minutes: 30
+  prediction_cache_entries: 3000
+  model_retry_sec: 30

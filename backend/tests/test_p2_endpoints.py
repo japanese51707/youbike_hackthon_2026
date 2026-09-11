@@ -7,8 +7,10 @@ P2 API 端點測試（ADR-104/113 靜態層 + KPI/熱力圖）
 from __future__ import annotations
 
 
-def test_station_static_bundle(client):
+def test_station_static_bundle(client, monkeypatch):
     """靜態打包：含 location/terrain/poi/profile 四塊。"""
+    import features.terrain as terrain
+    monkeypatch.setattr(terrain, "get_terrain", lambda *a, **k: (_ for _ in ()).throw(AssertionError("static reads must not fetch/write terrain")))
     stations = client.get("/api/v1/stations").json()
     sid = stations[0]["station_id"]
     r = client.get(f"/api/v1/stations/{sid}/static")
@@ -46,6 +48,6 @@ def test_kpi_real_stats(client):
     r = client.get("/api/v1/kpi")
     assert r.status_code == 200
     body = r.json()
-    assert body["source"] == "realtime"
+    assert body["source"] == "mock"
     assert "total_stations" in body and "health_rate_pct" in body
     assert body["total_stations"] >= 0

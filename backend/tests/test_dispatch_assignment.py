@@ -8,6 +8,7 @@ ADR-114 調度資源與行政區任務指派測試
   - persist 回寫 current_district 到車/人 + 建 task 帶 district
 """
 from __future__ import annotations
+from tests.conftest import put_drivers_on_duty
 import datetime as dt
 
 import pytest
@@ -71,12 +72,13 @@ def test_vehicle_invalid_inputs():
 def test_providers_db_and_factory():
     vr.seed_default_vehicles(5, 15)
     orp.seed_dispatch_operators(10)
+    put_drivers_on_duty()
     reset_providers()
     fp = get_fleet_provider()
     op = get_operator_provider()
     assert fp.name == "db"
     assert len(fp.available_vehicles()) == 5
-    assert len(op.available_operators()) >= 10
+    assert len(op.available_operators()) == 7
     with pytest.raises(ValueError):
         get_fleet_provider(force_mode="unknown")
 
@@ -94,6 +96,7 @@ def _rec(sid, district, quantity, score):
 def test_assign_by_district_no_cross_district_and_no_overload():
     vr.seed_default_vehicles(10, 15)
     orp.seed_dispatch_operators(10)
+    put_drivers_on_duty()
     reset_providers()
     # 兩區各數站，總量會超過單車 15 → 應切多趟，但每趟不跨區、不超載
     dispatch_list = [
@@ -117,7 +120,11 @@ def test_assign_by_district_no_cross_district_and_no_overload():
 
 def test_assign_by_district_persist_writes_back():
     vr.seed_default_vehicles(5, 15)
+    # ADR-123：這趟共補 12 台，出車前宣告滿載（載量不足會被可行性閘門擋下，另有專門測試）
+    for i in range(1, 6):
+        vr.report_onboard(f"CAR-{i:03d}", 15, "manual_report")
     orp.seed_dispatch_operators(5)
+    put_drivers_on_duty()
     reset_providers()
     dispatch_list = [_rec("A1", "新莊區", 8, 88), _rec("A2", "新莊區", 4, 70)]
     trips = dispatcher.assign_by_district(dispatch_list, persist=True, now=NOW)
@@ -142,6 +149,7 @@ def test_assign_by_district_unassigned_when_no_vehicle():
     """車不夠時多出的趟標 unassigned，不 crash。"""
     vr.seed_default_vehicles(1, 15)     # 只有 1 台車
     orp.seed_dispatch_operators(5)
+    put_drivers_on_duty()
     reset_providers()
     # 兩區各 1 趟 → 第 2 趟無車可派
     dispatch_list = [_rec("A1", "板橋區", 10, 90), _rec("B1", "三重區", 10, 85)]

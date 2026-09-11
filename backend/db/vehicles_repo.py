@@ -23,12 +23,16 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Optional
 
-from db.connection import get_connection
+from db.connection import get_connection, commit
 
 _VALID_STATUS = {"available", "dispatched", "maintenance", "off_duty", "standby"}
 # 可由 update_vehicle 更新的欄位（白名單，避免任意欄位注入）
 _UPDATABLE = {"max_capacity", "status", "current_district", "current_task_id",
-              "is_active", "is_depot"}
+              "is_active", "is_depot",
+              # ADR-123 車上載量（可追溯：值 + 來源 + 觀測時間）
+              "onboard_bikes", "onboard_source", "onboard_observed_at"}
+# ADR-123：載量來源必須可追溯，不接受任意字串
+_ONBOARD_SOURCES = {"manual_report", "task_completion", "fleet_api"}
 
 
 def _now() -> str:
@@ -65,7 +69,7 @@ def create_vehicle(
            VALUES (?, ?, ?, NULL, NULL, 1, ?, ?)""",
         (vehicle_id, int(max_capacity), status, now, now),
     )
-    conn.commit()
+    commit(conn)
     return get_vehicle(vehicle_id)
 
 
@@ -103,7 +107,7 @@ def update_vehicle(vehicle_id: str, **fields) -> Optional[dict]:
     conn.execute(
         f"UPDATE vehicles SET {sets} WHERE vehicle_id = ?",
         [*updates.values(), vehicle_id])
-    conn.commit()
+    commit(conn)
     return get_vehicle(vehicle_id)
 
 
@@ -129,7 +133,7 @@ def deactivate(vehicle_id: str) -> bool:
     cur = conn.execute(
         "UPDATE vehicles SET is_active = 0, updated_at = ? WHERE vehicle_id = ?",
         (_now(), vehicle_id))
-    conn.commit()
+    commit(conn)
     return cur.rowcount > 0
 
 
@@ -192,3 +196,31 @@ def seed_default_vehicles(n: int = 41, max_capacity: int = 15) -> None:
             "SELECT 1 FROM vehicles WHERE vehicle_id = ?", (vid,)).fetchone()
         if not exists:
             create_vehicle(vid, max_capacity=max_capacity, status="available")
+
+
+def report_onboard(vehicle_id: str, onboard_bikes: int, source: str,
+                   observed_at: Optional[str] = None) -> Optional[dict]:
+    """ADR-123：回報車上現有台數（可追溯）。source 必須是已知來源之一。
+
+    onboard_bikes 必須是 0 ≤ n ≤ max_capacity 的整數；不接受浮點、布林或超過容量的值。
+    observed_at 預設為現在；由 fleet_api／結案推算時可帶入實際觀測時間。
+    """
+    if source not in _ONBOARD_SOURCES:
+        raise ValueError(f"未知載量來源 '{source}'（合法：{sorted(_ONBOARD_SOURCES)}）")
+    if isinstance(onboard_bikes, bool) or not isinstance(onboard_bikes, int):
+        raise ValueError("車上台數必須為非負整數")
+    if onboard_bikes < 0:
+        raise ValueError("車上台數必須為非負整數")
+    vehicle = get_vehicle(vehicle_id)
+    if vehicle is None:
+        raise KeyError(f"找不到調度車 {vehicle_id}")
+    if onboard_bikes > int(vehicle["max_capacity"]):
+        raise ValueError(f"車上台數 {onboard_bikes} 超過車輛容量 {vehicle['max_capacity']}")
+    return update_vehicle(vehicle_id, onboard_bikes=onboard_bikes, onboard_source=source,
+                          onboard_observed_at=observed_at or _now())
+
+
+def clear_onboard(vehicle_id: str) -> Optional[dict]:
+    """把車上載量標回未知（例如觀測失效、車輛進廠）。ADR-123：未知不得當成 0。"""
+    return update_vehicle(vehicle_id, onboard_bikes=None, onboard_source=None,
+                          onboard_observed_at=None)
