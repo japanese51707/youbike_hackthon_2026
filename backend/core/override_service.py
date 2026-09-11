@@ -29,6 +29,7 @@ from typing import Optional
 
 from config_loader import get_config
 from .audit import get_audit_service
+from db.connection import atomic
 
 
 def _now() -> _dt.datetime:
@@ -47,6 +48,7 @@ class OverrideService:
         """事後注入 task_manager（避免建構時的循環依賴）。"""
         self._task_manager = task_manager
 
+    @atomic
     def _cascade_cancel_tasks(self, station_id: str, cause: str) -> None:
         """連動取消：該站覆寫消失時，取消它產生且仍未開始（pending/assigned）的任務。
 
@@ -103,6 +105,7 @@ class OverrideService:
         )
         return entry
 
+    @atomic
     def _purge_expired(self) -> None:
         """惰性清理：把已過期的覆寫移除，並記一筆自動恢復稽核。"""
         from db import overrides_repo
@@ -138,6 +141,7 @@ class OverrideService:
         from db import overrides_repo
         return overrides_repo.get(station_id) is not None
 
+    @atomic
     def cancel(self, station_id: str, operator: str = "system") -> bool:
         """手動取消覆寫。回傳是否有取消到東西。"""
         self._purge_expired()

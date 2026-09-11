@@ -7,7 +7,7 @@ audit_logs 表的 append-only 寫入與查詢。取代 AuditService 的記憶體
 from __future__ import annotations
 from typing import Optional
 
-from db.connection import get_connection
+from db.connection import get_connection, commit
 
 
 def insert(log: dict) -> None:
@@ -25,7 +25,7 @@ def insert(log: dict) -> None:
             "task_duration_minutes": log.get("task_duration_minutes"),
         },
     )
-    conn.commit()
+    commit(conn)
 
 
 def query(type: Optional[str] = None, station_id: Optional[str] = None,
