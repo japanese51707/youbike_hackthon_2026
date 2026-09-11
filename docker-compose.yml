@@ -14,10 +14,12 @@ services:
       # 掛入設定檔與 mock 資料（唯讀），路徑用環境變數指定
       - ./config.yaml:/data/config.yaml:ro
       - ./frontend/src/mock/mock_data.json:/data/mock_data.json:ro
+      - youbike-runtime:/data/runtime
     environment:
       - PYTHONUNBUFFERED=1
       - YOUBIKE_CONFIG_PATH=/data/config.yaml
       - YOUBIKE_MOCK_PATH=/data/mock_data.json
+      - YOUBIKE_DB_PATH=/data/runtime/youbike.db
     # A0 階段：後端回 mock，不需 .env；A1 接資料源後再掛 .env
 
   # frontend 待 C0 建立 frontend/Dockerfile 後再啟用
@@ -27,3 +29,6 @@ services:
   #     - "5173:5173"
   #   depends_on:
   #     - backend
+
+volumes:
+  youbike-runtime:

@@ -47,7 +47,7 @@ def test_detect_deadlocks_by_district():
 
 
 # ── 救火觸發 ──
-def test_firefight_dispatches_reserve_when_in_transit_too_slow():
+def test_firefight_suggests_reserve_without_dispatching():
     vr.seed_default_vehicles(41, 15)
     vr.set_reserve_fleet(0.12)
     reset_providers()
@@ -59,15 +59,16 @@ def test_firefight_dispatches_reserve_when_in_transit_too_slow():
     ]
     # 在途車 45 分才到（>30 門檻）→ 該派 standby
     res = emergency.check_and_dispatch_reserve(
-        stations, in_transit_eta_min=45, persist=True)
+        stations, in_transit_eta_min=45, persist=False)
     assert res["triggered"] is True
-    assert len(res["dispatched"]) == 1        # 板橋 1 區 → 派 1 台
+    assert len(res["suggestions"]) == 1        # 板橋 1 區 → 派 1 台
     assert len(res["alerts"]) == 1
     assert res["alerts"][0]["level"] == "critical"
-    # 被派的車已轉 dispatched（不再是 standby）
-    veh_id = res["dispatched"][0]["vehicle_id"]
-    assert vr.get_vehicle(veh_id)["status"] == "dispatched"
-    assert vr.get_vehicle(veh_id)["current_district"] == "板橋區"
+    # 建議不占用車輛；人工確認另由 confirm-trip 完成
+    veh_id = res["suggestions"][0]["vehicle_id"]
+    assert vr.get_vehicle(veh_id)["status"] == "standby"
+    assert res["dispatched"] == []
+    assert vr.get_vehicle(veh_id)["current_task_id"] is None
 
 
 def test_firefight_not_triggered_when_in_transit_fast_enough():
@@ -82,7 +83,7 @@ def test_firefight_not_triggered_when_in_transit_fast_enough():
     ]
     # 在途車 20 分就到（≤30）→ 常態車處理，不動 standby
     res = emergency.check_and_dispatch_reserve(
-        stations, in_transit_eta_min=20, persist=True)
+        stations, in_transit_eta_min=20, persist=False)
     assert res["triggered"] is False
     assert res["dispatched"] == []
     assert len(vr.list_standby()) == 5        # standby 沒被動用
@@ -97,5 +98,5 @@ def test_firefight_not_triggered_below_threshold():
         _st("大滿1", "板橋區", 50, 50),
         _st("大空2", "板橋區", 48, 0),   # 只 2 個 < 門檻 3
     ]
-    res = emergency.check_and_dispatch_reserve(stations, in_transit_eta_min=None, persist=True)
+    res = emergency.check_and_dispatch_reserve(stations, in_transit_eta_min=None, persist=False)
     assert res["triggered"] is False

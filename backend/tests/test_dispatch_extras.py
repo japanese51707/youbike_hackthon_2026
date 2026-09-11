@@ -4,6 +4,7 @@
 ADR-117 大夜跨區排程、尖峰折返組；ADR-118 駐點預備車量、即時天氣源突變偵測。
 """
 from __future__ import annotations
+from tests.conftest import put_drivers_on_duty
 import datetime as dt
 
 from db import vehicles_repo as vr, operators_repo as orp
@@ -21,6 +22,7 @@ def _rec(sid, dist, act, qty, score, avail, lat, lng):
 def _setup():
     vr.seed_default_vehicles(10, 15)
     orp.seed_dispatch_operators(20)
+    put_drivers_on_duty()
     reset_providers()
 
 

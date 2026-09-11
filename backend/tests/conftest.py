@@ -24,7 +24,7 @@ os.environ["BCRYPT_ROUNDS"] = "4"
 
 
 @pytest.fixture(autouse=True)
-def _reset_state():
+def _reset_state(monkeypatch):
     """每個測試前後重置單例 + 重建乾淨記憶體 DB（含 3 預設帳號），確保隔離。"""
     from core.audit import reset_audit_service
     from core.override_service import reset_override_service
@@ -33,18 +33,48 @@ def _reset_state():
     from core.data.data_source import reset_data_source
     from db.connection import reset_memory_db, init_db
     from db.operators_repo import seed_default_operators
+    from core.dispatch_drafts import reset_drafts
+    from api.optimization import reset_reviews
+    from core import interfaces, dispatcher, rule_engine
+    # 後端契約／派工測試不驗證模型準確度；隔離外部 S3 歷史讀取。
+    monkeypatch.setattr(interfaces, "get_predictor", interfaces.MockPredictor)
+    monkeypatch.setattr(dispatcher, "get_predictor", interfaces.MockPredictor)
+    if hasattr(rule_engine, "get_predictor"):
+        monkeypatch.setattr(rule_engine, "get_predictor", interfaces.MockPredictor)
 
     def _reset_all():
+        if "main" in sys.modules:
+            sys.modules["main"].app.middleware_stack = None  # 各測試獨立限流計數
         reset_audit_service()
         reset_override_service()
         reset_task_manager()
         reset_alert_service()
         reset_data_source()
+        reset_drafts()
+        reset_reviews()
         reset_memory_db()          # 丟掉舊記憶體 DB
         init_db()                  # 重建空 schema
         seed_default_operators()   # 種入 3 預設帳號（auth 查表用）
 
     _reset_all()
+
+    # ADR-123：車上載量未知的車不可確認派工。測試環境的慣例是「開班前已回報車上半載」——
+    # 任何在測試中建立的車，建立後立刻補一筆 manual_report(容量一半)，代表已完成回報，
+    # 讓純補車與純取車的既有情境都有可用的載量與空間。
+    # 這是測試夾具的約定，不是正式程式的預設：
+    #   - 要驗證「未知載量擋確認」的測試會自行呼叫 vehicles_repo.clear_onboard()。
+    #   - 要驗證特定載量邊界的測試會自行 report_onboard() 覆寫。
+    from db import vehicles_repo as _vr
+    _real_create = _vr.create_vehicle
+
+    def _create_and_report(vehicle_id, *args, **kwargs):
+        created = _real_create(vehicle_id, *args, **kwargs)
+        vehicle = _vr.get_vehicle(vehicle_id) or created
+        _vr.report_onboard(vehicle_id, int(vehicle["max_capacity"]) // 2, "manual_report")
+        return _vr.get_vehicle(vehicle_id) or created
+
+    monkeypatch.setattr(_vr, "create_vehicle", _create_and_report)
+
     yield
     _reset_all()
 
@@ -61,3 +91,11 @@ def client():
 OP_OPERATOR = {"X-Operator-Id": "OP-001"}    # operator
 OP_DISPATCHER = {"X-Operator-Id": "OP-002"}  # dispatcher
 OP_MAINTAINER = {"X-Operator-Id": "OP-003"}  # maintainer
+
+
+def put_drivers_on_duty():
+    """測試情境明確設定已值勤；正式 seed 不自動把未上班人員視為可用。"""
+    from db.connection import get_connection
+    conn = get_connection()
+    conn.execute("UPDATE operators SET status = 'on_duty' WHERE role_type IN ('driver', 'depot_standby')")
+    conn.commit()

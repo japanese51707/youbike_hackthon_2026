@@ -1,6 +1,16 @@
 """警示端點（3.11）。★題目要求：現行系統無警示。接 alert_service。"""
 
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Depends
+from auth import require_role
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
+
+
+class EmergencyCheckRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    in_transit_eta_min: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    persist: Literal[False] = False
+
 from core.alert_service import get_alert_service
 from core.data import get_stations_with_degradation
 from core import build_dispatch_list
@@ -49,3 +59,23 @@ def subscribe(body: dict = Body(...)):
 def alert_stream():
     """3.11 前端即時警示串流（骨架：回傳待推佇列。正式改 SSE EventSource）"""
     return {"events": get_alert_service().drain_sse()}
+
+
+# ── ADR-118 死結警報 / 緊急救火 ──
+
+@router.get("/emergency/deadlocks")
+def deadlocks():
+    """ADR-118 偵測各行政區死結大站（≥門檻 個大站連續滿/空）。"""
+    from core import emergency
+    stations = get_stations_with_degradation()
+    return emergency.detect_deadlocks(stations)
+
+
+@router.post("/emergency/check")
+def emergency_check(body: EmergencyCheckRequest = Body(default_factory=EmergencyCheckRequest),
+                    operator: dict = Depends(require_role("dispatcher", "maintainer"))):
+    """ADR-302：只回偵測與建議，不修改派工、人車或警報資料。"""
+    from core import emergency
+    stations = get_stations_with_degradation()
+    return emergency.check_and_dispatch_reserve(
+        stations, in_transit_eta_min=body.in_transit_eta_min)

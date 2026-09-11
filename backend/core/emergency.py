@@ -2,11 +2,11 @@
 緊急救火與死結警報（core.emergency）— ADR-118
 ==============================================
 題目宗旨：縮短「供需失衡→機關獲知→介入」的時間差。常態排程（ADR-117）處理可預測失衡；
-突發死結（大站爆滿/空車、在途車來不及）走本模組的緊急救火：偵測 → 警報 → 派 standby 預備車。
+突發死結（大站爆滿/空車、在途車來不及）走本模組的緊急救火：偵測 → 建議 → 人工確認後派 standby 預備車。
 
 不歸大數據預測管，歸「緊急警報」管（ADR-118）。
 
-職責（單一）：偵測死結 + 產生救火警報 + 派待命預備車（可跨區）。
+職責（單一）：偵測死結並提供救火警報與待命車建議（ADR-302：不直接派車）。
 不做：常態排程（dispatcher）、預測（predictor）、警示推播機制本身（借用 alert_service）。
 
 觸發條件（config emergency，可調）：
@@ -22,7 +22,6 @@
 """
 
 from __future__ import annotations
-import datetime as _dt
 from typing import Optional
 
 from config_loader import get_config
@@ -35,6 +34,9 @@ def _is_deadlock(st: dict) -> Optional[str]:
         return None
     bikes = float(st.get("available_bikes", 0) or 0)
     docks = float(st.get("available_docks", total - bikes) or 0)
+    # 故障/未啟用站（ADR-108）：可借與可還同時為 0＝離線，不是死結（排除誤判）
+    if bikes <= 0 and docks <= 0:
+        return None
     if bikes <= 0:
         return "empty"
     if docks <= 0:
@@ -126,60 +128,24 @@ def check_and_dispatch_reserve(
     now=None,
     persist: bool = False,
 ) -> dict:
-    """ADR-118 緊急救火主流程：偵測死結 → 若在途車來不及 → 產生 critical 警報 + 派 standby。
-
-    in_transit_eta_min：現有在途調度車抵達該區的預估時間（分鐘）。None 視為無在途車（等同來不及）。
-    persist=True 時真的把 standby 車轉 active（demo/測試可設 False 只回報建議）。
-
-    回傳：{ triggered, deadlock_districts, dispatched:[{district, vehicle_id}...], alerts:[...] }
-    """
+    """ADR-302：只偵測及建議資源；確認必須使用 emergency 草稿流程。"""
+    if persist:
+        raise ValueError("緊急檢查不可直接派車，請先建立 emergency 草稿並人工確認")
     cfg = config or get_config()
-    em = cfg.get("emergency", {})
-    eta_threshold = float(em.get("在途門檻分鐘", 30))
-
+    threshold = float(cfg.get("emergency", {}).get("在途門檻分鐘", 30))
     deadlocks = detect_deadlocks(stations, cfg)
-    # 在途車若能在門檻內趕到，就不必動用 standby（常態車處理即可）
-    in_time = in_transit_eta_min is not None and in_transit_eta_min <= eta_threshold
+    in_time = in_transit_eta_min is not None and in_transit_eta_min <= threshold
     if not deadlocks or in_time:
         return {"triggered": False, "deadlock_districts": deadlocks,
-                "dispatched": [], "alerts": []}
-
-    from core.alert_service import get_alert_service
+                "dispatched": [], "suggestions": [], "alerts": []}
     from db import vehicles_repo
-    alert_svc = get_alert_service()
-
-    dispatched = []
-    alerts = []
-    standby = vehicles_repo.list_standby()   # 待命預備車池（救火可跨區，不限該區）
-    si = 0
-    for dl in deadlocks:
-        district = dl["district"]
-        # 產生 critical 救火警報（統一走 alert_service，前端跳紅字、webhook 推機關）
-        first = dl["stations"][0]
-        a = alert_svc._create_alert(
-            {"station_id": first["station_id"], "station_name": first["station_name"],
-             "district": district, "status": first["deadlock_type"]},
-            level="critical",
-            rec={"action": "緊急救火補/取車", "quantity": 0,
-                 "priority_level": "high",
-                 "reason": (f"【死結救火】{district} 有 {dl['count']} 個大站死結"
-                            f"（{'/'.join(s['station_name'] for s in dl['stations'][:3])}），"
-                            f"在途車來不及（>{eta_threshold:.0f}分），派待命預備車")})
-        alerts.append(a)
-
-        # 派一台 standby 預備車去救火（可跨區，ADR-116/118）
-        if si < len(standby):
-            veh = standby[si]
-            si += 1
-            if persist:
-                task_id = f"RESCUE-{_dt.datetime.now().strftime('%Y%m%d-%H%M%S')}-{district}"
-                vehicles_repo.activate_reserve(veh["vehicle_id"], district, task_id)
-            dispatched.append({"district": district, "vehicle_id": veh["vehicle_id"]})
-
-    return {
-        "triggered": True,
-        "deadlock_districts": deadlocks,
-        "dispatched": dispatched,
-        "alerts": alerts,
-        "reserve_exhausted": si >= len(standby) and len(deadlocks) > len(dispatched),
-    }
+    standby = vehicles_repo.list_standby()
+    suggestions = [{"district": dl["district"], "vehicle_id": veh["vehicle_id"],
+                    "station_ids": [s["station_id"] for s in dl["stations"]]}
+                   for dl, veh in zip(deadlocks, standby)]
+    alerts = [{"level": "critical", "district": dl["district"],
+               "message": f"{dl['district']} 有 {dl['count']} 個大站死結，請預覽並確認救火任務"}
+              for dl in deadlocks]
+    return {"triggered": True, "deadlock_districts": deadlocks, "dispatched": [],
+            "suggestions": suggestions, "alerts": alerts, "requires_confirmation": True,
+            "reserve_exhausted": len(deadlocks) > len(suggestions)}

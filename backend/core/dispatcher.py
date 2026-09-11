@@ -431,9 +431,32 @@ def assign_peak_shuttle(
 
 
 def _persist_trip(trip: dict) -> None:
+    from db.connection import transaction
+    with transaction():
+        _persist_trip_atomic(trip)
+
+
+def _persist_trip_atomic(trip: dict) -> None:
     """落地一張派工單：建 task（帶 district/assigned_vehicle）+ 回寫車/人的 current_district。"""
     from db import vehicles_repo, operators_repo, tasks_repo
+    from core.dispatch_guards import validate_resources, validate_stations
+    from core.dispatch_errors import DispatchConflict
     task_id = trip["trip_id"]
+    if tasks_repo.exists(task_id):
+        raise DispatchConflict("任務 ID 已存在，請使用草稿確認收據重送")
+    vehicle, operator = validate_resources(trip)
+    validate_stations(trip["stations"], vehicle["max_capacity"])
+    # ADR-123/304：確認時以當下資源重跑與預覽相同的可行性評估（載量守恆／逐站視野／班別工時／重疊）
+    from core.dispatch_feasibility import evaluate_feasibility, first_blocking_message
+    feasibility = evaluate_feasibility(
+        trip["stations"], vehicle, operator, mode=trip.get("mode"),
+        start_lat=vehicle.get("current_lat"), start_lng=vehicle.get("current_lng"),
+        est_total_min=trip.get("est_total_min") or (trip.get("estimate") or {}).get("est_total_min"),
+        exclude_task=task_id)
+    blocked = first_blocking_message(feasibility)
+    if blocked:
+        raise DispatchConflict(blocked)
+    plan_by_station = {str(e["station_id"]): e for e in feasibility["load_plan"]}
     # route 存「站物件」（含 target_available/station_status/認領人），供 task_execution 逐站操作（ADR-117）
     route = []
     for s in trip["stations"]:
@@ -443,23 +466,36 @@ def _persist_trip(trip: dict) -> None:
             "district": s.get("district"),
             "action": s.get("action"),
             "target_available": s.get("target_available"),
-            "est_quantity": s.get("quantity"),
-            "station_status": s.get("station_status", "pending"),
+            # ADR-123：與可行性計畫同一口徑的搬運量（結案推算載量要用同一個數）
+            "est_quantity": plan_by_station.get(str(s.get("station_id")), {}).get(
+                "quantity", s.get("quantity")),
+            "station_status": "pending",
+            "total_docks": s.get("total_docks"),
             "claimed_by": trip["assigned_operator"],   # 認領標註（ADR-117）
             "lat": s.get("lat"), "lng": s.get("lng"),
+            # ADR-123：逐站到達偏移／所用預測視野／到站後車上載量（確認時算定，供執行端對照）
+            "arrival_offset_min": plan_by_station.get(str(s.get("station_id")), {}).get(
+                "arrival_offset_min"),
+            "horizon_used_min": plan_by_station.get(str(s.get("station_id")), {}).get(
+                "horizon_used_min"),
+            "onboard_after": plan_by_station.get(str(s.get("station_id")), {}).get("onboard_after"),
         })
     task = {
         "task_id": task_id,
-        "task_type": "normal",
+        "task_type": "emergency" if trip.get("mode") == "emergency" else "normal",
+        "vehicle_return_status": vehicle["status"],
+        "resources_released": 0,
         "task_status": "assigned",
         "assigned_operator": trip["assigned_operator"],
         "district": trip["district"],
         "assigned_vehicle": trip["assigned_vehicle"],
         "route": route,
         "assigned_at": _dt.datetime.now().isoformat(timespec="seconds"),
+        "estimated_total_minutes": feasibility.get("est_total_min"),
+        "onboard_start": feasibility.get("onboard_start"),
+        "onboard_planned_end": feasibility.get("onboard_end"),
     }
-    if not tasks_repo.exists(task_id):
-        tasks_repo.insert(task)
+    tasks_repo.insert(task)
     # 回寫車/人的 current_district（動態，ADR-114）
     vehicles_repo.assign_district(trip["assigned_vehicle"], trip["district"], task_id)
     operators_repo.assign_district(trip["assigned_operator"], trip["district"], task_id)

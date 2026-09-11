@@ -32,9 +32,12 @@ from .interfaces import PredictionInterval, get_predictor
 def _mk_rec(station: dict, action: str, quantity: int, reason: str,
             basis: str, at_arrival: float,
             urgency_tier: str = "normal", is_censored_demand: bool = False,
-            breach_horizon_min=None, arrival_by_horizon=None) -> dict:
-    """組一筆規則引擎輸出（未含優先級，dispatcher 再補）。"""
+            breach_horizon_min=None, arrival_by_horizon=None, extra=None) -> dict:
+    """組一筆規則引擎輸出（未含優先級，dispatcher 再補）。extra 為 ADR-124 等附加欄位。"""
     return {
+        **(extra or {}),
+        **{key: station.get(key) for key in ("source", "observed_at", "received_at",
+            "data_freshness", "dispatch_eligible", "quality_reasons", "total_docks") if key in station},
         "station_id": station.get("station_id", ""),
         "station_name": station.get("station_name", ""),
         "district": station.get("district", ""),
@@ -59,6 +62,7 @@ def _mk_rec(station: dict, action: str, quantity: int, reason: str,
 
 def _dynamic_target_available(
     action: str, total: float, available: float, target: dict, multi=None,
+    coefficient: float = 1.0,
 ) -> float:
     """ADR-115：動態目標水位——補/抽到「能吸收後續 60 分最悲觀淨流量」的水位。
 
@@ -83,13 +87,15 @@ def _dynamic_target_available(
     else:
         base = float(target.get("安全緩衝_台數", 2))
 
+    # ADR-124：站點調整係數只乘在「預期流量」項；安全緩衝與 80/20 護欄不受影響
+    coef = float(coefficient) if coefficient else 1.0
     if action == "補車":
         cum_delta_p10 = float(iv.raw_lower_bound) - available   # 悲觀累積淨流出（通常為負）
-        後續最大流出 = abs(min(0.0, cum_delta_p10))
+        後續最大流出 = abs(min(0.0, cum_delta_p10)) * coef
         target_raw = base + 後續最大流出
     else:  # 取車
         cum_delta_p90 = float(iv.raw_upper_bound) - available   # 樂觀累積淨流入（通常為正）
-        後續最大流入 = max(0.0, cum_delta_p90)
+        後續最大流入 = max(0.0, cum_delta_p90) * coef
         target_空位 = base + 後續最大流入
         target_raw = total - target_空位
 
@@ -104,13 +110,20 @@ def evaluate_station(
     prediction: Optional[PredictionInterval],
     config: Optional[dict] = None,
     multi=None,
+    coefficient: Optional[dict] = None,
 ) -> Optional[dict]:
     """判斷單站是否需要調度。需要則回一筆建議 dict，否則回 None。
 
     prediction：觸發判斷用的單視野區間（依調度員響應時間挑的視野）。
     multi：（可選）MultiHorizonPrediction，用來補齊 4 視野 arrival_by_horizon（前端趨勢圖）
            並掃出「最早穿透邊界的視野」（ADR-107/111/113）。
+    coefficient：（可選，ADR-124）該站生效的調整係數與其來源版本。
+           None＝off 模式，行為與接線前完全相同；帶 mode="shadow" 時算但不採用。
     """
+    if (station.get("dispatch_eligible") is False or station.get("service_available") is False
+            or station.get("data_freshness") in ("stale", "historical", "historical_fallback")
+            or station.get("status") == "offline"):
+        return None
     cfg = config or get_config()
     trig = cfg["trigger"]
     target = cfg["target"]
@@ -120,6 +133,10 @@ def evaluate_station(
     if total <= 0:
         return None
     available = float(station.get("available_bikes", 0) or 0)
+    docks = float(station.get("available_docks", total - available) or 0)
+    # 故障/未啟用站（ADR-108）：可借與可還同時為 0＝離線，不觸發調度（不是真缺車）
+    if station.get("status") == "offline" or (available <= 0 and docks <= 0):
+        return None
     buffer_bikes = float(trig["安全緩衝_台數"])
     sensitivity = float(trig["觸發靈敏度"])
     horizon = fleet["響應時間_分鐘"]
@@ -194,12 +211,31 @@ def evaluate_station(
         return None
 
     # 數量：補/取到「動態目標水位」（ADR-115），單站不超過一車容量
-    target_available = _dynamic_target_available(action, total, available, target, multi)
-    if action == "補車":
-        quantity = max(1, round(target_available - available))
+    def _plan(coef: float):
+        level = _dynamic_target_available(action, total, available, target, multi, coef)
+        raw = (level - available) if action == "補車" else (available - level)
+        return level, int(min(max(1, round(raw)), fleet["每車容量"]))
+
+    # ADR-124：off→不讀係數；shadow→算兩份但採用基準值；on→採用套用後的值
+    mode = (coefficient or {}).get("mode", "off")
+    coef_value = float((coefficient or {}).get("value", 1.0))
+    baseline_level, baseline_qty = _plan(1.0)
+    extra = {}
+    if coefficient:
+        extra = {"coefficient_mode": mode,
+                 "param_version": coefficient.get("version"),
+                 "applied_coefficients": coefficient.get("applied") or {},
+                 "coefficient_clamped": bool(coefficient.get("clamped"))}
+    if mode == "on":
+        target_available, quantity = _plan(coef_value)
+    elif mode == "shadow":
+        target_available, quantity = baseline_level, baseline_qty
+        shadow_level, shadow_qty = _plan(coef_value)
+        extra.update({"shadow_target_available": round(shadow_level, 1),
+                      "shadow_quantity": shadow_qty,
+                      "shadow_quantity_delta": shadow_qty - baseline_qty})
     else:
-        quantity = max(1, round(available - target_available))
-    quantity = int(min(quantity, fleet["每車容量"]))
+        target_available, quantity = baseline_level, baseline_qty
 
     # 各視野到達存量（前端趨勢圖用）：有 multi 就補齊 4 視野；否則只填當前 horizon
     arrival_by_horizon = {}
@@ -223,7 +259,7 @@ def evaluate_station(
     return _mk_rec(station, action, quantity, reason, basis, at_arrival,
                    urgency_tier=urgency_tier, is_censored_demand=is_censored_demand,
                    breach_horizon_min=breach_horizon_min,
-                   arrival_by_horizon=arrival_by_horizon)
+                   arrival_by_horizon=arrival_by_horizon, extra=extra)
 
 
 def generate_recommendations(
@@ -240,8 +276,21 @@ def generate_recommendations(
     pred = predictor or get_predictor()
     horizon = cfg["fleet"]["響應時間_分鐘"]
 
+    # ADR-124：係數一次批次讀入（off 模式完全不查 DB），今天是否放假型態也只算一次
+    from params import bulk_load, current_mode, is_dayoff, resolve
+    mode = current_mode(cfg)
+    param_index, dayoff = {}, False
+    if mode != "off":
+        dayoff = is_dayoff()
+        try:
+            param_index = bulk_load(str(st.get("station_id", "")) for st in stations)
+        except Exception:
+            param_index = {}   # 參數不可用時退回不影響，不讓調度因此中斷
+
     out = []
     for st in stations:
+        if st.get("dispatch_eligible") is False:
+            continue
         interval = None
         multi = None
         try:
@@ -253,7 +302,24 @@ def generate_recommendations(
                 interval = pred.predict(st, horizon)
         except NotImplementedError:
             interval = None   # 預測不可用 → 走降級
-        rec = evaluate_station(st, interval, cfg, multi=multi)
+        coefficient = None
+        if mode != "off":
+            resolved = resolve(param_index.get(str(st.get("station_id", ""))), dayoff, cfg)
+            coefficient = {**resolved, "mode": mode} if resolved else {
+                "mode": mode, "value": 1.0, "version": None, "applied": {}, "clamped": False}
+        rec = evaluate_station(st, interval, cfg, multi=multi, coefficient=coefficient)
         if rec is not None:
+            rec["prediction_status"] = getattr(multi, "status", "ready") if interval else "unavailable"
+            rec["prediction_missing_features"] = getattr(multi, "missing_features", [])
+            # ADR-126：在建議「已經決定完」之後才附加，結構上保證它不可能影響 action／quantity／
+            # target_available／緊急度。空站看到的缺口一定是低估的，這個欄位補上誠實的參考值。
+            if hasattr(pred, "unconstrained_demand"):
+                try:
+                    value, basis = pred.unconstrained_demand(st, rec["action"])
+                except Exception:
+                    value, basis = None, None
+                if basis is not None:
+                    rec["unconstrained_demand"] = value
+                    rec["demand_basis"] = basis
             out.append(rec)
     return out

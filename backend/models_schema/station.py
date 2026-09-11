@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 class StationStatusEnum(str, Enum):
     """站點空滿現況（僅顯示分級，非緊急度）"""
+    offline = "offline"
     empty = "empty"      # 空站（可借=0）→ 紅
     low = "low"          # 低水位（<15%）→ 橘
     normal = "normal"    # 正常 → 綠
@@ -41,6 +42,8 @@ class Terrain(str, Enum):
 
 class DataFreshness(str, Enum):
     """資料新鮮度（NFR-10 降級標記）"""
+    mock = "mock"
+    historical = "historical"
     live = "live"                              # 即時
     stale = "stale"                            # 過期（用最後成功資料）
     historical_fallback = "historical_fallback"  # 歷史同時段估計
@@ -49,6 +52,8 @@ class DataFreshness(str, Enum):
 class StationStatus(BaseModel):
     station_id: str                       # TDX StationUID
     station_name: str
+    station_key: str | None = None
+    hour: int | None = None
     district: str
     lat: float
     lng: float
@@ -60,8 +65,16 @@ class StationStatus(BaseModel):
     service_available: bool = True        # 是否啟用（TDX ServiceStatus）
     area_type: Optional[AreaType] = None  # 加值分析
     terrain: Optional[Terrain] = None     # 加值分析
-    timestamp: str                        # 系統取得時間
+    timestamp: str | None                # 官方觀測時間（相容欄位）
+    source: str | None = None
+    observed_at: str | None = None
+    received_at: str | None = None
+    observation_age_sec: float | None = None
+    quality_reasons: list[str] = Field(default_factory=list)
+    dispatch_eligible: bool = False
     source_timestamp: Optional[str] = None  # 資料源更新時間（TDX SrcUpdateTime）
+    yb2_quantity: int | None = None
+    eyb_quantity: int | None = None
     data_freshness: DataFreshness = DataFreshness.live
 
 
@@ -78,6 +91,7 @@ class StationParams(BaseModel):
         default_factory=dict,
         description="outflow_rate/inflow_rate/target_level(0~1)/buffer_level(0~1)/nearby_stations/capacity_class",
     )
+    target_usage_rate: float | None = None
     param_source: ParamSource = ParamSource.base
     override_active: bool = False          # ③ 是否有生效中的即時覆寫
     conditions: list = Field(default_factory=list)  # 參數背後條件說明
@@ -86,13 +100,36 @@ class StationParams(BaseModel):
 
 class HistoryPoint(BaseModel):
     """某站某歷史時間點的完整快照（時間軸/趨勢圖用）"""
+    source: str | None = None
+    identity_source: str | None = None
+    station_id: str | None = None
     timestamp: str
     available_bikes: int
     available_docks: int
     usage_rate: float               # 0~100（%）
-    urgency_score: float            # 緊急指數 0~100（回填歷史）
+    urgency_score: float | None = None  # 緊急指數 0~100（回填歷史）
     status: StationStatusEnum
     anomaly_tags: list[str] = Field(
         default_factory=list,
         description="dispatch_intervention/event/holiday/school_vacation/weather_extreme/station_change/data_error",
     )
+
+
+class HistoryStatus(BaseModel):
+    status: str
+    source: str = "historical"
+    requested_start: str | None = None
+    requested_end: str | None = None
+    reason: str | None = None
+
+
+class StationDetail(BaseModel):
+    current: StationStatus
+    prediction: "Prediction"
+    params: StationParams | None = None
+    history: list[HistoryPoint] = Field(default_factory=list)
+    history_status: HistoryStatus
+
+
+from .prediction import Prediction
+StationDetail.model_rebuild()

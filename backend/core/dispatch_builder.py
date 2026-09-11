@@ -20,16 +20,13 @@
 """
 
 from __future__ import annotations
-import datetime as _dt
 from typing import Optional
 
 from config_loader import get_config
+from copy import deepcopy
+from core.dispatch_drafts import remember_draft
 from . import dispatcher as _dsp
 from .providers import get_fleet_provider, get_operator_provider
-
-
-def _draft_id() -> str:
-    return f"DRAFT-{_dt.datetime.now().strftime('%Y%m%d-%H%M%S-%f')[:-3]}"
 
 
 def _fill_station_targets(stations: list[dict]) -> None:
@@ -46,7 +43,7 @@ def _fill_station_targets(stations: list[dict]) -> None:
 def _make_draft(stations, vehicle, operator, district, cfg, now,
                 start_lat=None, start_lng=None, note="") -> dict:
     """組一張草稿派工單（含路徑順序 + 預估）。不落地。"""
-    ordered = _dsp._order_route(stations, start_lat, start_lng)
+    ordered = _dsp._order_route(deepcopy(stations), start_lat, start_lng)
     _fill_station_targets(ordered)
     kpi = _dsp._estimate_trip_kpi(ordered, cfg, start_lat, start_lng)
     default_cap = _dsp._default_capacity(cfg)
@@ -56,22 +53,39 @@ def _make_draft(stations, vehicle, operator, district, cfg, now,
         "stop_count": len(ordered),
         "urgency_sum": round(sum(float(s.get("priority_score", 0)) for s in ordered), 1),
     }
+    mode = "emergency" if note.startswith("緊急出車") else _dsp.current_mode(now)
+    # ADR-123/304：預覽就跑與確認相同的可行性評估，草稿帶逐站載量計畫與阻擋原因
+    from core.dispatch_feasibility import evaluate_feasibility
+    feasibility = evaluate_feasibility(
+        ordered, vehicle, operator, mode=mode, now=now, config=cfg,
+        start_lat=start_lat, start_lng=start_lng,
+        est_total_min=kpi.get("est_total_min"),
+        check_resources=bool(vehicle and operator))
+    for stop, entry in zip(ordered, feasibility["load_plan"]):
+        stop["arrival_offset_min"] = entry["arrival_offset_min"]
+        stop["horizon_used_min"] = entry["horizon_used_min"]
+        stop["onboard_after"] = entry["onboard_after"]
     return {
-        "draft_id": _draft_id(),
         "is_draft": True,                       # ★草稿：預覽用，未確認不落地
         "district": district,
         "shift": _dsp.current_shift(now),
-        "mode": _dsp.current_mode(now),
+        "mode": mode,
         "stations": ordered,
         "assigned_vehicle": vehicle.get("vehicle_id") if vehicle else None,
         "assigned_operator": operator.get("operator_id") if operator else None,
         "vehicle_capacity": int(vehicle.get("max_capacity") or default_cap) if vehicle else None,
         "estimate": estimate,                   # 預估：距離/時間/載運量/緊急度加總（ADR-119）
+        # ADR-304 §1：空陣列＝可確認；非空＝確認會被擋，且原因在預覽就看得到
+        "blocking_reasons": feasibility["blocking_reasons"],
+        "load_plan": feasibility["load_plan"],  # ADR-123：逐站到達時間／視野／車上載量
+        "onboard_start": feasibility["onboard_start"],
+        "onboard_end": feasibility["onboard_end"],
         "note": note,
     }
 
 
 # ── 入口 (a)：以車為起點 ──
+@remember_draft
 def build_from_vehicle(
     vehicle_id: str, operator_id: str, dispatch_list: list[dict],
     district: Optional[str] = None, config=None, fleet_provider=None, now=None,
@@ -106,6 +120,7 @@ def build_from_vehicle(
 
 
 # ── 入口 (b)：以站為起點 ──
+@remember_draft
 def build_from_station(
     station_id: str, dispatch_list: list[dict], operator_id: Optional[str] = None,
     vehicle_id: Optional[str] = None, config=None, fleet_provider=None,
@@ -168,6 +183,7 @@ def build_from_station(
 
 
 # ── 入口 (c)：緊急出車 ──
+@remember_draft
 def build_emergency(
     station_ids: list[str], dispatch_list: list[dict],
     vehicle_id: Optional[str] = None, operator_id: Optional[str] = None,
@@ -229,32 +245,6 @@ def build_emergency(
 
 # ── 確認落地 ──
 def confirm_trip(draft: dict, operator: str = "system") -> dict:
-    """ADR-119 確認：草稿 → 真正派工單（assigned，落地 DB）。人在迴圈唯一閘門。
-
-    走 dispatcher._persist_trip（建 task + 回寫車/人 current_district + 認領標註）。
-    確認記 audit 留痕。
-    """
-    if not draft or not draft.get("stations"):
-        raise ValueError("空草稿不可確認")
-    if not draft.get("assigned_vehicle") or not draft.get("assigned_operator"):
-        raise ValueError("草稿缺車輛或人員，不可確認（請先指派）")
-
-    # 組成 dispatcher trip 結構（給 _persist_trip）
-    trip = {
-        "trip_id": draft["draft_id"].replace("DRAFT", "TRIP"),
-        "district": draft.get("district"),
-        "shift": draft.get("shift"),
-        "mode": draft.get("mode"),
-        "stations": draft["stations"],
-        "assigned_vehicle": draft["assigned_vehicle"],
-        "assigned_operator": draft["assigned_operator"],
-        "vehicle_capacity": draft.get("vehicle_capacity"),
-    }
-    _dsp._persist_trip(trip)
-
-    from core.audit import get_audit_service
-    get_audit_service().record(
-        type="task_report", operator=operator,
-        action=f"確認派工單 {trip['trip_id']}（{trip.get('mode')}，{len(trip['stations'])} 站）",
-        reason=draft.get("note"))
-    return {"trip_id": trip["trip_id"], "confirmed": True, "status": "assigned"}
+    """ADR-302：相容完整草稿；也接受 {draft_id, version} 確認。"""
+    from core.dispatch_confirmation import confirm
+    return confirm(draft, operator)

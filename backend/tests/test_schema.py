@@ -20,6 +20,8 @@ def test_station_detail_shape(client):
 
 def test_target_usage_rate_same_scale_as_usage(client):
     """params 附換算好的 target_usage_rate（0~100%），與 usage_rate 同尺度可比（I-3）。"""
+    from params import set_base
+    set_base("500101001", {"target_level": 0.5})
     p = client.get("/api/v1/stations/500101001/params").json()
     tur = p.get("target_usage_rate")
     assert tur is not None

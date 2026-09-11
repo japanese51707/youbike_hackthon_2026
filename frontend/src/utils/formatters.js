@@ -61,6 +61,7 @@ export function formatStationTime(station, { withSeconds = true } = {}) {
 }
 
 export const stationStatusLabels = {
+  offline: "停用／離線",
   empty: "空站",
   low: "偏低",
   normal: "正常",
@@ -88,6 +89,9 @@ export const areaTypeLabels = {
 };
 
 export const freshnessLabels = {
+  mock: "Mock 展示",
+  historical: "歷史快照",
+  historical_fallback: "歷史推估",
   live: "即時",
   stale: "延遲",
   cached: "快取",

@@ -12,7 +12,7 @@
 from __future__ import annotations
 from typing import Optional
 
-from db.connection import get_connection
+from db.connection import get_connection, commit
 
 # 確保覆寫表存在（不在主 schema.sql 的七張表內，這裡補建）
 _ENSURE = """
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS overrides (
 def _ensure_table():
     conn = get_connection()
     conn.execute(_ENSURE)
-    conn.commit()
+    commit(conn)
 
 
 def upsert(entry: dict) -> None:
@@ -45,7 +45,7 @@ def upsert(entry: dict) -> None:
              expire_minutes=excluded.expire_minutes""",
         entry,
     )
-    conn.commit()
+    commit(conn)
 
 
 def get(station_id: str) -> Optional[dict]:
@@ -65,5 +65,5 @@ def delete(station_id: str) -> bool:
     _ensure_table()
     conn = get_connection()
     cur = conn.execute("DELETE FROM overrides WHERE station_id = ?", (station_id,))
-    conn.commit()
+    commit(conn)
     return cur.rowcount > 0

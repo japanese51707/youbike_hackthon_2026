@@ -53,3 +53,10 @@ frontend/.env
 # === 大型產出檔 ===
 # dashboard 等產出的 html 不進 Git（可重新產生）；審查報告 html 保留於根目錄
 output/*.html
+
+# === 桌面 app 產出（重複副本，證據以 docs/analysis/ 為準）===
+Claude outputs/
+
+# === 會前簡報二進位檔（.pptx/.key 皆不進版控，與現況一致）===
+*.pptx
+*.key

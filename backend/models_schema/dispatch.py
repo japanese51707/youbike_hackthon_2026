@@ -66,6 +66,10 @@ class RouteStop(BaseModel):
     lat: float
     lng: float
     stop_status: StopStatus = StopStatus.pending
+    # ADR-123 逐站到達可行性（確認當下算定；None 代表尚未計算或超出預測視野）
+    arrival_offset_min: Optional[float] = None   # 預估自出發起算的到達偏移（分鐘）
+    horizon_used_min: Optional[int] = None       # 該站採用的預測視野（30/60/90/120）
+    onboard_after: Optional[int] = None          # 完成該站後車上台數
 
 
 class DispatchTask(BaseModel):
@@ -83,3 +87,6 @@ class DispatchTask(BaseModel):
     assigned_at: Optional[str] = None
     # 若此任務因某站的③即時覆寫而產生，記來源站；覆寫到期時，仍在 assigned 者一併取消
     source_override_station_id: Optional[str] = None
+    # ADR-123 車上載量（出車時算定／依載量計畫預估的收車載量）；None=未知
+    onboard_start: Optional[int] = None
+    onboard_planned_end: Optional[int] = None

@@ -19,13 +19,13 @@
 | 編號 | 決策 | 狀態 | 範圍 | 實作狀態／限制 |
 |---|---|---|---|---|
 | [ADR-000](ADR-000-ADR編號規則與號段配置.md) | ADR 編號規則與號段配置（分段編號制） | accepted | governance, collaboration | 1xx模型/2xx前端/3xx平台;001-010封存;取號前查登記表 |
-| [ADR-001](ADR-001-單一模型分層參數.md) | 單一模型＋分層參數 | accepted | prediction, params | 三層參數已實作；真實模型尚未接入後端 |
-| [ADR-002](ADR-002-LightGBM選型.md) | 預測模型採 LightGBM | accepted | prediction | 選型已定；backend 目前仍使用 MockPredictor |
+| [ADR-001](ADR-001-單一模型分層參數.md) | 單一模型＋分層參數 | accepted | prediction, params | 三層參數已實作；線上模型與特徵包見 ADR-121 |
+| [ADR-002](ADR-002-LightGBM選型.md) | 預測模型採 LightGBM | accepted | prediction | 官方模式已接 LightGBM；明確 Mock 模式使用 MockPredictor |
 | [ADR-003](ADR-003-運算層EC2資料層Serverless.md) | 運算層 EC2、資料層 Serverless | accepted | infra, data | S3／Athena 已規劃；Git 歷史尚無 EC2 部署證據 |
 | [ADR-004](ADR-004-AI只估計規則引擎決策.md) | AI 只估計、規則引擎決策 | accepted | core, prediction | 規則與人工閘門為不可違反約束 |
-| [ADR-005](ADR-005-契約先行與Mock並行開發.md) | 契約先行＋符合 Schema 的 Mock 解鎖並行 | accepted（追溯） | api, schemas, collaboration | 後端契約與 Mock 已建立；Mock-only 前端已完成，FastAPI 整合尚未完成 |
-| [ADR-006](ADR-006-可抽換資料源與明確降級.md) | 可抽換資料源＋明確 freshness／降級 | accepted（追溯） | data, reliability | Mock／Historical 可用；即時 adapter 未實作，雙重失敗回空與 freshness 枚舉仍有缺口 |
-| [ADR-007](ADR-007-API雙向邊界防護.md) | API 入向與出向都視為信任邊界 | accepted（追溯） | api, security | 應用層防護已建；正式 webhook／TLS 尚待部署 |
+| [ADR-005](ADR-005-契約先行與Mock並行開發.md) | 契約先行＋符合 Schema 的 Mock 解鎖並行 | accepted（追溯） | api, schemas, collaboration | 後端契約與 Mock 已建立；FastAPI 派工整合已實作，見 ADR-207／302／303 |
+| [ADR-006](ADR-006-可抽換資料源與明確降級.md) | 可抽換資料源＋明確 freshness／降級 | accepted（追溯） | data, reliability | 官方 adapter／同源最後快照／503 已實作，見 ADR-303 |
+| [ADR-007](ADR-007-API雙向邊界防護.md) | API 入向與出向都視為信任邊界 | accepted（追溯） | api, security | 應用層防護已建；官方與 CWA 即時資料驗證 TLS；正式 webhook 部署仍待後續 |
 | [ADR-008](ADR-008-依賴釘選與關鍵行為測試.md) | 精確釘選依賴＋優先測決策關鍵行為 | accepted（追溯） | backend, testing, dependencies | Python 3.12 為容器基線；CI 尚未建立 |
 | [ADR-009](ADR-009-SQLite持久化與Repository分層.md) | 黑客松階段使用 SQLite＋Repository | accepted（追溯） | database, backend | 單實例適用；多實例前需重評估 |
 | [ADR-010](ADR-010-Demo帳號與後端角色驗證.md) | Demo 本地帳號＋後端角色驗證 | accepted（追溯） | authentication, authorization, security | 無 token/session，只限受控 Demo |
@@ -34,18 +34,31 @@
 | [ADR-103](ADR-103-時序自身鄰近連動營運面因子.md) | 站點時序自身/鄰近連動/營運面因子 | accepted | prediction, features, data | lag/歷史空滿頻率/波動度/鄰近連動(距離指數衰減)/日出日落/溫度倒U/故障缺口/level shift；含資料洩漏防範約束 |
 | [ADR-104](ADR-104-站點行為指紋與需求密度分層.md) | 站點行為指紋/需求密度分層/外部因子降級 | accepted | prediction, features, data | 六個月行為指紋(日夜比/平假日比/峰型/需求密度)；需求密度分規劃層(柱位建議)與調度層(不進即時觸發)；站型分群行為vsPOI兩套對照；外部人口因子降為冷啟動fallback |
 | [ADR-105](ADR-105-目標變數定義與截斷樣本處理.md) | 目標變數定義與截斷(censored)樣本處理 | accepted | prediction, features, data | 進訓練前審查F-03；截斷=「Δ=0 且同時空/滿站」才排除/降權(正常站Δ=0保留為真實訊號)+分區間評估；需求插補選配 |
-| [ADR-106](ADR-106-調度標註離線與線上分離.md) | 調度介入辨識：離線清訓練資料/上線只事後標註 | accepted | prediction, features, data | 進訓練前審查§5-2；辨識調度僅為清訓練資料(離線用全期合法)；上線不做即時調度偵測,只做事後異常標註供回查 |
+| [ADR-106](ADR-106-調度標註離線與線上分離.md) | 調度介入辨識：離線清訓練資料/上線只事後標註 | superseded（由 ADR-122） | prediction, features, data | 進訓練前審查§5-2；辨識調度僅為清訓練資料(離線用全期合法)；上線不做即時調度偵測,只做事後異常標註供回查 |
 | [ADR-107](ADR-107-多視野預測與累積分位數.md) | 多視野預測(30/60/90/120分)+累積分位數 | accepted | prediction, api, core | 進訓練前審查F-04/F-05；直接多視野非遞迴、分位數對累積Δ訓練;horizon用分鐘定義(粒度落差解法);Prediction改horizons[]陣列(改api_contract,通知B/C) |
 | [ADR-108](ADR-108-資料品質與站點主檔處理.md) | 資料品質與站點主檔處理 | accepted | data, features, prediction | 站數1521→1576(聯集1583);時間戳floor統一;經緯度為主鍵歸併亂碼站(1583→1579);新舊站分報 |
 | [ADR-109](ADR-109-流量加權訓練與決策層信心.md) | 流量加權訓練與決策層信心 | accepted | prediction, features, rules | A樣本權重實測否決(LightGBM已內建);B周轉量保留;C決策層信心分級接dispatcher排序(守ADR-104不進觸發) |
 | [ADR-110](ADR-110-超參數優化與時序交叉驗證.md) | 超參數優化與時序交叉驗證 | accepted | prediction | 時序CV選參(6月不參與防洩漏);選參目標正常區間MAE;調參後模型正常區間全視野贏baseline |
+| [ADR-113](ADR-113-即時預測服務架構.md) | 即時預測服務架構 | superseded（由 ADR-121） | prediction, data | 保留歷史，serving 特徵改成套凍結載入 |
+| [ADR-118](ADR-118-駐點預備車與緊急救火警報.md) | 駐點預備車／緊急警報／即時天氣 | superseded（由 ADR-303） | dispatch, weather | 資源決策由 ADR-303 承接，修訂 TLS／快取及時間處理 |
 | [ADR-201](ADR-201-React-Vite-Mock-first前端架構.md) | React／Vite Mock-first 前端＋Leaflet 歷史基線 | superseded（由 ADR-202） | frontend, dependencies, data-adapter | `98d3e8e` 已完成 Mock-only 三頁與 Leaflet 基線；保留歷史，不再作為現行地圖選型 |
 | [ADR-202](ADR-202-MapLibre-DeckGL-OpenFreeMap地圖架構.md) | MapLibre／Deck.gl／OpenFreeMap 三頁地圖架構 | superseded（由 ADR-204） | frontend, map-architecture, outbound-security | 地圖遷移、OpenFreeMap 與 no-basemap 已於 `d1fdb16` 實作；底圖 style 來源條款由 ADR-204 取代，其餘決策由 ADR-204 承接 |
-| [ADR-203](ADR-203-Past-Live-Predict時序契約.md) | Past／Live／Predict 前端呈現與 Mock-first | accepted | frontend, temporal-presentation, mock-data | 前端 UI／Mock 決策已定；API／Schema／prediction／Alert／fallback／dispatch 契約仍待 owner／團隊決策，不可作為 A／B 實作依據 |
+| [ADR-203](ADR-203-Past-Live-Predict時序契約.md) | Past／Live／Predict 前端呈現與 Mock-first | accepted | frontend, temporal-presentation, mock-data | 保留孿生 Mock 時序展示；實際站況／預測及派工 API 契約由 ADR-121／207／303 補齊 |
 | [ADR-204](ADR-204-數位孿生戰情室設計語言與暗色底圖.md) | 數位孿生戰情室設計語言＋自帶暗色底圖 | superseded（由 ADR-205） | frontend, map-architecture, design-language, dependencies | 暗色主題與地圖視覺已實作；資訊架構（三頁）由 ADR-205 取代為四頁，設計語言/地圖決策由 ADR-205 承接 |
 | [ADR-205](ADR-205-四頁角色導向資訊架構與無捲動版面.md) | 四頁角色導向資訊架構＋無捲動固定視窗版面 | accepted | frontend, information-architecture, ux | 調度/司機手機端/長官/戰情室；預設落地調度面板、炫技集中戰情室；2026-09-05 修訂：移除桌機司機頁（與調度面板重疊），司機僅手機端；調度面板資訊架構由 ADR-206 細化 |
 | [ADR-206](ADR-206-調度面板決策流資訊架構.md) | 調度面板決策流資訊架構（三入口組單＋執行追蹤） | accepted | frontend, information-architecture, ux | 地圖舞台＋右欄狀態機（待命態/組單態）；對齊 ADR-119 三入口與預覽確認；缺口榜併入緊急站排行；執行追蹤含狀態生命週期；站數動態；owner 2026-09-11 核准，實作中 |
 | [ADR-301](ADR-301-AI營運助理定位與LLM接入決策.md) | AI 營運助理定位與 LLM 接入決策（advisory-only） | proposed | platform, ai-advisory, security, api-contract | 助理僅輔助理解與建議、不自行決策（守 ADR-004）；是否接 LLM 及接法留給後端/owner 決定，尚不可作為實作依據 |
+| [ADR-302](ADR-302-派工確認與任務結案一致性.md) | 後端草稿、原子派工、授權回報與結案釋放 | accepted | api, security, database, dispatch | 第一批派工安全修正；沿用 SQLite／Demo 身分限制 |
+| [ADR-121](ADR-121-模型與特徵成套載入.md) | 模型與特徵成套載入 | accepted | prediction, data | 第二批整合 |
+| [ADR-207](ADR-207-前端實際派工服務整合.md) | 前端實際派工服務整合 | accepted | frontend, api | 第二批整合；原編 ADR-206，2026-08-19 與前端 ADR-206 撞號讓號至 207 |
+| [ADR-303](ADR-303-觀測時間與資料可用性契約.md) | 觀測時間與資料可用性契約 | accepted | api, data, security, deployment | 第二批整合 |
+| [ADR-122](ADR-122-時序評估協議與標籤完整性.md) | 時序評估協議與標籤完整性 | accepted | prediction, evaluation, data | 第三批A；supersedes ADR-106；逐fold擬合／依目標時間切分／補值與整段介入遮罩／輸出語意為淨變化非需求；不覆蓋現行上線模型 |
+| [ADR-123](ADR-123-路線載量守恆與逐站到達可行性.md) | 路線載量守恆與逐站到達可行性 | accepted | dispatch, database, prediction | 第三批B；車輛初始載量可追溯（未知擋確認）／逐站載量守恆／各站對應預測視野／班別工時與任務重疊；預覽與確認共用驗證 |
+| [ADR-304](ADR-304-派工可行性閘門與最適化套用一致性.md) | 派工可行性閘門與最適化套用一致性 | accepted | api, dispatch, optimization, database | 第三批B4+C；預覽回 blocking_reasons／optimizer 四種狀態語意／approve 綁 review_id 冪等且全成或全退／回滾驗證；係數仍不生效（ADR-120 做法Y） |
+| [ADR-124](ADR-124-最適化調整係數的生效接線.md) | 最適化調整係數的生效接線 | accepted | dispatch, optimization, prediction | 第四批；係數乘在 ADR-115 動態目標水位的預期流量項；off/shadow/on 三態預設 off；累積絕對護欄 0.8~1.25；建議帶生效版本與係數 |
+| [ADR-125](ADR-125-預測區間的conformal校準.md) | 預測區間的 conformal 校準 | superseded（由 ADR-127） | prediction, dispatch | 第四批；實測反證：偏移全為 0，原判斷「條件覆蓋率不足」係以標籤選子集造成；保留歷史，不得作為現行依據 |
+| [ADR-126](ADR-126-未受供給限制的需求估計.md) | 未受供給限制的需求估計 | accepted | prediction, data | 第四批；站內自比（不跨站外推）；獨立欄位輸出、不進觸發與派工量；凍結統計進模型包；預設關 |
+| [ADR-127](ADR-127-不採用conformal校準與覆蓋率判讀規則.md) | 不採用 conformal 校準，並訂定覆蓋率判讀規則 | accepted | prediction, evaluation | 第四批；supersedes ADR-125；430 萬列實測偏移全為 0、七種可觀測分組覆蓋率皆 79.5~83.0%；訂定「不得以標籤本身選出的子集判斷校準」；conformal.py 僅留為離線量測庫、無開關 |
 
 ## 新決策流程
 

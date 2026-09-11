@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     estimated_fuel_cost         REAL,
     route_map_url               TEXT,
     source_override_station_id  TEXT,                -- 由哪個③覆寫產生（覆寫到期連動取消依據）
+    onboard_start               INTEGER,             -- ADR-123 出車時車上台數（確認當下算定）
+    onboard_planned_end         INTEGER,             -- ADR-123 依載量計畫預估的收車載量
     district                    TEXT,                -- ADR-114 這趟任務的行政區（一趟不跨區的約束落地）
     assigned_vehicle            TEXT,                -- ADR-114 指派的調度車（vehicle_id）
     cancel_reason               TEXT,
@@ -122,6 +124,9 @@ CREATE TABLE IF NOT EXISTS vehicles (
     current_task_id   TEXT,                          -- 當前任務
     is_active         INTEGER DEFAULT 1,             -- 1=啟用 0=停用（停用取代刪除，保留稽核關聯）
     is_depot          INTEGER DEFAULT 0,             -- ADR-119 總站待命車（1=總站待命，可調派各區支援）
+    onboard_bikes       INTEGER,                   -- ADR-123 車上現有台數；NULL=未知（不得當成 0）
+    onboard_source      TEXT,                      -- ADR-123 載量來源：manual_report/task_completion/fleet_api
+    onboard_observed_at TEXT,                      -- ADR-123 載量觀測時間（過期即不可用）
     created_at        TEXT NOT NULL,
     updated_at        TEXT NOT NULL
 );
@@ -136,3 +141,13 @@ CREATE INDEX IF NOT EXISTS idx_params_active ON station_params(station_id, is_ac
 CREATE INDEX IF NOT EXISTS idx_alerts_ack ON alerts(acknowledged);
 CREATE INDEX IF NOT EXISTS idx_vehicles_status ON vehicles(status);
 CREATE INDEX IF NOT EXISTS idx_vehicles_district ON vehicles(current_district);
+
+-- ADR-302：只有確認後才保存收據，草稿本身仍在記憶體。
+CREATE TABLE IF NOT EXISTS dispatch_confirmations (
+    draft_id TEXT PRIMARY KEY,
+    version INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    task_id TEXT NOT NULL REFERENCES tasks(task_id),
+    confirmed_by TEXT NOT NULL,
+    confirmed_at TEXT NOT NULL
+);

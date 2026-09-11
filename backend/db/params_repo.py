@@ -13,7 +13,7 @@ import datetime as _dt
 import json
 from typing import Optional
 
-from db.connection import get_connection
+from db.connection import commit, get_connection
 
 
 def _now() -> str:
@@ -55,7 +55,7 @@ def save_version(
          json.dumps(conditions or [], ensure_ascii=False), reason, _now(),
          1 if make_active else 0),
     )
-    conn.commit()
+    commit(conn)
     return get_version(station_id, version)
 
 
@@ -66,6 +66,28 @@ def get_active(station_id: str) -> Optional[dict]:
         "SELECT * FROM station_params WHERE station_id = ? AND is_active = 1",
         (station_id,)).fetchone()
     return _from_row(row) if row else None
+
+
+def get_active_many(station_ids) -> dict:
+    """ADR-124：一次取回多站的生效版本，避免逐站查詢。
+
+    SQLite 的變數上限是 999，所以分批帶入；回傳 {station_id: 版本 dict}，查不到的站不會出現。
+    """
+    ids = [str(sid) for sid in dict.fromkeys(station_ids) if sid is not None and str(sid) != ""]
+    if not ids:
+        return {}
+    conn = get_connection()
+    out: dict = {}
+    for start in range(0, len(ids), 900):
+        batch = ids[start:start + 900]
+        placeholders = ",".join("?" for _ in batch)
+        rows = conn.execute(
+            f"SELECT * FROM station_params WHERE is_active = 1 AND station_id IN ({placeholders})",
+            batch).fetchall()
+        for row in rows:
+            record = _from_row(row)
+            out[str(record["station_id"])] = record
+    return out
 
 
 def get_version(station_id: str, version: str) -> Optional[dict]:
@@ -99,7 +121,7 @@ def activate_version(station_id: str, version: str) -> Optional[dict]:
     conn.execute(
         "UPDATE station_params SET is_active = 1 WHERE station_id = ? AND version = ?",
         (station_id, version))
-    conn.commit()
+    commit(conn)
     return get_active(station_id)
 
 
@@ -109,4 +131,4 @@ def set_override_active(station_id: str, active: bool) -> None:
     conn.execute(
         "UPDATE station_params SET override_active = ? WHERE station_id = ? AND is_active = 1",
         (1 if active else 0, station_id))
-    conn.commit()
+    commit(conn)

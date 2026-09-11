@@ -28,6 +28,8 @@
 from __future__ import annotations
 from typing import Optional
 
+from db.connection import atomic
+
 
 # 合法狀態轉換表：{現狀態: {可轉往的狀態}}
 # 注意：只有「未開始」的任務（pending/assigned）能被取消；in_progress 執行中不可取消
@@ -74,6 +76,8 @@ class TaskManager:
         task = tasks_repo.get(task_id)
         if task is None:
             raise KeyError(f"找不到任務 {task_id}")
+        if task.get("resources_released") and to_status in {"assigned", "in_progress"}:
+            raise IllegalTransition("任務資源已釋放，請重新預覽派工")
         cur = task.get("task_status", "pending")
         if to_status not in _TRANSITIONS.get(cur, set()):
             raise IllegalTransition(
@@ -81,10 +85,18 @@ class TaskManager:
                 f"（合法：{sorted(_TRANSITIONS.get(cur, set())) or '無（終態）'}）"
             )
         task["task_status"] = to_status
+        if to_status in {"completed", "cancelled"}:
+            from db.task_resources_repo import release
+            release(task)
+            task["resources_released"] = 1
+            for stop in task.get("route", []):
+                if isinstance(stop, dict):
+                    stop["claimed_by"] = None
         tasks_repo.update(task)
         return task
 
     # ── 生命週期操作 ──
+    @atomic
     def create(self, task: dict) -> dict:
         """建立任務（pending）。task 需含 task_id、task_type。"""
         from db import tasks_repo
@@ -95,14 +107,19 @@ class TaskManager:
         tasks_repo.insert(task)
         return tasks_repo.get(tid)
 
+    @atomic
     def assign(self, task_id: str, operator_id: str) -> dict:
         """指派給調度員（pending→assigned）。"""
         from db import tasks_repo
+        existing = tasks_repo.get(task_id)
+        if existing and existing.get("assigned_vehicle") and existing.get("task_status") != "pending":
+            raise IllegalTransition("已指派的人車任務請使用轉派或退回流程")
         task = self._transition(task_id, "assigned")
         task["assigned_operator"] = operator_id
         tasks_repo.update(task)
         return task
 
+    @atomic
     def reassign(self, task_id: str, new_operator_id: str) -> dict:
         """動態轉派（assigned→assigned，換人）。僅 emergency 型、未開始前可轉。"""
         from db import tasks_repo
@@ -119,26 +136,52 @@ class TaskManager:
                 f"任務 {task_id} 為 '{task.get('task_type')}' 型，"
                 f"只有 emergency 型可動態轉派（normal 綁定調度員）"
             )
+        if task.get("assigned_vehicle"):
+            from core.dispatch_guards import occupied_tasks
+            from core.dispatch_errors import DispatchConflict
+            from db import operators_repo
+            op = operators_repo.get_operator(new_operator_id)
+            if (not op or not op["is_active"] or op.get("status") != "on_duty"
+                    or op.get("role_type") not in {"driver", "depot_standby"}
+                    or op.get("current_task_id")
+                    or any(t.get("assigned_operator") == new_operator_id
+                           for t in occupied_tasks(task_id))):
+                raise DispatchConflict("新執行人員不可派遣")
+            from db.task_resources_repo import release
+            release({**task, "assigned_vehicle": None})
+            operators_repo.assign_district(new_operator_id, task.get("district"), task_id)
+            for stop in task.get("route", []):
+                if isinstance(stop, dict) and stop.get("station_status", "pending") == "pending":
+                    stop["claimed_by"] = new_operator_id
         task["assigned_operator"] = new_operator_id
         tasks_repo.update(task)   # assigned→assigned，狀態不變只換人
         return task
 
+    @atomic
     def start(self, task_id: str) -> dict:
         """開始執行（assigned→in_progress，鎖定不可轉派）。"""
         return self._transition(task_id, "in_progress")
 
+    @atomic
     def complete(self, task_id: str) -> dict:
         """完成（in_progress→completed）。"""
+        task = self.get(task_id)
+        if task and any(not isinstance(s, dict) or s.get("station_status", "pending") == "pending"
+                        for s in task.get("route", [])):
+            raise IllegalTransition("仍有未回報站點，不可結案")
         return self._transition(task_id, "completed")
 
+    @atomic
     def fail(self, task_id: str, retryable: bool = True) -> dict:
         """失敗：可重試→retryable，否則→manual_required。"""
         return self._transition(task_id, "retryable" if retryable else "manual_required")
 
+    @atomic
     def retry(self, task_id: str) -> dict:
         """重試（retryable→in_progress）。"""
         return self._transition(task_id, "in_progress")
 
+    @atomic
     def cancel(self, task_id: str, reason: str = "", operator: str = "system") -> dict:
         """取消任務（pending/assigned→cancelled）。in_progress 不可取消（會 raise）。
 
@@ -151,6 +194,7 @@ class TaskManager:
         tasks_repo.update(task)
         return task
 
+    @atomic
     def cancel_by_override_source(
         self, station_id: str, reason: str = "", operator: str = "system"
     ) -> list[dict]:
