@@ -294,9 +294,11 @@ def run_full_training(df, tuned=False):
 def run_train_save(df, out_dir: str = "_models_candidate"):
     """ADR-113/121：訓練上線模型並序列化存檔（4 視野 × P10/P50/P90 = 12 個 booster）。
 
-    ★上線模型用全部資料（1~6 月）訓練（不留驗證集；驗證已在 full 模式做過）。
     ★ADR-122 §6：預設寫入 _models_candidate/，**不覆蓋** 現行 serving 的 _models/。
       要換版須由 owner 決定並另行搬移，serving 仍依 ADR-121 成套載入既有版本。
+    ★ADR-125：訓練期尾端切出 config.prediction.校準窗口天數 當 conformal 校準集，
+      這段**不參與訓練**（用訓練過的資料算 conformity score 會低估偏移、把區間校得更窄）。
+      訓練完成後以校準集算出各視野各分組的偏移，成套存成 conformal.json。
     """
     import lightgbm as lgb
     import json
@@ -312,23 +314,47 @@ def run_train_save(df, out_dir: str = "_models_candidate"):
         with_profile=True, with_terrain=True)
     print(f"      特徵數={len(feat_cols)}｜列數={len(frame):,}", flush=True)
 
+    # ADR-125：切出校準窗口（訓練期尾端 N 天），這段不進訓練
+    from config_loader import get_config
+    pcfg = get_config().get("prediction", {})
+    calib_days = int(pcfg.get("校準窗口天數", 14))
+    calib_start = frame["dt"].max() - pd.Timedelta(days=calib_days)
+    print(f"      校準窗口：{calib_start} 之後（{calib_days} 天，不參與訓練）", flush=True)
+
     print("[2/2] 訓練 + 序列化 12 個 booster（4 視野 × 3 分位數）...", flush=True)
     saved = []
+    conformal_horizons = {}
     for h, mins in HORIZON_STEPS.items():
         tgt = f"target_delta_{mins}"
         sub = frame.dropna(subset=[tgt])
         clean = sub[(sub[f"is_censored_{mins}"] == 0)
                     & (sub[f"is_rebalancing_{mins}"] == 0)
                     & (sub.get(f"target_imputed_{mins}", 0) == 0)]
-        X = clean[feat_cols].astype(float)
-        y = clean[tgt].astype(float)
+        target_time = clean["dt"] + pd.Timedelta(minutes=mins)
+        train_part = clean[target_time < calib_start]
+        calib_part = clean[target_time >= calib_start]
+        X = train_part[feat_cols].astype(float)
+        y = train_part[tgt].astype(float)
+        preds = {}
         for q, alpha in [("p10", 0.10), ("p50", 0.50), ("p90", 0.90)]:
             m = lgb.LGBMRegressor(objective="quantile", alpha=alpha, verbose=-1, **TUNED_PARAMS)
             m.fit(X, y)
             fn = outdir / f"model_{mins}_{q}.txt"
             m.booster_.save_model(str(fn))
             saved.append(fn.name)
-        print(f"      視野 {mins} 分完成（p10/p50/p90）", flush=True)
+            if len(calib_part):
+                preds[q] = m.predict(calib_part[feat_cols].astype(float))
+        if len(calib_part) and len(preds) == 3:
+            from prediction.conformal import fit_horizon
+            available = calib_part["available_bikes"].astype(float).values
+            conformal_horizons[str(mins)] = fit_horizon(
+                calib_part[tgt].astype(float).values,
+                available + preds["p10"], available + preds["p90"],
+                available + preds["p50"], available,
+                alpha=0.2, buckets=int(pcfg.get("分組桶數", 4)),
+                min_samples=int(pcfg.get("分組最小樣本數", 500)))
+        print(f"      視野 {mins} 分完成（訓練 {len(train_part):,} / 校準 {len(calib_part):,} 列）",
+              flush=True)
 
     meta = {
         "feature_cols": feat_cols,          # ★特徵欄順序（即時預測組裝要對齊）
@@ -336,13 +362,29 @@ def run_train_save(df, out_dir: str = "_models_candidate"):
         "quantiles": {"p10": 0.10, "p50": 0.50, "p90": 0.90},
         "tuned_params": TUNED_PARAMS,
         "train_rows": int(len(frame)),
-        "note": "ADR-113 上線模型;全量1-6月訓練;quantile;截斷+調度異常排除",
+        "calibration_days": calib_days,
+        "note": ("ADR-122/125 上線模型;訓練期尾端切校準窗口不參與訓練;quantile;"
+                 "逐視野截斷+整段視野調度介入+補值標籤排除"),
     }
     (outdir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2),
                                       encoding="utf-8")
-    from prediction.serving_features import export_frame, save_bundle
+    from prediction.serving_features import export_frame, model_fingerprint, save_bundle
     save_bundle(outdir, feat_cols, export_frame(frame, feat_cols),
                 str(frame["dt"].min()), str(frame["dt"].max()), {"kind": "training_frame"})
+    # ADR-125：指紋要在 booster 與 meta.json 都落地之後才算，才能成套比對
+    if conformal_horizons:
+        from prediction.conformal import SCHEMA_VERSION, save as save_conformal
+        save_conformal(outdir, {
+            "schema_version": SCHEMA_VERSION,
+            "model_fingerprint": model_fingerprint(outdir),
+            "alpha": 0.2,
+            "calibration": {"start": str(calib_start), "end": str(frame["dt"].max()),
+                            "days": calib_days},
+            "horizons": conformal_horizons,
+        })
+        print(f"      conformal.json 已產出（{len(conformal_horizons)} 個視野）", flush=True)
+    else:
+        print("      校準集為空，未產出 conformal.json（serving 會視為未校準）", flush=True)
     print(f"完成：{len(saved)} 個 booster + meta.json + serving_features.json 存於 {outdir}", flush=True)
 
 
