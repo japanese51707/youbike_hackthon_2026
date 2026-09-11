@@ -12,7 +12,7 @@
 
 出向資安（steering §11）：CWA 是第三方——
   - API key 從環境變數 CWA_WEATHER_API_KEY 讀（放 .env，不進版控、不寫 log）
-  - 設超時 + 重試上限；政府平台憑證鏈問題用 verify=False（比照 youbike_official）
+  - 設超時 + 重試上限；HTTPS 驗證失敗明確降級（ADR-303）
   - 第三方回應當「不可信輸入」：欄位缺失/型別容錯，不直接信任
 
 對外暴露：
@@ -27,6 +27,7 @@
 from __future__ import annotations
 import math
 import os
+from time import monotonic
 from abc import ABC, abstractmethod
 from typing import Optional
 
@@ -54,7 +55,8 @@ def _haversine_km(lat1, lng1, lat2, lng2) -> float:
 
 def _f(v, d=None):
     try:
-        return float(v)
+        value = float(v)
+        return value if math.isfinite(value) and value > -90 else d
     except (TypeError, ValueError):
         return d
 
@@ -130,25 +132,32 @@ class CWAWeatherSource(WeatherSource):
         self._key = os.environ.get("CWA_WEATHER_API_KEY", "")
         self._rain_cache: Optional[list] = None
         self._wx_cache: Optional[list] = None
+        self._rain_at = self._wx_at = 0
+        self._retry_at = 0
+        self._refresh_sec = w.get("refresh_interval_sec", 300)
+        self._retry_sec = w.get("retry_backoff_sec", 30)
 
     def _fetch(self, code: str) -> list[dict]:
-        """打 CWA API，回該縣市測站原始列（出向資安：超時/重試/verify=False/回應容錯）。"""
+        """打 CWA API，回該縣市測站原始列（出向資安：超時/重試/TLS/回應容錯）。"""
         import httpx
         if not self._key:
             raise RuntimeError("缺 CWA_WEATHER_API_KEY 環境變數（放 .env，勿進版控）")
+        if monotonic() < self._retry_at:
+            raise RuntimeError("CWA 暫時無法連線")
         url = f"{_CWA_BASE}/{code}"
         last_err = None
         for _ in range(self._retries + 1):
             try:
-                # 政府平台憑證鏈問題 → verify=False（比照 youbike_official；key 在參數非靠 SSL 保護）
+                # API key 必須由驗證過的 HTTPS 保護；驗證失敗即降級。
                 r = httpx.get(url, params={"Authorization": self._key, "format": "JSON"},
-                              timeout=self._timeout, verify=False)
+                              timeout=self._timeout, follow_redirects=False)
                 r.raise_for_status()
                 stations = r.json().get("records", {}).get("Station", [])
                 return [s for s in stations
                         if self._county in s.get("GeoInfo", {}).get("CountyName", "")]
             except Exception as e:   # noqa: BLE001 - 第三方不可信，容錯後重試
                 last_err = e
+        self._retry_at = monotonic() + self._retry_sec
         raise RuntimeError(f"CWA {code} 取用失敗：{type(last_err).__name__}")
 
     @staticmethod
@@ -160,7 +169,7 @@ class CWAWeatherSource(WeatherSource):
         return (_f(cs[0].get("StationLatitude")), _f(cs[0].get("StationLongitude"))) if cs else (None, None)
 
     def rain_stations(self) -> list[dict]:
-        if self._rain_cache is not None:
+        if self._rain_cache is not None and monotonic() - self._rain_at < self._refresh_sec:
             return self._rain_cache
         out = []
         for s in self._fetch(_CWA_RAIN):
@@ -171,16 +180,19 @@ class CWAWeatherSource(WeatherSource):
             re = s.get("RainfallElement", {})
             out.append({
                 "name": s.get("StationName", "?"), "town": geo.get("TownName", ""),
+                "observed_at": s.get("ObsTime", {}).get("DateTime"),
+                "source": "cwa",
                 "lat": lat, "lng": lng,
-                "now": _f(re.get("Now", {}).get("Precipitation"), 0.0),
-                "past10": _f(re.get("Past10Min", {}).get("Precipitation"), 0.0),
-                "past1hr": _f(re.get("Past1hr", {}).get("Precipitation"), 0.0),
+                "now": _f(re.get("Now", {}).get("Precipitation")),
+                "past10": _f(re.get("Past10Min", {}).get("Precipitation")),
+                "past1hr": _f(re.get("Past1hr", {}).get("Precipitation")),
             })
+        self._rain_at = monotonic()
         self._rain_cache = out
         return out
 
     def weather_stations(self) -> list[dict]:
-        if self._wx_cache is not None:
+        if self._wx_cache is not None and monotonic() - self._wx_at < self._refresh_sec:
             return self._wx_cache
         out = []
         for s in self._fetch(_CWA_WEATHER):
@@ -191,13 +203,17 @@ class CWAWeatherSource(WeatherSource):
             we = s.get("WeatherElement", {})
             out.append({
                 "name": s.get("StationName", "?"), "town": geo.get("TownName", ""),
+                "observed_at": s.get("ObsTime", {}).get("DateTime"),
+                "source": "cwa",
                 "lat": lat, "lng": lng,
                 "condition": _map_condition(we.get("Weather", "")),
                 "raw_weather": we.get("Weather", ""),
                 "temperature_c": _f(we.get("AirTemperature")),
                 "humidity": _f(we.get("RelativeHumidity")),
-                "rainfall_mm": _f(we.get("Now", {}).get("Precipitation"), 0.0),
+                "wind_speed": _f(we.get("WindSpeed")),
+                "rainfall_mm": _f(we.get("Now", {}).get("Precipitation")),
             })
+        self._wx_at = monotonic()
         self._wx_cache = out
         return out
 

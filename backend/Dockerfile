@@ -3,6 +3,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# LightGBM Linux wheels require the OpenMP runtime.
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # 先裝依賴（利用 layer 快取）
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

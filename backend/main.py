@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from core.data.observations import DataUnavailable
 from config_loader import get_config
 from middleware import RateLimitMiddleware
 from api import (
@@ -82,6 +83,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=422,
         content={"error": "validation_error", "message": "輸入資料驗證失敗", "details": errors},
     )
+
+
+@app.exception_handler(DataUnavailable)
+async def data_unavailable_handler(request: Request, exc: DataUnavailable):
+    return JSONResponse(status_code=503, content={"error": "data_unavailable", "message": str(exc)})
 
 
 @app.exception_handler(Exception)

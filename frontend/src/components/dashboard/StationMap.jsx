@@ -5,7 +5,8 @@ import { createStationGaugeLayer } from "../map/layers/stationGaugeLayer.js";
 import { createVoronoiLayer } from "../map/layers/voronoiLayer.js";
 import { createDensityLayer } from "../map/layers/densityLayer.js";
 import presentationConfig from "../../config/presentation.json";
-import { areaTypeLabels, stationStatusLabels } from "../../utils/formatters.js";
+import { escapeHtml } from "../../utils/escapeHtml.js";
+import { areaTypeLabels, stationStatusLabels, freshnessLabels } from "../../utils/formatters.js";
 import {
   deriveStationTags,
   getStationElevation,
@@ -19,6 +20,7 @@ const layerOptions = [
 ];
 
 const statusToneColor = {
+  offline: "#64748b",
   empty: "#ff6b6b",
   low: "#ffa94d",
   normal: "#38d9a9",
@@ -38,14 +40,14 @@ function buildTooltipHtml(station) {
 
   return `
     <div style="font-family:'Noto Sans TC',sans-serif;min-width:210px">
-      <div style="font-weight:700;font-size:13px;color:#f1f5f9">${station.station_name}</div>
-      <div style="font-size:11px;color:#8ea0b5;margin-bottom:8px">${station.district}｜${areaTypeLabels[station.area_type] ?? station.area_type ?? ""}${elevation != null ? `｜海拔 ${elevation}m（範例）` : ""}</div>
-      ${tags.length ? `<div style="margin-bottom:6px">${tags.map((t) => `<span style="display:inline-block;font-size:10px;color:#66d9e8;border:1px solid #1c4a52;border-radius:4px;padding:1px 5px;margin-right:4px">${t}</span>`).join("")}</div><div style="font-size:10px;color:#6b7a8d;margin-bottom:8px">特徵依站名自動標註</div>` : ""}
+      <div style="font-weight:700;font-size:13px;color:#f1f5f9">${escapeHtml(station.station_name)}</div>
+      <div style="font-size:11px;color:#8ea0b5;margin-bottom:8px">${escapeHtml(station.district)}｜${escapeHtml(areaTypeLabels[station.area_type] ?? station.area_type ?? "")}${elevation != null ? `｜海拔 ${elevation}m（範例）` : ""}</div>
+      ${tags.length ? `<div style="margin-bottom:6px">${tags.map((t) => `<span style="display:inline-block;font-size:10px;color:#66d9e8;border:1px solid #1c4a52;border-radius:4px;padding:1px 5px;margin-right:4px">${escapeHtml(t)}</span>`).join("")}</div><div style="font-size:10px;color:#6b7a8d;margin-bottom:8px">特徵依站名自動標註</div>` : ""}
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
         <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${tone}"></span>
-        <span style="font-size:12px;color:#e5ecf5">${statusLabel}</span>
+        <span style="font-size:12px;color:#e5ecf5">${escapeHtml(statusLabel)}</span>
         ${station.service_available === false ? '<span style="font-size:10px;color:#ff6b6b">暫停服務</span>' : ""}
-        ${stale ? '<span style="font-size:10px;color:#ffa94d">資料延遲</span>' : ""}
+        ${stale ? `<span style="font-size:10px;color:#ffa94d">${escapeHtml(freshnessLabels[station.data_freshness] || "資料狀態未知")}</span>` : ""}
       </div>
       <div style="height:6px;border-radius:3px;background:rgba(148,163,184,0.25);overflow:hidden">
         <div style="height:100%;width:${ratio}%;background:${tone}"></div>

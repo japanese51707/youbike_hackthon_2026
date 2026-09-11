@@ -1,0 +1,272 @@
+<mxfile host="app.diagrams.net" agent="claude" version="24.0.0">
+  <diagram id="flow-main" name="1. 調度主流程（後端假設的前端步驟）">
+    <mxGraphModel dx="1200" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="1654" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="lg" value="圖例：藍=前端動作／綠=API 端點／橘=後端核心運算／紅=權限與閘門／紫=落地寫入／黃=契約註記" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=2;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="900" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n1" value="&lt;b&gt;① 登入／選身分&lt;/b&gt;&lt;br&gt;POST /auth/login&lt;br&gt;之後所有寫入帶 X-Operator-Id&lt;br&gt;角色決定能做什麼" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="360" y="50" width="260" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n2" value="&lt;b&gt;② 戰情看板（唯讀）&lt;/b&gt;&lt;br&gt;GET /dispatch/recommendations&lt;br&gt;GET /alerts ｜ /emergency/deadlocks&lt;br&gt;GET /dispatch/claim-map ｜ /kpi ｜ /stations" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="360" y="170" width="260" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note2" value="&lt;b&gt;後端已經算完，前端只顯示&lt;/b&gt;&lt;br&gt;• 排序＝③覆寫站置頂 → priority_score 由高到低&lt;br&gt;• 主指令是 target_available（補／抽到幾台），quantity 只是輔助&lt;br&gt;• 附 urgency_tier／breach_horizon_min／arrival_by_horizon／reason／basis&lt;br&gt;• claim-map 標出已被別的任務認領的站 → 避免重複組單&lt;br&gt;★ 前端不得自行計算數量或目標水位" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;spacingLeft=6;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="680" y="160" width="380" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d1" value="&lt;b&gt;③ 從哪個起點組單？&lt;/b&gt;&lt;br&gt;（後台主動觸發，非系統自動派）" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="370" y="300" width="240" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b1" value="&lt;b&gt;(a) 以車為起點&lt;/b&gt;&lt;br&gt;POST /dispatch/build/from-vehicle&lt;br&gt;{vehicle_id, operator_id, district?}&lt;br&gt;車閒著 → 找活" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="40" y="440" width="260" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="b2" value="&lt;b&gt;(b) 以站為起點&lt;/b&gt;&lt;br&gt;POST /dispatch/build/from-station&lt;br&gt;{station_id, vehicle_id?, operator_id?}&lt;br&gt;站危急 → 找車找人" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="360" y="440" width="260" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="b3" value="&lt;b&gt;(c) 緊急出車&lt;/b&gt;&lt;br&gt;POST /dispatch/build/emergency&lt;br&gt;{station_ids[], vehicle_id?, operator_id?}&lt;br&gt;死結／突發 → 可跨區" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="680" y="440" width="260" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="gate1" value="需 dispatcher / maintainer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="960" y="465" width="140" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n5" value="&lt;b&gt;④ 回傳草稿 draft（不落地 DB、不佔人車、不進認領地圖）&lt;/b&gt;&lt;br&gt;draft_id ｜ version ｜ expires_at（記憶體 TTL）&lt;br&gt;stations[]：已排好「先取後放」順序，每站帶 target_available&lt;br&gt;assigned_vehicle／assigned_operator／vehicle_capacity&lt;br&gt;estimate{總距離, 交通時間, 作業時間, 總載運量, 站數, 緊急度加總}&lt;br&gt;(b) 另附 vehicle_candidates　(c) 另附 resource_suggestion" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#ffe6cc;strokeColor=#d79b00;spacingLeft=8;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="280" y="590" width="420" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d2" value="&lt;b&gt;⑤ 預覽：要改車／人／行政區／站嗎？&lt;/b&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="340" y="770" width="300" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note5" value="&lt;b&gt;草稿不可就地編輯&lt;/b&gt;&lt;br&gt;改任何一項＝重新呼叫 build 端點，&lt;br&gt;拿到新的 draft_id / version。&lt;br&gt;前端改了 draft 內容再送 → 409&lt;br&gt;（後端以 fingerprint 比對）" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;spacingLeft=6;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="40" y="600" width="220" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n6" value="&lt;b&gt;⑥ 確認派發（人在迴圈閘門）&lt;/b&gt;&lt;br&gt;POST /dispatch/confirm-trip&lt;br&gt;body = {draft_id, version}&lt;br&gt;需 dispatcher / maintainer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="360" y="920" width="260" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="err" value="&lt;b&gt;錯誤語意（前端必須有對應 UI）&lt;/b&gt;&lt;br&gt;401 未帶身分　403 無權限／非草稿建立者&lt;br&gt;409 草稿過期・被竄改・人車或站已被占用・超車容量&lt;br&gt;422 欄位不合法&lt;br&gt;★ 同 draft_id+version 重送 → 回傳原任務（冪等，不會重複派工）" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#f8cecc;strokeColor=#b85450;spacingLeft=6;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="680" y="910" width="400" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n7" value="&lt;b&gt;⑦ 落地（單一 SQLite 交易，全成或全退）&lt;/b&gt;&lt;br&gt;建立 task：task_status = assigned、route[] 逐站物件&lt;br&gt;佔用車與人（current_task_id、回寫 current_district）&lt;br&gt;站點認領 claimed_by&lt;br&gt;寫 audit_logs + 確認收據&lt;br&gt;回傳 {trip_id, confirmed:true, status:'assigned'}" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#e1d5e7;strokeColor=#9673a6;spacingLeft=8;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="320" y="1070" width="340" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n8" value="&lt;b&gt;⑧ 司機端接單&lt;/b&gt;&lt;br&gt;GET /dispatch/tasks?operator=…&amp;amp;status=…&lt;br&gt;GET /dispatch/tasks/{id}（含站級 route）&lt;br&gt;POST /dispatch/tasks/{id}/start" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="360" y="1240" width="260" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n9" value="&lt;b&gt;⑨ 逐站回報&lt;/b&gt;&lt;br&gt;POST /dispatch/tasks/{id}/report&lt;br&gt;{station_id, actual_available}&lt;br&gt;回 {gap（與目標差）, remaining, all_done}" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="360" y="1380" width="260" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note9" value="&lt;b&gt;回報約束&lt;/b&gt;&lt;br&gt;• 只有 assigned_operator 本人可 start／report／return&lt;br&gt;• actual_available 必須非負整數，且不可超過站點柱數&lt;br&gt;• 已完成或已移除的站不可再操作（409）&lt;br&gt;• 首次合法回報會自動把 assigned → in_progress" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;spacingLeft=6;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="680" y="1370" width="400" height="110" as="geometry" />
+        </mxCell>
+
+        <mxCell id="side" value="&lt;b&gt;後台中途介入（需 dispatcher）&lt;/b&gt;&lt;br&gt;• DELETE /tasks/{id}/stations/{sid}?reason=&lt;br&gt;　抽離站 → 回 resolved／back_to_pool／needs_notify&lt;br&gt;• POST /tasks/{id}/stations {station_id, reason}&lt;br&gt;　加站：該站必須仍在當前 recommendations，&lt;br&gt;　否則 409「請重新預覽」&lt;br&gt;• POST /tasks/{id}/return {reason}（執行者退回）&lt;br&gt;　in_progress → manual_required&lt;br&gt;　assigned → cancelled，並釋放人車與認領" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#f8cecc;strokeColor=#b85450;spacingLeft=6;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="30" y="1330" width="290" height="170" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d3" value="&lt;b&gt;⑩ 還有 pending 的站嗎？&lt;/b&gt;" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="370" y="1520" width="240" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n10" value="&lt;b&gt;⑪ 自動結案&lt;/b&gt;&lt;br&gt;所有站 completed／removed → task = completed&lt;br&gt;釋放車與人、清除站點認領&lt;br&gt;預備車回復派出前 standby" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="340" y="1660" width="300" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="n11" value="&lt;b&gt;⑫ 滾動下一趟&lt;/b&gt;&lt;br&gt;GET /dispatch/next-trip?vehicle_id=&lt;br&gt;（緊急度 − 距離懲罰的候選清單，仍由後台拍板）&lt;br&gt;→ 回到入口 (a)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="340" y="1800" width="300" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n1" target="n2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n2" target="d1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="車閒置" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d1" target="b1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="站危急" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d1" target="b2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="緊急" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d1" target="b3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="b1" target="n5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="b2" target="n5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="b3" target="n5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n5" target="d2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" value="要改 → 重新 build" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#b85450;" edge="1" parent="1" source="d2" target="d1"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="200" y="820" /><mxPoint x="200" y="345" /></Array></mxGeometry></mxCell>
+        <mxCell id="e11" value="確認" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d2" target="n6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" value="失敗" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#b85450;" edge="1" parent="1" source="n6" target="err"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" value="成功" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n6" target="n7"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n7" target="n8"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n8" target="n9"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n9" target="d3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e17" value="有 → 下一站" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;" edge="1" parent="1" source="d3" target="n9"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="680" y="1565" /><mxPoint x="680" y="1425" /></Array></mxGeometry></mxCell>
+        <mxCell id="e18" value="全部完成" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="d3" target="n10"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e19" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="n10" target="n11"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;" edge="1" parent="1" source="side" target="n9"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e21" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;strokeColor=#b85450;" edge="1" parent="1" source="gate1" target="b3"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="flow-entries" name="2. 三入口組單內部邏輯">
+    <mxGraphModel dx="1200" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="common" value="&lt;b&gt;三入口共同底層（都吃同一份「當前需調度清單」）&lt;/b&gt;&lt;br&gt;站點現況（可降級標記）→ rule_engine 觸發判斷 → dispatcher 排序（覆寫置頂＋緊急度）＋資源上限&lt;br&gt;→ _pack_trips 依車載運上限與每趟最大站數切一趟 → _order_route 先取後放最近鄰排序 → _estimate_trip_kpi 預估" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;spacingLeft=8;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="1560" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a0" value="&lt;b&gt;(a) 以車為起點　build_from_vehicle&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="40" y="180" width="480" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" value="1. 後台選一台閒置車 + 人員" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="250" width="480" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" value="2. 目標區 = district 參數，未指定則用「車當前所在行政區」" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="40" y="315" width="480" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" value="3. 取該區需調度站 → 依緊急度排序 → 依該車 max_capacity 切第一趟" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="40" y="380" width="480" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" value="4. 以「車的座標」為起點算路線順序" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="40" y="445" width="480" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="a5" value="&lt;b&gt;前端要提供的互動&lt;/b&gt;：切換目標行政區 → 重新呼叫此端點（換區＝整張重算，不是局部改）" style="rounded=0;whiteSpace=wrap;html=1;align=left;fillColor=#fff2cc;strokeColor=#d6b656;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="510" width="480" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b0" value="&lt;b&gt;(b) 以站為起點　build_from_station&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="580" y="180" width="480" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="b1b" value="1. 後台從緊急度清單點一站（不必從最急的開始）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="580" y="250" width="480" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="b2b" value="2. 取該站所屬行政區的需調度站，該站強制排第一" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="580" y="315" width="480" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="b3b" value="&lt;b&gt;3. 找車候選（回 vehicle_candidates 三類供後台選）&lt;/b&gt;&lt;br&gt;該區閒置車 → 鄰近區閒置車 → 總站待命車" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="580" y="380" width="480" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="b4b" value="4. 人員池 = 該區閒置 + 總站待命人力（depot_standby）" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="580" y="450" width="480" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="b5b" value="&lt;b&gt;前端要提供的互動&lt;/b&gt;：顯示三類候選車讓後台挑 → 帶 vehicle_id 重新呼叫；&lt;br&gt;該區與鄰近皆無車時，note 會提示改用總站待命車" style="rounded=0;whiteSpace=wrap;html=1;align=left;fillColor=#fff2cc;strokeColor=#d6b656;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="580" y="510" width="480" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c0" value="&lt;b&gt;(c) 緊急出車　build_emergency&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="180" width="480" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="c1" value="1. 後台自選要跑的站（可跨行政區）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="250" width="480" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="c2" value="2. 以第一站座標為參考點找車" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="315" width="480" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" value="&lt;b&gt;3. 資源優先序（回 resource_suggestion，後台可覆寫）&lt;/b&gt;&lt;br&gt;就近閒置的一般調度車 → 才動用預備車 standby" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="380" width="480" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="c4" value="4. mode = emergency；跨多區時 district 標「緊急跨區」" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="450" width="480" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="c5" value="&lt;b&gt;注意&lt;/b&gt;：/emergency/check 只回建議、不派車（persist=true 會被拒）。&lt;br&gt;真正緊急派遣一律走這個入口 + 共同的確認閘門" style="rounded=0;whiteSpace=wrap;html=1;align=left;fillColor=#f8cecc;strokeColor=#b85450;spacingLeft=6;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="510" width="480" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="conv" value="&lt;b&gt;三入口輸出同一種 draft，之後走同一條路：預覽 → confirm-trip → task_execution 執行閉環&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="440" y="640" width="760" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="ec1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="a5" target="conv"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ec2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="b5b" target="conv"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ec3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="c5" target="conv"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ea1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="a1" target="a2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ea2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="a2" target="a3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ea3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="a3" target="a4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="eb1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="b1b" target="b2b"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="eb2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="b2b" target="b3b"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="eb3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="b3b" target="b4b"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ecc1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="c1" target="c2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ecc2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="c2" target="c3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ecc3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="c3" target="c4"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="flow-state" name="3. 狀態機與契約紅線">
+    <mxGraphModel dx="1200" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="t0" value="任務狀態機（task_status）" style="text;html=1;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="400" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s1" value="pending" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="120" width="120" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="assigned&lt;br&gt;（已確認未開始）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="240" y="115" width="150" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="in_progress&lt;br&gt;（鎖定，不可轉派）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="470" y="115" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" value="completed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="720" y="120" width="130" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="s5" value="retryable" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="470" y="250" width="160" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="s6" value="manual_required&lt;br&gt;（執行中退回落到這）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="470" y="340" width="160" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="s7" value="cancelled&lt;br&gt;（未開始才可取消）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="240" y="250" width="150" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="se1" value="confirm-trip" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s1" target="s2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se2" value="start / 首次回報" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s2" target="s3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se3" value="全站回報完畢（自動）" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s3" target="s4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se4" value="fail" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s3" target="s5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se5" value="retry" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;" edge="1" parent="1" source="s5" target="s3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se6" value="return（執行中退回）" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s3" target="s6"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se7" value="return / 覆寫到期連動取消" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="s2" target="s7"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="se8" value="reassign 轉派（僅 emergency 型、僅 assigned 狀態）" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;" edge="1" parent="1" source="s2" target="s2"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="315" y="70" /></Array></mxGeometry></mxCell>
+
+        <mxCell id="t1" value="站點狀態（route[].station_status）" style="text;html=1;fontSize=15;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="900" y="30" width="400" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="p1s" value="pending&lt;br&gt;（已認領 claimed_by）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="900" y="115" width="170" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="p2s" value="completed&lt;br&gt;（帶 actual_available / target_gap）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="110" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="p3s" value="removed&lt;br&gt;（後台抽離，帶 removed_resolved）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="240" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="pe1" value="report" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="p1s" target="p2s"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="pe2" value="DELETE stations/{sid}" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="p1s" target="p3s"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="pnote" value="所有站都離開 pending → 任務自動結案並釋放資源&lt;br&gt;抽離時後端會重跑規則引擎判斷該站需求是否已消化：&lt;br&gt;resolved=true 視為已完成；false 則退回需調度池" style="rounded=0;whiteSpace=wrap;html=1;align=left;fillColor=#fff2cc;strokeColor=#d6b656;spacingLeft=6;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="900" y="350" width="480" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="red" value="&lt;b&gt;後端對前端的六條紅線（違反就是 4xx，不是 UI 問題）&lt;/b&gt;&lt;br&gt;&lt;br&gt;1. 調度指令只能來自後端預覽：target_available、quantity、路線順序前端一律不自算，加站也只能送 station_id，且該站必須仍在當前 recommendations。&lt;br&gt;2. 草稿不可就地編輯：改車／人／區／站＝重新呼叫 build，拿新的 draft_id + version；改了 draft 再送會被 fingerprint 擋下（409）。&lt;br&gt;3. 確認只送 {draft_id, version}：同一組重送回傳原任務（冪等），別人建立的草稿不能確認（403），過期要重新預覽（409）。&lt;br&gt;4. 身分決定動作：組單／確認／加減站需 dispatcher 或 maintainer；start／report／return 只有該任務的 assigned_operator 本人可做。&lt;br&gt;5. 回報值嚴格：actual_available 必須是非負整數且不超過站點柱數；已完成或已移除的站不可重報。&lt;br&gt;6. 結案由後端判定：前端不呼叫「完成任務」，站點回報完後端自動結案並釋放人車與認領。" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#f8cecc;strokeColor=#b85450;spacingLeft=10;spacingTop=8;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="480" width="1340" height="230" as="geometry" />
+        </mxCell>
+
+        <mxCell id="gap" value="&lt;b&gt;實作狀態（2026-09-11 更新）&lt;/b&gt;&lt;br&gt;• 後端：三入口、草稿、confirm-trip、逐站回報、介入、結案、認領地圖、next-trip 皆已實作並有測試；第三批再加可行性閘門（ADR-123/304）。&lt;br&gt;• 前端：已接 httpClient（明確 api/mock 模式、帶 X-Operator-Id、失敗不自動退回 mock）、組單預覽、confirm-trip、司機逐站回報；第三批補上 blocking_reasons 閘門、車上台數回報、逐站視野與載量顯示。&lt;br&gt;• 仍為 Mock：孿生頁、舊司機頁、部分總覽資料；最適化 daily-review 沒有前端 UI（係數尚未生效，刻意不做）。" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#fff2cc;strokeColor=#d6b656;spacingLeft=10;spacingTop=8;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="740" width="1340" height="130" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

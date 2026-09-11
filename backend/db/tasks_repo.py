@@ -10,7 +10,7 @@ import datetime as _dt
 import json
 from typing import Optional
 
-from db.connection import get_connection
+from db.connection import get_connection, commit
 
 # 存進 DB 的欄位（其餘非欄位的鍵會塞進 route_json 之外忽略）
 _COLUMNS = [
@@ -18,7 +18,8 @@ _COLUMNS = [
     "estimated_travel_minutes", "estimated_work_minutes", "estimated_total_minutes",
     "estimated_distance_km", "estimated_fuel_cost", "route_map_url",
     "source_override_station_id", "cancel_reason", "cancelled_by", "assigned_at",
-    "district", "assigned_vehicle",   # ADR-114：這趟任務的行政區 + 指派的調度車
+    "district", "assigned_vehicle", "vehicle_return_status", "resources_released",   # ADR-114：這趟任務的行政區 + 指派的調度車
+    "onboard_start", "onboard_planned_end",   # ADR-123 車上載量（出車／計畫收車）
 ]
 
 
@@ -51,7 +52,7 @@ def insert(task: dict) -> None:
     placeholders = ", ".join(f":{c}" for c in cols)
     conn.execute(
         f"INSERT INTO tasks ({', '.join(cols)}) VALUES ({placeholders})", row)
-    conn.commit()
+    commit(conn)
 
 
 def update(task: dict) -> None:
@@ -61,7 +62,7 @@ def update(task: dict) -> None:
     row["updated_at"] = _now()
     sets = ", ".join(f"{c} = :{c}" for c in row if c != "task_id")
     conn.execute(f"UPDATE tasks SET {sets} WHERE task_id = :task_id", row)
-    conn.commit()
+    commit(conn)
 
 
 def get(task_id: str) -> Optional[dict]:
@@ -98,5 +99,5 @@ def find_by_override_source(station_id: str, statuses: list[str]) -> list[dict]:
 def not_completed() -> list[dict]:
     conn = get_connection()
     rows = conn.execute(
-        "SELECT * FROM tasks WHERE task_status != 'completed'").fetchall()
+        "SELECT * FROM tasks WHERE task_status NOT IN ('completed', 'cancelled')").fetchall()
     return [_from_row(r) for r in rows]

@@ -5,6 +5,7 @@ ADR-117 任務執行閉環測試
 執行者取消/退回（附原因）、稽核留痕。
 """
 from __future__ import annotations
+from tests.conftest import put_drivers_on_duty
 import datetime as dt
 
 import pytest
@@ -27,6 +28,7 @@ def _rec(sid, dist, act, qty, score, avail, lat, lng):
 def _make_trip():
     vr.seed_default_vehicles(3, 15)
     orp.seed_dispatch_operators(5)
+    put_drivers_on_duty()
     reset_providers()
     dl = [
         _rec("滿A", "板橋區", "取車", 6, 80, 18, 25.010, 121.460),
@@ -59,13 +61,13 @@ def test_report_station_records_gap_and_completion():
 def test_report_unknown_station_raises():
     tid, _ = _make_trip()
     with pytest.raises(KeyError):
-        tx.report_station(tid, "不存在", actual_available=5)
+        tx.report_station(tid, "不存在", actual_available=5, operator="OP-004")
 
 
 def test_remove_station_back_to_pool_when_demand_remains():
     tid, _ = _make_trip()
     # mock 源沒有「滿A」→ _demand_resolved 保守回 False → 回池
-    rem = tx.remove_station(tid, "滿A", operator="controller", reason="改派")
+    rem = tx.remove_station(tid, "滿A", operator="OP-002", reason="改派")
     assert rem["back_to_pool"] is True
     assert rem["needs_notify"] is True
     # 抽離後該站清除認領
@@ -75,13 +77,13 @@ def test_remove_station_back_to_pool_when_demand_remains():
 def test_add_station_marks_claim():
     tid, _ = _make_trip()
     add = tx.add_station(tid, {"station_id": "新E", "station_name": "新E", "district": "板橋區",
-                               "action": "補車", "target_available": 10, "quantity": 5},
-                         operator="controller", reason="緊急增站")
+                               "action": "補車", "target_available": 10, "quantity": 3},
+                         operator="OP-002", reason="緊急增站")
     assert add["needs_notify"] is True
     assert "新E" in tx.station_claim_map()
     # 重複增加同站報錯
     with pytest.raises(ValueError):
-        tx.add_station(tid, {"station_id": "新E"}, operator="controller")
+        tx.add_station(tid, {"station_id": "新E"}, operator="OP-002")
 
 
 def test_cancel_by_executor_requires_reason():
@@ -93,9 +95,8 @@ def test_cancel_by_executor_requires_reason():
 def test_cancel_by_executor_in_progress_goes_manual():
     tid, _ = _make_trip()
     tm = get_task_manager()
-    tm.assign(tid, "OP-005")
     tm.start(tid)   # in_progress
-    tx.cancel_by_executor(tid, operator="OP-005", reason="車輛故障")
+    tx.cancel_by_executor(tid, operator="OP-004", reason="車輛故障")
     # in_progress 退回 → manual_required（脫離執行中，後台可重排）
     assert tasks_repo.get(tid)["task_status"] == "manual_required"
 
@@ -103,7 +104,7 @@ def test_cancel_by_executor_in_progress_goes_manual():
 def test_execution_writes_audit_trail():
     tid, _ = _make_trip()
     tx.report_station(tid, "滿A", actual_available=12, operator="OP-004")
-    tx.remove_station(tid, "空B", operator="controller", reason="改派")
+    tx.remove_station(tid, "空B", operator="OP-002", reason="改派")
     from core.audit import get_audit_service
     logs = get_audit_service().query(type="task_report")
     assert len(logs) >= 2

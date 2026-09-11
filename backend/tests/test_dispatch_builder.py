@@ -4,6 +4,7 @@ ADR-119 互動式派工單組建測試
 三入口(以車/以站/緊急)+草稿預覽(estimate)+確認落地+總站待命資源。
 """
 from __future__ import annotations
+from tests.conftest import put_drivers_on_duty
 import datetime as dt
 
 import pytest
@@ -26,7 +27,9 @@ def _setup():
     vr.seed_default_vehicles(10, 15)
     vr.seed_depot_vehicles(3, 15)
     orp.seed_dispatch_operators(20)
+    put_drivers_on_duty()
     orp.seed_depot_standby_operators(5)
+    put_drivers_on_duty()
     reset_providers()
 
 
@@ -105,7 +108,7 @@ def test_confirm_trip_persists():
     vr.update_vehicle("CAR-003", current_district="板橋區")
     reset_providers()
     draft = db.build_from_vehicle("CAR-003", "OP-004", DL, now=NOW)
-    res = db.confirm_trip(draft, operator="controller")
+    res = db.confirm_trip(draft, operator="OP-002")
     assert res["confirmed"] is True
     assert res["status"] == "assigned"
     # 真正落地成 task
@@ -119,11 +122,11 @@ def test_confirm_trip_persists():
 def test_confirm_empty_draft_raises():
     _setup()
     with pytest.raises(ValueError):
-        db.confirm_trip({"draft_id": "DRAFT-x", "stations": []})
+        db.confirm_trip({"draft_id": "DRAFT-x", "stations": []}, operator="OP-002")
 
 
 def test_confirm_without_vehicle_or_operator_raises():
     _setup()
     with pytest.raises(ValueError):
         db.confirm_trip({"draft_id": "DRAFT-x", "stations": [{"station_id": "A"}],
-                         "assigned_vehicle": None, "assigned_operator": None})
+                         "assigned_vehicle": None, "assigned_operator": None}, operator="OP-002")

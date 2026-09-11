@@ -1,0 +1,270 @@
+{
+  "params": {
+    "n_estimators": 300,
+    "learning_rate": 0.1,
+    "num_leaves": 127,
+    "min_child_samples": 200,
+    "subsample": 0.7,
+    "colsample_bytree": 0.8,
+    "reg_lambda": 0.0
+  },
+  "tuning": "adr110",
+  "rows": [
+    {
+      "horizon_min": 30,
+      "n_rows": 2240435,
+      "n_observed": 2240427,
+      "n_imputed_labels": 8,
+      "models": {
+        "model": {
+          "mae": 1.4247479481454306,
+          "mae_normal": 1.369819700990331,
+          "mae_empty": 2.2417766786841087,
+          "mae_decision": 1.46778479769026,
+          "coverage": 0.7838630761011183,
+          "crossing_rate": 0.008202007920811523,
+          "event": {
+            "precision": 0.598230891049277,
+            "recall": 0.9161528139635665,
+            "f1": 0.7238204061764897,
+            "tp": 350936,
+            "fp": 235687,
+            "fn": 32118
+          },
+          "event_basis": "interval",
+          "n_actual_events": 383054
+        },
+        "seasonal_naive": {
+          "mae": 1.3787300367296056,
+          "mae_normal": 1.3814089631253494,
+          "mae_empty": 1.2013978732132151,
+          "mae_decision": 1.1960351667202744,
+          "event": {
+            "precision": 0.7669887674543923,
+            "recall": 0.7654429923718327,
+            "f1": 0.7662151002958179,
+            "tp": 293206,
+            "fp": 89076,
+            "fn": 89848
+          },
+          "event_basis": "point",
+          "n_actual_events": 383054
+        },
+        "persistence": {
+          "mae": 1.441515389700267,
+          "mae_normal": 1.4532043510169748,
+          "mae_empty": 1.1166261714682402,
+          "mae_decision": 1.1855923662485257,
+          "event": {
+            "precision": 0.7584658364011384,
+            "recall": 0.7583787142282812,
+            "f1": 0.7584222728127155,
+            "tp": 290500,
+            "fp": 92510,
+            "fn": 92554
+          },
+          "event_basis": "point",
+          "n_actual_events": 383054
+        }
+      },
+      "imputed_only": {
+        "n": 8,
+        "mae": 7.132551637870238
+      },
+      "n_train_rows": 10578829,
+      "seconds": 905.6
+    },
+    {
+      "horizon_min": 60,
+      "n_rows": 2240408,
+      "n_observed": 2240392,
+      "n_imputed_labels": 16,
+      "models": {
+        "model": {
+          "mae": 2.0532223100792963,
+          "mae_normal": 2.0117645451872557,
+          "mae_empty": 2.6675449257824773,
+          "mae_decision": 1.9667653862875543,
+          "coverage": 0.7839668236630019,
+          "crossing_rate": 0.005485647154605087,
+          "event": {
+            "precision": 0.4973542290575448,
+            "recall": 0.8705792670988087,
+            "f1": 0.6330516526395819,
+            "tp": 333478,
+            "fp": 337026,
+            "fn": 49575
+          },
+          "event_basis": "interval",
+          "n_actual_events": 383053
+        },
+        "seasonal_naive": {
+          "mae": 2.0150797271191827,
+          "mae_normal": 2.0204624645152713,
+          "mae_empty": 1.7571610062496055,
+          "mae_decision": 1.756632128908554,
+          "event": {
+            "precision": 0.6783988758131407,
+            "recall": 0.673006085319786,
+            "f1": 0.6756917205832824,
+            "tp": 257797,
+            "fp": 122211,
+            "fn": 125256
+          },
+          "event_basis": "point",
+          "n_actual_events": 383053
+        },
+        "persistence": {
+          "mae": 2.1793212973443934,
+          "mae_normal": 2.198800877267937,
+          "mae_empty": 1.6888217284262357,
+          "mae_decision": 1.7789268916232175,
+          "event": {
+            "precision": 0.6580261903829332,
+            "recall": 0.6578750199058616,
+            "f1": 0.6579505964611798,
+            "tp": 252001,
+            "fp": 130964,
+            "fn": 131052
+          },
+          "event_basis": "point",
+          "n_actual_events": 383053
+        }
+      },
+      "imputed_only": {
+        "n": 16,
+        "mae": 7.257475687541202
+      },
+      "n_train_rows": 10599010,
+      "seconds": 917.4
+    },
+    {
+      "horizon_min": 90,
+      "n_rows": 2240381,
+      "n_observed": 2240357,
+      "n_imputed_labels": 24,
+      "models": {
+        "model": {
+          "mae": 2.4781227002781008,
+          "mae_normal": 2.4487520880687326,
+          "mae_empty": 2.911180425912515,
+          "mae_decision": 2.2957441803404977,
+          "coverage": 0.7831684860939574,
+          "crossing_rate": 0.005229077330086232,
+          "event": {
+            "precision": 0.43880564212092354,
+            "recall": 0.8131167569938285,
+            "f1": 0.5700037333372375,
+            "tp": 311466,
+            "fp": 398338,
+            "fn": 71586
+          },
+          "event_basis": "interval",
+          "n_actual_events": 383052
+        },
+        "seasonal_naive": {
+          "mae": 2.456425917833631,
+          "mae_normal": 2.4661598633207014,
+          "mae_empty": 2.113941685347141,
+          "mae_decision": 2.1585003775657308,
+          "event": {
+            "precision": 0.6244285767256585,
+            "recall": 0.6154856259724528,
+            "f1": 0.6199248505820267,
+            "tp": 235763,
+            "fp": 141803,
+            "fn": 147289
+          },
+          "event_basis": "point",
+          "n_actual_events": 383052
+        },
+        "persistence": {
+          "mae": 2.7312714000491884,
+          "mae_normal": 2.7587006542016588,
+          "mae_empty": 2.0957834748839708,
+          "mae_decision": 2.2415541120340494,
+          "event": {
+            "precision": 0.5928596612648376,
+            "recall": 0.5926166682330336,
+            "f1": 0.5927381398451851,
+            "tp": 227003,
+            "fp": 155892,
+            "fn": 156049
+          },
+          "event_basis": "point",
+          "n_actual_events": 383052
+        }
+      },
+      "imputed_only": {
+        "n": 24,
+        "mae": 7.052229282424313
+      },
+      "n_train_rows": 10588812,
+      "seconds": 899.8
+    },
+    {
+      "horizon_min": 120,
+      "n_rows": 2240354,
+      "n_observed": 2240322,
+      "n_imputed_labels": 32,
+      "models": {
+        "model": {
+          "mae": 2.802062818310878,
+          "mae_normal": 2.782869498373505,
+          "mae_empty": 3.0793748853654797,
+          "mae_decision": 2.5567447573580866,
+          "coverage": 0.7834891591476583,
+          "crossing_rate": 0.005484033098813474,
+          "event": {
+            "precision": 0.415295143163232,
+            "recall": 0.8146669764600536,
+            "f1": 0.5501425340204114,
+            "tp": 312059,
+            "fp": 439356,
+            "fn": 70992
+          },
+          "event_basis": "interval",
+          "n_actual_events": 383051
+        },
+        "seasonal_naive": {
+          "mae": 2.7995183281688973,
+          "mae_normal": 2.8138175003061883,
+          "mae_empty": 2.378351703881502,
+          "mae_decision": 2.4773632924403395,
+          "event": {
+            "precision": 0.5871992485215943,
+            "recall": 0.5744404792051189,
+            "f1": 0.5807497964446099,
+            "tp": 220040,
+            "fp": 154688,
+            "fn": 163011
+          },
+          "event_basis": "point",
+          "n_actual_events": 383051
+        },
+        "persistence": {
+          "mae": 3.187436895232025,
+          "mae_normal": 3.2219182491149017,
+          "mae_empty": 2.429720809777974,
+          "mae_decision": 2.6444948960651313,
+          "event": {
+            "precision": 0.5454208224703369,
+            "recall": 0.5450605794006542,
+            "f1": 0.5452406414319271,
+            "tp": 208786,
+            "fp": 174012,
+            "fn": 174265
+          },
+          "event_basis": "point",
+          "n_actual_events": 383051
+        }
+      },
+      "imputed_only": {
+        "n": 32,
+        "mae": 6.7717422850698
+      },
+      "n_train_rows": 10567960,
+      "seconds": 901.9
+    }
+  ]
+}

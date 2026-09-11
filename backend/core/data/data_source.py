@@ -139,3 +139,6 @@ def reset_data_source() -> None:
     global _instance, _instance_mode
     _instance = None
     _instance_mode = None
+    from . import observations, degradation
+    observations.reset()
+    degradation.reset()

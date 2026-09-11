@@ -1,0 +1,57 @@
+{
+  "winner": "trial2",
+  "results": {
+    "default": {
+      "params": {
+        "n_estimators": 300,
+        "learning_rate": 0.05,
+        "num_leaves": 31,
+        "min_child_samples": 50,
+        "subsample": 1.0,
+        "colsample_bytree": 1.0,
+        "reg_lambda": 0.0
+      },
+      "cv_mae": 2.452293363092678
+    },
+    "adr110": {
+      "params": {
+        "n_estimators": 300,
+        "learning_rate": 0.1,
+        "num_leaves": 127,
+        "min_child_samples": 200,
+        "subsample": 0.7,
+        "colsample_bytree": 0.8,
+        "reg_lambda": 0.0
+      },
+      "cv_mae": 2.3262630255815857
+    },
+    "trial1": {
+      "params": {
+        "n_estimators": 200,
+        "learning_rate": 0.02,
+        "num_leaves": 63,
+        "min_child_samples": 50,
+        "subsample": 0.7,
+        "colsample_bytree": 0.7,
+        "reg_lambda": 5.0
+      },
+      "cv_mae": 2.4253172377210674
+    },
+    "trial2": {
+      "params": {
+        "n_estimators": 200,
+        "learning_rate": 0.02,
+        "num_leaves": 127,
+        "min_child_samples": 20,
+        "subsample": 0.7,
+        "colsample_bytree": 0.7,
+        "reg_lambda": 0.0
+      },
+      "cv_mae": 2.3747422998832755
+    }
+  },
+  "subset_chunks": [
+    0
+  ],
+  "horizon": 60
+}

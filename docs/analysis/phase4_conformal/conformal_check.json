@@ -1,0 +1,118 @@
+{
+  "30": {
+    "n_cal": 1075528,
+    "n_val": 1075529,
+    "n_moving": 603858,
+    "edges": [
+      0.0,
+      0.002748,
+      0.184056
+    ],
+    "offsets": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "counts": [
+      0,
+      537766,
+      268880,
+      268882
+    ],
+    "global_offset": 0.0,
+    "coverage_all_before": 0.8109451256079566,
+    "coverage_all_after": 0.8109451256079566,
+    "coverage_moving_before": 0.6789212033292595,
+    "coverage_moving_after": 0.6789212033292595,
+    "width_before": 4.426,
+    "width_after": 4.426
+  },
+  "60": {
+    "n_cal": 1081311,
+    "n_val": 1081311,
+    "n_moving": 720981,
+    "edges": [
+      0.00654,
+      0.187253,
+      0.819011
+    ],
+    "offsets": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "counts": [
+      270326,
+      270329,
+      270328,
+      270328
+    ],
+    "global_offset": 0.0,
+    "coverage_all_before": 0.8119393957890005,
+    "coverage_all_after": 0.8119393957890005,
+    "coverage_moving_before": 0.7240856555165809,
+    "coverage_moving_after": 0.7240856555165809,
+    "width_before": 6.468,
+    "width_after": 6.468
+  },
+  "90": {
+    "n_cal": 1084460,
+    "n_val": 1084460,
+    "n_moving": 786871,
+    "edges": [
+      0.068457,
+      0.472442,
+      1.513068
+    ],
+    "offsets": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "counts": [
+      271115,
+      271115,
+      271115,
+      271115
+    ],
+    "global_offset": 0.0,
+    "coverage_all_before": 0.8089353226490603,
+    "coverage_all_after": 0.8089353226490603,
+    "coverage_moving_before": 0.7414849448003549,
+    "coverage_moving_after": 0.7414849448003549,
+    "width_before": 7.779,
+    "width_after": 7.779
+  },
+  "120": {
+    "n_cal": 1086579,
+    "n_val": 1086580,
+    "n_moving": 830235,
+    "edges": [
+      0.125195,
+      0.731181,
+      2.090454
+    ],
+    "offsets": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "counts": [
+      271645,
+      271645,
+      271644,
+      271645
+    ],
+    "global_offset": 0.0,
+    "coverage_all_before": 0.8074775902372582,
+    "coverage_all_after": 0.8074775902372582,
+    "coverage_moving_before": 0.752548374857721,
+    "coverage_moving_after": 0.752548374857721,
+    "width_before": 8.761,
+    "width_after": 8.761
+  }
+}

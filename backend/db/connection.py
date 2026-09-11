@@ -17,6 +17,10 @@ SQLite 連線管理（core 持久層底座）
 from __future__ import annotations
 import os
 import sqlite3
+from contextlib import contextmanager
+from contextvars import ContextVar
+from functools import wraps
+from threading import RLock
 from pathlib import Path
 from typing import Optional
 
@@ -24,6 +28,46 @@ _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 # 記憶體 DB 需共用同一連線（否則每次連線是不同的空 DB）
 _memory_conn: Optional[sqlite3.Connection] = None
+_transaction_conn = ContextVar("dispatch_transaction_connection", default=None)
+_transaction_lock = RLock()
+
+
+@contextmanager
+def transaction():
+    """ADR-302：巢狀服務共用交易；最外層才提交，失敗全部回滾。"""
+    active = _transaction_conn.get()
+    if active is not None:
+        yield active
+        return
+    with _transaction_lock:
+        conn = get_connection()
+        token = _transaction_conn.set(conn)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            yield conn
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+        finally:
+            _transaction_conn.reset(token)
+            if conn is not _memory_conn:
+                conn.close()
+
+
+def atomic(fn):
+    """核心服務的交易邊界；Repository 維持原介面。"""
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        with transaction():
+            return fn(*args, **kwargs)
+    return wrapped
+
+
+def commit(conn):
+    """交易內禁止 Repository 提前提交。"""
+    if _transaction_conn.get() is not conn:
+        conn.commit()
 
 
 # 專案根（backend/ 的上一層），用來把 config 的相對路徑解析成絕對路徑，
@@ -52,12 +96,16 @@ def _db_path() -> str:
 def get_connection() -> sqlite3.Connection:
     """取得 SQLite 連線（row_factory=Row）。記憶體模式共用單一連線。"""
     global _memory_conn
+    active = _transaction_conn.get()
+    if active is not None:
+        return active
     path = _db_path()
 
     if path == ":memory:":
         if _memory_conn is None:
             _memory_conn = sqlite3.connect(":memory:", check_same_thread=False)
             _memory_conn.row_factory = sqlite3.Row
+            _memory_conn.execute("PRAGMA foreign_keys = ON")
             _init_schema(_memory_conn)
         return _memory_conn
 
@@ -84,6 +132,13 @@ _MIGRATIONS = [
     ("operators", "role_type", "TEXT"),          # ADR-116 營運角色 driver/stationed/controller
     ("operators", "stationed_at", "TEXT"),       # ADR-116 駐點人員駐守站(僅 stationed)
     ("vehicles", "is_depot", "INTEGER"),         # ADR-119 總站待命車(1=總站待命,可調派各區)
+    ("tasks", "resources_released", "INTEGER DEFAULT 0"),
+    ("tasks", "vehicle_return_status", "TEXT"),  # ADR-302 預備車結案恢復 standby
+    ("vehicles", "onboard_bikes", "INTEGER"),        # ADR-123 車上現有台數（NULL=未知）
+    ("vehicles", "onboard_source", "TEXT"),          # ADR-123 載量來源（可追溯）
+    ("vehicles", "onboard_observed_at", "TEXT"),     # ADR-123 載量觀測時間
+    ("tasks", "onboard_start", "INTEGER"),           # ADR-123 出車載量
+    ("tasks", "onboard_planned_end", "INTEGER"),     # ADR-123 計畫收車載量
 ]
 
 

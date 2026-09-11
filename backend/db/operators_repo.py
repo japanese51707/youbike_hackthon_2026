@@ -19,7 +19,7 @@ from __future__ import annotations
 import datetime as _dt
 from typing import Optional
 
-from db.connection import get_connection
+from db.connection import get_connection, commit
 from core.security import hash_password, verify_password
 
 _VALID_ROLES = {"operator", "dispatcher", "maintainer"}
@@ -73,7 +73,7 @@ def create_operator(
            VALUES (?, ?, ?, ?, 'off_duty', 1, ?, ?, ?, ?)""",
         (operator_id, name, role, pw_hash, role_type, stationed_at, now, now),
     )
-    conn.commit()
+    commit(conn)
     return get_operator(operator_id)
 
 
@@ -122,7 +122,7 @@ def deactivate(operator_id: str) -> bool:
     cur = conn.execute(
         "UPDATE operators SET is_active = 0, updated_at = ? WHERE operator_id = ?",
         (_now(), operator_id))
-    conn.commit()
+    commit(conn)
     return cur.rowcount > 0
 
 
@@ -132,7 +132,7 @@ def set_password(operator_id: str, password: str) -> bool:
     cur = conn.execute(
         "UPDATE operators SET password_hash = ?, updated_at = ? WHERE operator_id = ?",
         (hash_password(password), _now(), operator_id))
-    conn.commit()
+    commit(conn)
     return cur.rowcount > 0
 
 
@@ -144,7 +144,7 @@ def assign_district(operator_id: str, district: str, task_id: Optional[str] = No
         """UPDATE operators SET current_district = ?, current_task_id = ?,
            status = 'busy', updated_at = ? WHERE operator_id = ?""",
         (district, task_id, _now(), operator_id))
-    conn.commit()
+    commit(conn)
     return cur.rowcount > 0
 
 
@@ -155,7 +155,15 @@ def clear_assignment(operator_id: str) -> bool:
         """UPDATE operators SET current_district = NULL, current_task_id = NULL,
            status = 'on_duty', updated_at = ? WHERE operator_id = ?""",
         (_now(), operator_id))
-    conn.commit()
+    commit(conn)
+    return cur.rowcount > 0
+
+
+def update_status(operator_id: str, status: str) -> bool:
+    conn = get_connection()
+    cur = conn.execute("UPDATE operators SET status = ?, updated_at = ? WHERE operator_id = ?",
+                       (status, _now(), operator_id))
+    commit(conn)
     return cur.rowcount > 0
 
 
@@ -165,7 +173,7 @@ def set_stationed_at(operator_id: str, station_id: Optional[str]) -> bool:
     cur = conn.execute(
         "UPDATE operators SET stationed_at = ?, updated_at = ? WHERE operator_id = ?",
         (station_id, _now(), operator_id))
-    conn.commit()
+    commit(conn)
     return cur.rowcount > 0
 
 

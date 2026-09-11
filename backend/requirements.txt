@@ -20,3 +20,8 @@ httpx==0.28.1
 # ── 帳號密碼雜湊（A5）──
 # 直接用 bcrypt（不透過 passlib，passlib 已過時且與 bcrypt 5.x 不相容）
 bcrypt==5.0.0
+
+# 線上模型推論及官方 HTTPS 信任庫（ADR-121/303）
+lightgbm==4.7.0
+numpy==2.5.2
+certifi==2026.7.22

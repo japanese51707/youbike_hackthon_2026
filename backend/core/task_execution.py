@@ -1,221 +1,249 @@
-"""
-任務執行閉環（core.task_execution）— ADR-117
-=============================================
-逐站完成回報、站點認領標註、後台手動介入（抽離/增加站、取消/退回）。
-是「系統給建議、人拍板」定位的執行層：任務指派後，現場逐站回報實際狀況，
-後台可緊急介入個別站，認領狀態全程可見（防重複接/漏做）。
+"""ADR-302：授權逐站回報、手動介入與結案，所有寫入共用交易。"""
 
-職責（單一）：只做「任務內站點層級的執行操作」。
-不做：任務狀態機（在 task_manager）、產生建議（在 dispatcher）、觸發判斷（在 rule_engine）。
-
-站點以 route（list[dict]）存於 task 的 route_json，每站含：
-  station_id / station_name / district / action / target_available（目標存量，主指令）
-  / est_quantity（預估增減量，輔助）/ station_status（pending/completed/removed）
-  / claimed_by（認領人=任務的 assigned_operator）/ actual_available（回報實際存量）
-
-對外暴露：
-    report_station(task_id, station_id, actual_available, operator)   # 逐站完成回報
-    remove_station(task_id, station_id, operator, reason)             # 後台抽離個別站
-    add_station(task_id, station_dict, operator, reason)              # 後台增加個別站
-    cancel_by_executor(task_id, operator, reason)                     # 執行者取消/退回(附原因)
-    station_claim_map(district=None)                                  # 站點認領狀態(前端地圖用)
-"""
-
-from __future__ import annotations
-import datetime as _dt
+from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Optional
 
-from config_loader import get_config
-
-
-def _now() -> str:
-    return _dt.datetime.now().isoformat(timespec="seconds")
+from db import tasks_repo, vehicles_repo
+from db.connection import atomic
+from core.dispatch_errors import DispatchConflict
+from core.dispatch_guards import (
+    inventory, require_executor, require_dispatcher, require_active,
+    validate_stations,
+)
+from core.task_manager import get_task_manager
 
 
 def _audit(action, station_id=None, operator="system", reason=None):
     from core.audit import get_audit_service
-    get_audit_service().record(
-        type="task_report", operator=operator, action=action,
-        station_id=station_id, reason=reason)
+    get_audit_service().record(type="task_report", operator=operator, action=action,
+                              station_id=station_id, reason=reason)
 
 
-def _get_task(task_id: str) -> dict:
-    from db import tasks_repo
+def _get_task(task_id):
     task = tasks_repo.get(task_id)
     if task is None:
         raise KeyError(f"找不到任務 {task_id}")
     return task
 
 
-def _route(task: dict) -> list:
-    """取任務的站點清單（route）。若為舊格式（純 ID 字串），升級為站物件。"""
-    route = task.get("route", []) or []
-    upgraded = []
-    for item in route:
-        if isinstance(item, dict):
-            upgraded.append(item)
-        else:  # 舊格式：純 station_id
-            upgraded.append({"station_id": str(item), "station_status": "pending"})
-    return upgraded
+def _route(task):
+    return [dict(s) if isinstance(s, dict) else
+            {"station_id": str(s), "station_status": "pending"}
+            for s in task.get("route", []) or []]
 
 
-def _save_route(task: dict, route: list) -> None:
-    from db import tasks_repo
+def _stop(route, station_id):
+    found = next((s for s in route if str(s.get("station_id")) == str(station_id)), None)
+    if found is None:
+        raise KeyError(f"任務內找不到站點 {station_id}")
+    if found.get("station_status", "pending") != "pending":
+        raise DispatchConflict("已完成或移除的站點不可再次操作")
+    return found
+
+
+def _settle_onboard(task):
+    """ADR-123：結案時由實際回報推算收車載量，寫回車輛（來源 task_completion）。
+
+    推算：出車載量 + Σ(取車實際搬運) − Σ(補車實際搬運)。
+    每站實際搬運由計畫量與 target_gap 還原：補車 = q − gap、取車 = q + gap。
+    任一站缺必要數字，或出車載量本身未知 → 把車上載量標回「未知」，不寫入猜測值。
+    """
+    vehicle_id = task.get("assigned_vehicle")
+    if not vehicle_id:
+        return
+    onboard = task.get("onboard_start")
+    if onboard is None:
+        vehicles_repo.clear_onboard(vehicle_id)
+        return
+    total = int(onboard)
+    for stop in task.get("route", []) or []:
+        if not isinstance(stop, dict):
+            vehicles_repo.clear_onboard(vehicle_id)
+            return
+        status = stop.get("station_status", "pending")
+        if status == "removed":
+            continue          # 抽離的站沒有搬運，不影響載量
+        planned = stop.get("est_quantity")
+        gap = stop.get("target_gap")
+        if status != "completed" or planned is None or gap is None:
+            vehicles_repo.clear_onboard(vehicle_id)
+            return
+        moved = float(planned) + (float(gap) if stop.get("action") == "取車" else -float(gap))
+        total += int(round(moved)) if stop.get("action") == "取車" else -int(round(moved))
+    if total < 0:
+        vehicles_repo.clear_onboard(vehicle_id)
+        return
+    capacity = (vehicles_repo.get_vehicle(vehicle_id) or {}).get("max_capacity")
+    if capacity is not None and total > int(capacity):
+        vehicles_repo.clear_onboard(vehicle_id)
+        return
+    vehicles_repo.report_onboard(vehicle_id, total, "task_completion")
+
+
+def _finish_if_done(task):
+    route = task["route"]
+    remaining = sum(s.get("station_status", "pending") == "pending" for s in route)
+    tasks_repo.update(task)
+    if not remaining:
+        tm = get_task_manager()
+        if task["task_status"] == "assigned":
+            tm.start(task["task_id"])
+        _settle_onboard(task)          # 先在資源釋放前算定載量（ADR-123）
+        tm.complete(task["task_id"])
+    return remaining
+
+
+@atomic
+def start_task(task_id, operator):
+    task = _get_task(task_id)
+    require_executor(task, operator)
+    require_active(task)
+    if task["task_status"] == "assigned":
+        task = get_task_manager().start(task_id)
+        _audit(f"開始任務 {task_id}", operator=operator)
+    return {"task_id": task_id, "status": task["task_status"]}
+
+
+@atomic
+def report_station(task_id, station_id, actual_available, operator="system"):
+    task = _get_task(task_id)
+    require_executor(task, operator)
+    require_active(task)
+    route = _route(task)
+    found = _stop(route, station_id)
+    actual = inventory(actual_available, found.get("total_docks"))
+    # 首次回報相容既有客戶端；在同一交易內完成 assigned → in_progress。
+    if task["task_status"] == "assigned":
+        task = get_task_manager().start(task_id)
+        _audit(f"首次回報開始任務 {task_id}", operator=operator)
+    found.update(station_status="completed", actual_available=actual, claimed_by=None,
+                 reported_at=datetime.now(timezone.utc).isoformat(), reported_by=operator)
+    target = found.get("target_available")
+    gap = round(target - actual, 1) if target is not None else None
+    if gap is not None:
+        found["target_gap"] = gap
+    task["route"] = route
+    remaining = _finish_if_done(task)
+    _audit(f"逐站回報 {station_id} 實際存量={actual}，剩餘 {remaining} 站",
+           station_id=station_id, operator=operator)
+    if not remaining:
+        _audit(f"全部站點完成，任務 {task_id} 結案並釋放資源", operator=operator)
+    return {"station": found, "gap": gap, "all_done": remaining == 0, "remaining": remaining,
+            "status": "completed" if remaining == 0 else "in_progress"}
+
+
+def remove_station(task_id, station_id, operator, reason=""):
+    # 來源讀取可能等待外部網路，不能在 SQLite 寫入交易內阻塞其他派工。
+    require_dispatcher(operator)
+    task = _get_task(task_id)
+    require_active(task)
+    _stop(_route(task), station_id)
+    resolved = _demand_resolved(station_id)
+    return _remove_station(task_id, station_id, operator, reason, resolved)
+
+
+@atomic
+def _remove_station(task_id, station_id, operator, reason, resolved):
+    require_dispatcher(operator)
+    task = _get_task(task_id)
+    require_active(task)
+    route = _route(task)
+    target = _stop(route, station_id)
+    target.update(station_status="removed", removed_by=operator, removed_reason=reason,
+                  claimed_by=None, removed_resolved=resolved)
+    task["route"] = route
+    remaining = _finish_if_done(task)
+    _audit(f"後台抽離站點 {station_id}，剩餘 {remaining} 站", station_id, operator, reason)
+    return {"station": target, "resolved": resolved, "back_to_pool": not resolved,
+            "needs_notify": True, "all_done": remaining == 0}
+
+
+def _onboard_at_stop(task, pending):
+    """剩餘路線的起始車上載量：最後一個已完成站的 onboard_after，否則回出車載量。
+
+    兩者都沒有時回 None（未知），由可行性評估標記為載量未知，不假設為零。
+    """
+    done = [s for s in task.get("route", []) or []
+            if isinstance(s, dict) and s.get("station_status") == "completed"
+            and s.get("onboard_after") is not None]
+    if done:
+        return done[-1]["onboard_after"]
+    return task.get("onboard_start")
+
+
+@atomic
+def add_station(task_id, station, operator, reason=""):
+    require_dispatcher(operator)
+    task = _get_task(task_id)
+    require_active(task)
+    route = _route(task)
+    station = deepcopy(station)
+    sid = str(station.get("station_id") or "")
+    if any(str(s.get("station_id")) == sid for s in route):
+        raise DispatchConflict(f"站點 {sid} 已在任務內")
+    vehicle = vehicles_repo.get_vehicle(task.get("assigned_vehicle"))
+    if vehicle is None:
+        raise DispatchConflict("任務缺少車輛資料，請人工處理")
+    pending = [s for s in route if s.get("station_status", "pending") == "pending"]
+    validate_stations(pending + [station], vehicle["max_capacity"], exclude=task_id)
+    # ADR-123/304：加站後整條剩餘路線仍須通過同一份可行性評估（載量守恆／逐站視野）
+    from core.dispatch_feasibility import evaluate_feasibility, first_blocking_message
+    remaining_plan = evaluate_feasibility(
+        pending + [station],
+        {**vehicle, "onboard_bikes": _onboard_at_stop(task, pending)},
+        None, mode=task.get("task_type"), check_resources=False)
+    blocked = first_blocking_message(remaining_plan)
+    if blocked:
+        raise DispatchConflict(blocked)
+    station.update(station_status="pending", claimed_by=task["assigned_operator"], added_by=operator)
+    route.append(station)
     task["route"] = route
     tasks_repo.update(task)
-
-
-def report_station(
-    task_id: str, station_id: str, actual_available: float, operator: str = "system",
-) -> dict:
-    """逐站完成回報（ADR-117）：現場人員輸入「該站實際存量」，非「做了多少」。
-
-    - 標記該站 station_status=completed、寫入 actual_available。
-    - 記錄「目標 vs 實際」落差（供日後校準，本階段只記錄，不自動回饋）。
-    - 若所有站皆 completed/removed → 任務可視為完成（回報告知，實際狀態轉換由 task_manager）。
-    回傳：{ station, 落差 gap, all_done, remaining }
-    """
-    task = _get_task(task_id)
-    route = _route(task)
-    target = None
-    found = None
-    for s in route:
-        if str(s.get("station_id")) == str(station_id):
-            s["station_status"] = "completed"
-            s["actual_available"] = float(actual_available)
-            s["reported_at"] = _now()
-            target = s.get("target_available")
-            found = s
-            break
-    if found is None:
-        raise KeyError(f"任務 {task_id} 內找不到站點 {station_id}")
-
-    # 目標 vs 實際落差（目標存量 − 實際到場存量）
-    gap = None
-    if target is not None:
-        gap = round(float(target) - float(actual_available), 1)
-        found["target_gap"] = gap
-
-    _save_route(task, route)
-    _audit(action=f"逐站回報 {station_id} 實際存量={actual_available:.0f}"
-           + (f"（目標{target:.0f}，落差{gap:+.1f}）" if gap is not None else ""),
-           station_id=station_id, operator=operator)
-
-    active = [s for s in route if s.get("station_status") == "pending"]
-    return {
-        "station": found, "gap": gap,
-        "all_done": len(active) == 0,
-        "remaining": len(active),
-    }
-
-
-def remove_station(
-    task_id: str, station_id: str, operator: str, reason: str = "",
-) -> dict:
-    """後台抽離任務內個別站（ADR-117，緊急用）。
-
-    - 抽離時偵測該站當下狀況：需求已消失（不缺不滿）→ 視為已完成、不回池；
-      需求仍在 → 清除認領標註、回待調度池（供他人重排）。
-    - 必通知現場（走 alert/通知，這裡記錄 needs_notify 供上層發通知）。
-    - 留痕。
-    回傳：{ station, resolved（是否已消化）, back_to_pool, needs_notify }
-    """
-    task = _get_task(task_id)
-    route = _route(task)
-    target = None
-    for s in route:
-        if str(s.get("station_id")) == str(station_id):
-            target = s
-            break
-    if target is None:
-        raise KeyError(f"任務 {task_id} 內找不到站點 {station_id}")
-
-    resolved = _demand_resolved(station_id)
-    target["station_status"] = "removed"
-    target["removed_by"] = operator
-    target["removed_reason"] = reason
-    target["claimed_by"] = None   # 清除認領標註
-    target["removed_resolved"] = resolved
-    _save_route(task, route)
-
-    _audit(action=f"後台抽離站點 {station_id}（{'需求已消化,視為完成' if resolved else '需求仍在,回待調度池'}）",
-           station_id=station_id, operator=operator, reason=reason)
-
-    return {
-        "station": target,
-        "resolved": resolved,
-        "back_to_pool": not resolved,   # 需求還在才回池重排
-        "needs_notify": True,           # 必通知現場（ADR-117）
-    }
-
-
-def add_station(
-    task_id: str, station: dict, operator: str, reason: str = "",
-) -> dict:
-    """後台增加個別站到任務（ADR-117，緊急用）。必通知現場 + 留痕。"""
-    task = _get_task(task_id)
-    route = _route(task)
-    sid = str(station.get("station_id"))
-    if any(str(s.get("station_id")) == sid for s in route):
-        raise ValueError(f"站點 {sid} 已在任務 {task_id} 內")
-    station.setdefault("station_status", "pending")
-    station["claimed_by"] = task.get("assigned_operator")   # 認領標註
-    station["added_by"] = operator
-    route.append(station)
-    _save_route(task, route)
-    _audit(action=f"後台增加站點 {sid} 到任務 {task_id}",
-           station_id=sid, operator=operator, reason=reason)
+    _audit(f"後台增加站點 {sid} 到任務 {task_id}", sid, operator, reason)
     return {"station": station, "needs_notify": True}
 
 
-def cancel_by_executor(task_id: str, operator: str, reason: str) -> dict:
-    """執行者取消/退回整張任務（ADR-117）：須說明原因；使任務脫離 in_progress，後台可重排。
-
-    透過 task_manager.cancel（會擋非法狀態）；清除所有未完成站的認領標註。
-    """
-    if not reason:
-        raise ValueError("取消/退回任務必須說明原因（ADR-117）")
-    from core.task_manager import get_task_manager
-    tm = get_task_manager()
-    # task_manager.cancel 允許 pending/assigned/in_progress？既有規則 in_progress 不可 cancel，
-    # 但「執行者退回」是合法脫離路徑：用 fail→manual_required 或直接 cancel 視狀態。
+@atomic
+def cancel_by_executor(task_id, operator, reason):
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError("取消/退回任務必須說明原因")
     task = _get_task(task_id)
-    status = task.get("task_status")
-    if status == "in_progress":
-        # 執行者退回：in_progress → manual_required（脫離執行中，後台重排）
-        tm.fail(task_id, retryable=False)
-    result = tm.cancel(task_id, reason=reason, operator=operator) if status != "in_progress" \
-        else _get_task(task_id)
-    # 清除未完成站的認領標註
-    route = _route(task if status == "in_progress" else result)
-    for s in route:
-        if s.get("station_status") == "pending":
-            s["claimed_by"] = None
-    t = _get_task(task_id)
-    _save_route(t, route)
-    _audit(action=f"執行者退回/取消任務 {task_id}", operator=operator, reason=reason)
-    return {"task_id": task_id, "released": True, "reason": reason}
-
-
-def station_claim_map(district: Optional[str] = None) -> dict:
-    """回傳站點認領狀態（前端地圖用）：哪些站已被某任務認領、哪些待接。
-
-    掃所有未完成任務的 route，蒐集 pending 站的認領人。
-    """
-    from core.task_manager import get_task_manager
+    require_executor(task, operator)
+    require_active(task)
     tm = get_task_manager()
+    if task["task_status"] == "in_progress":
+        task = tm.fail(task_id, retryable=False)
+        task.update(cancel_reason=reason.strip(), cancelled_by=operator)
+    else:
+        task = tm.cancel(task_id, reason.strip(), operator)
+    from db.task_resources_repo import release
+    release(task)
+    task["resources_released"] = 1
+    route = _route(task)
+    for stop in route:
+        stop["claimed_by"] = None
+    task["route"] = route
+    tasks_repo.update(task)
+    _audit(f"執行者退回任務 {task_id}，釋放認領及人車", operator=operator, reason=reason.strip())
+    return {"task_id": task_id, "released": True, "reason": reason.strip(),
+            "status": task["task_status"]}
+
+
+def station_claim_map(district: Optional[str] = None):
     claimed = {}
-    for task in tm.pending_or_active():
-        for s in _route(task):
-            if s.get("station_status") != "pending":
+    for task in get_task_manager().pending_or_active():
+        if task.get("resources_released"):
+            continue
+        for stop in _route(task):
+            if stop.get("station_status", "pending") != "pending":
                 continue
-            if district and s.get("district") != district:
+            if district and stop.get("district") != district:
                 continue
-            claimed[str(s.get("station_id"))] = {
-                "claimed_by": s.get("claimed_by") or task.get("assigned_operator"),
-                "task_id": task.get("task_id"),
-                "action": s.get("action"),
-                "target_available": s.get("target_available"),
+            claimed[str(stop.get("station_id"))] = {
+                "claimed_by": stop.get("claimed_by") or task.get("assigned_operator"),
+                "task_id": task["task_id"], "action": stop.get("action"),
+                "target_available": stop.get("target_available"),
             }
     return claimed
 

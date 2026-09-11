@@ -30,11 +30,15 @@ def kpi():
         "healthy_stations": healthy,
         "health_rate_pct": round(healthy / in_service * 100, 1) if in_service else 0,
         "avg_usage_rate": avg_usage,
-        "source": "realtime",
+        "source": stations[0].get("source", "unknown") if stations else "unavailable",
+        "freshness_counts": {key: sum(s.get("data_freshness") == key for s in stations)
+                             for key in ("live", "stale", "historical", "mock")},
     }
 
 
 @router.get("/simulation/replay")
 def replay(date: str = "2026-06-02"):
     """3.8 模擬重放 Before/After（Demo 成效）"""
+    from api.stations import _require_mock
+    _require_mock("模擬重放")
     return get_mock()["simulation_replay"]

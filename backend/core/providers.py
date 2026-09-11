@@ -42,9 +42,9 @@ class OperatorProvider(ABC):
         總站待命人力（ADR-119 depot_standby）為獨立資源池，用 depot_standby_operators() 取。"""
         out = []
         for o in self.list_operators(active_only=True):
-            if o.get("role_type") == "depot_standby":
-                continue   # 總站待命獨立，不進一般池
-            if o.get("status") in (None, "on_duty", "off_duty"):
+            if o.get("role_type") != "driver":
+                continue
+            if o.get("status") == "on_duty" and not o.get("current_task_id"):
                 out.append(o)
         return out
 
@@ -52,7 +52,7 @@ class OperatorProvider(ABC):
         """總站待命人力（ADR-119，可調派各區支援）。"""
         return [o for o in self.list_operators(active_only=True)
                 if o.get("role_type") == "depot_standby"
-                and o.get("status") in (None, "on_duty", "off_duty")]
+                and o.get("status") == "on_duty" and not o.get("current_task_id")]
 
 
 class FleetProvider(ABC):

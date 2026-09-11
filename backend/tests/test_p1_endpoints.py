@@ -58,7 +58,8 @@ def test_deadlocks_endpoint(client):
 
 
 def test_emergency_check_endpoint(client):
-    r = client.post("/api/v1/emergency/check", json={"in_transit_eta_min": 45})
+    r = client.post("/api/v1/emergency/check", json={"in_transit_eta_min": 45},
+                    headers={"X-Operator-Id": "OP-002"})
     assert r.status_code == 200
     body = r.json()
     assert "triggered" in body and "dispatched" in body
@@ -83,16 +84,16 @@ def test_remove_station_requires_auth(client):
 
 
 def test_return_task_needs_reason(client):
-    """退回需附原因；帶身分但無原因 → 400。"""
+    """退回需附原因；帶身分但無原因 → 422。"""
     r = client.post("/api/v1/dispatch/tasks/T1/return", json={},
                     headers={"X-Operator-Id": "OP-001"})
-    assert r.status_code == 400
+    assert r.status_code == 422
 
 
 def test_report_needs_fields(client):
     r = client.post("/api/v1/dispatch/tasks/T1/report", json={},
                     headers={"X-Operator-Id": "OP-001"})
-    assert r.status_code == 400
+    assert r.status_code == 422
 
 
 def test_claim_map_empty_initially(client):

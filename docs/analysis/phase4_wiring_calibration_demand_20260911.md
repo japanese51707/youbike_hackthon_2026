@@ -1,0 +1,131 @@
+# 第四批：係數生效、區間校準、審核畫面與需求估計
+
+日期：2026-09-11。分支：`feature/A-dispatch-safety-lifecycle`。未 push。
+決策：[ADR-124](../decisions/ADR-124-最適化調整係數的生效接線.md)、
+[ADR-125](../decisions/ADR-125-預測區間的conformal校準.md)（已由
+[ADR-127](../decisions/ADR-127-不採用conformal校準與覆蓋率判讀規則.md) 取代）、
+[ADR-126](../decisions/ADR-126-未受供給限制的需求估計.md)，前端沿用 ADR-205/206/304。
+
+**設計原則：全部 default-off。** 四項都加了開關且預設關閉，合併後不改變任何現有行為。
+
+## 一、ADR-124 最適化調整係數生效接線
+
+| 項目 | 內容 |
+|---|---|
+| 套用位置 | ADR-115 動態目標水位的「預期流量」項（補車看 P10 推得的後續最大流出、取車看 P90 推得的後續最大流入）。安全緩衝與 80/20 護欄**不受係數影響** |
+| 係數組成 | `base_outflow_coef` ×（放假型態時再乘 `env_coef_weekend`） |
+| 三態 | `config.optimization.係數套用模式`：`off`（預設，完全不讀參數、不查 DB）／`shadow`（算但不採用，附影子值與差異）／`on`（實際採用） |
+| 護欄 | 累積後的絕對值夾在 `係數上下限`（預設 0.8～1.25）。壞值（None／字串／布林／NaN／Inf／≤0）一律視為 1.0 |
+| 可追溯 | 建議輸出帶 `coefficient_mode`、`param_version`、`applied_coefficients`、`coefficient_clamped`；shadow 另帶 `shadow_target_available`／`shadow_quantity`／`shadow_quantity_delta` |
+| 效能 | 參數一次批次查詢（`params_repo.get_active_many`，900 個一批避開 SQLite 變數上限），不逐站打 DB |
+
+決策邊界（ADR-004）：係數只改「目標水位」這一個量，測試固定住「係數不改變是否觸發、也不改變動作方向」。
+
+## 二、conformal 校準：**做完了、量測了、然後整條拆掉**（ADR-125 → ADR-127）
+
+### 2.1 原本的判斷
+
+第三批全量評估顯示：邊際覆蓋率 80.8～81.2%（名目 80%，合格），
+但「觀測 Δ≠0」的列只有 67.9%（30 分）～75.3%（120 分）。當時判斷是「站點真的在動的時候區間太窄」，
+屬條件覆蓋率問題，應以分組 conformal（Mondrian CQR）修正，分組變數用 `|P50 − 現況|`。
+
+### 2.2 實測結果：偏移全是 0，什麼都沒修到
+
+候選 booster 只用 1～5 月訓練，6 月完全沒被看過，因此把 6 月隨機切半（前半校準、後半驗證）
+做有效的 split-conformal：
+
+| 視野 | 校準／驗證列數 | 分桶偏移 | 整體覆蓋率 | Δ≠0 覆蓋率 | 平均區間寬 |
+|---|---|---|---|---|---|
+| 30 分 | 1,075,528 / 1,075,529 | [0, 0, 0, 0] | 81.1% → 81.1% | 67.9% → 67.9% | 4.43 → 4.43 |
+| 60 分 | 1,081,311 / 1,081,311 | [0, 0, 0, 0] | 81.2% → 81.2% | 72.4% → 72.4% | 6.47 → 6.47 |
+| 90 分 | 1,084,460 / 1,084,460 | [0, 0, 0, 0] | 80.9% → 80.9% | 74.1% → 74.1% | 7.78 → 7.78 |
+| 120 分 | 1,086,579 / 1,086,580 | [0, 0, 0, 0] | 80.7% → 80.7% | 75.3% → 75.3% | 8.76 → 8.76 |
+
+偏移為 0 是 CQR 的正確行為：區間已經達到名目覆蓋率時，conformity score 的 80% 分位數本來就 ≤ 0，
+不需要也不應該再放寬。
+
+### 2.3 換分組變數也沒用——因為前提本身錯了
+
+對 60 分視野試了七個「推論時算得出來」的分組變數，各切十等分看覆蓋率離散程度：
+
+| 分組變數 | 覆蓋率離散 | 各十分位覆蓋率 |
+|---|---|---|
+| 站點周轉量 | 2.9pp | 82.9 83.0 82.2 81.1 80.9 80.3 80.6 80.4 80.4 80.1 |
+| 區間寬度 hi−lo | 2.8pp | 83.0 80.2 81.6 81.5 81.1 80.8 80.9 80.9 80.8 81.0 |
+| 借用率 | 2.7pp | 79.5 80.7 81.3 81.4 81.9 82.0 82.2 81.8 81.4 79.8 |
+| \|P50 − 現況\|（原提案） | 2.0pp | 81.3 82.0 81.6 81.2 81.4 81.1 80.7 81.1 80.0 |
+| \|近 2 小時變化\| | 1.7pp | 82.2 81.2 80.9 80.8 80.7 80.5 |
+| \|近 1 小時變化\| | 1.1pp | 81.8 81.0 80.8 80.8 80.7 |
+| \|station_slot_p50\| | 0.0pp | 81.2 |
+
+**每一個可觀測分組的每一個十分位，覆蓋率都在 79.5～83.0% 之間**——也就是說，
+模型在所有看得到的切面上都是校準良好的。
+
+**「Δ≠0」不是一個可觀測的分組，它是用答案本身選出來的子集。**
+任何覆蓋率正確的區間，在「真值離中心比較遠」的子集上都必然覆蓋不足——
+這是依變數選樣（selection on the outcome），不是校準缺陷，也沒有任何 conformal 方法能修
+（也不該修：對 Y 的條件覆蓋率在無分布假設下不可得）。
+
+### 2.4 結論與現況
+
+- **第三批把 67.9～75.3% 判讀為「校準問題」是錯的**，本批已用 430 萬列驗證資料推翻。
+- owner 裁示：ADR-125 不留。改以 **[ADR-127](../decisions/ADR-127-不採用conformal校準與覆蓋率判讀規則.md)**
+  取代，把反證與判讀規則正式記錄下來——「不得以標籤本身選出來的子集判斷校準」。
+- 已拆除的接線：`LightGBMPredictor._calibration()` / `_CONFORMAL`、`PredictionInterval.calibration`
+  欄位、`config.prediction` 的四個校準設定、`run_train_save` 的校準窗口切分與 `conformal.json` 產出。
+  拆除後 `run_train_save` 恢復用全部乾淨列訓練（原本會白白少掉尾端 14 天）。
+- **保留**：`backend/prediction/conformal.py` 作為**沒有開關的離線量測庫**
+  （`tools/fullscale_eval/conformal_check.py` 需要它）。要重新啟用必須先立新 ADR；
+  `test_conformal.py::test_serving_has_no_conformal_wiring` 就是守住這條界線的閘門。
+
+證據：[`phase4_conformal/`](phase4_conformal/)；重現：`tools/fullscale_eval/{conformal_check,grouping_probe}.py`。
+
+## 三、daily-review 前端審核畫面
+
+- `frontend/src/api/optimizationApi.js` + `frontend/src/pages/OptimizationReviewPage.jsx`，路由 `/optimization`，導覽加「最適化審核」。
+- 四種 `status` 各有呈現，非 `ok` 明確擋住核准；`approve` 帶 `review_id`，錯誤（409／422）直接顯示。
+- 逐站 accept／keep／re_adjust（含人工改值）；核准為全成或全退。
+- **頂部橫幅讀後端的 `coefficient_mode`**：`off` 說「只會存成參數版本，不會改變任何一次派工」／
+  `shadow` 說「會算並記錄差異，但實際派工仍用基準值」／`on` 才說「會影響目標水位與建議數量」。
+  這是 ADR-304 §7 的落地：**不得把「已套用」呈現成「調度行為已改變」**，而且這句話由後端狀態決定，不由前端自己講。
+- 為此後端的 `daily-review` 回應新增 `coefficient_mode`。
+
+## 四、ADR-126 未受供給限制的需求估計
+
+| 項目 | 內容 |
+|---|---|
+| 方法 | 站內自比：該站訓練期「未觸底時」同一（放假型態 × 時段）的流出／流入中位數。**不跨站外推**（跨站需要群集與規模縮放兩層無法驗證的假設） |
+| 觸發條件 | 只有補車遇空站、取車遇滿站才給估計；站況正常時觀測沒被壓抑，回 `not_censored` |
+| 樣本不足 | 回 `insufficient_samples` 且值為 null，**不給看似確定的數字**（門檻 `需求估計最小樣本數`，預設 8） |
+| 輸出 | 獨立欄位 `unconstrained_demand` + `demand_basis`；`predicted_at_arrival` 語意不變 |
+| 決策邊界 | 在建議「已經決定完」之後才附加，**結構上保證**不可能影響 action／quantity／target_available／緊急度；估計器拋錯時調度照跑 |
+| 統計來源 | `feature_pipeline` 新增 `slot_outflow_p50`／`slot_inflow_p50`／`slot_uncensored_n`（**不進 `feature_cols`**），由 `export_frame` 寫入模型包的 `demand` 區塊；舊模型包沒有該區塊時回 null 且不拋錯 |
+
+## 五、驗證
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 python3 -B -m pytest \
+  -p no:cacheprovider -o addopts='' backend/tests -q
+cd frontend && npm run build && node --test src/api/httpClient.test.js \
+  src/utils/escapeHtml.test.js src/utils/dispatchGating.test.js
+```
+
+| 階段 | 後端 | 前端 |
+|---|---|---|
+| 第三批結束 | 262 passed | 11 passed + build |
+| +ADR-124 | 282 passed（+20 係數三態／護欄／批次） | — |
+| +ADR-125 | 293 passed（+11 CQR 保證／分組／成套檢查） | — |
+| +ADR-127（拆接線） | 301 passed（−3 旗標語意 +1 無接線閘門） | 11 passed + build 通過 |
+| +審核畫面 | 294 passed（+1 `coefficient_mode` 外露） | 11 passed + build 通過 |
+| +ADR-126 | **303 passed**（+9 估計語意／決策邊界／容錯） | — |
+
+## 六、剩餘限制與待裁示
+
+1. **（已裁示）ADR-125 由 ADR-127 取代**，可被開啟的部分已全數拆除，見第二節。
+   現行模型的區間未經任何後處理；若日後換模型，覆蓋率要重新量測，
+   且只能看邊際覆蓋率與「上線時算得出來的變數」分組覆蓋率。
+2. **ADR-124 的係數本身仍未經驗證**：係數是「近 N 日 vs 全期流出比值」，沒有任何預測品質驗證。
+   建議先跑 `shadow` 模式累積差異資料，再決定要不要切 `on`。切換是營運決定，不在程式內自動升級。
+3. **ADR-126 對現行模型回 null**：`_models/` 的特徵包沒有 `demand` 區塊，要到下次依新流程重訓才有數字。
+4. 前端審核畫面未做瀏覽器端自動化測試；驗證為 Vite build 與型別／邏輯層測試。
+5. 需求估計沒有 ground truth 可驗證準確度，只能做合理性檢核；滿站還車與空站借車的行為不對稱未處理。
