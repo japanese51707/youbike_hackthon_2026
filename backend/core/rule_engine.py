@@ -35,6 +35,8 @@ def _mk_rec(station: dict, action: str, quantity: int, reason: str,
             breach_horizon_min=None, arrival_by_horizon=None) -> dict:
     """組一筆規則引擎輸出（未含優先級，dispatcher 再補）。"""
     return {
+        **{key: station.get(key) for key in ("source", "observed_at", "received_at",
+            "data_freshness", "dispatch_eligible", "quality_reasons", "total_docks") if key in station},
         "station_id": station.get("station_id", ""),
         "station_name": station.get("station_name", ""),
         "district": station.get("district", ""),
@@ -111,6 +113,10 @@ def evaluate_station(
     multi：（可選）MultiHorizonPrediction，用來補齊 4 視野 arrival_by_horizon（前端趨勢圖）
            並掃出「最早穿透邊界的視野」（ADR-107/111/113）。
     """
+    if (station.get("dispatch_eligible") is False or station.get("service_available") is False
+            or station.get("data_freshness") in ("stale", "historical", "historical_fallback")
+            or station.get("status") == "offline"):
+        return None
     cfg = config or get_config()
     trig = cfg["trigger"]
     target = cfg["target"]
@@ -246,6 +252,8 @@ def generate_recommendations(
 
     out = []
     for st in stations:
+        if st.get("dispatch_eligible") is False:
+            continue
         interval = None
         multi = None
         try:
@@ -259,5 +267,7 @@ def generate_recommendations(
             interval = None   # 預測不可用 → 走降級
         rec = evaluate_station(st, interval, cfg, multi=multi)
         if rec is not None:
+            rec["prediction_status"] = getattr(multi, "status", "ready") if interval else "unavailable"
+            rec["prediction_missing_features"] = getattr(multi, "missing_features", [])
             out.append(rec)
     return out

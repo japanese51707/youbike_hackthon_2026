@@ -24,12 +24,21 @@ class HorizonPrediction(BaseModel):
     predict_target_time: str        # 目標時刻 = predict_from + horizon_minutes
     predicted_available: float      # 該視野目標時刻的預測可借車數（點估計）
     lower_bound: float              # 動態區間下界（規則引擎吃下界觸發防空）
-    upper_bound: float              # 動態區間上界（規則引擎吃上界觸發防滿）
+    upper_bound: float              # 顯示用夾界值
+    raw_lower_bound: float | None = None
+    raw_upper_bound: float | None = None
+    raw_predicted: float | None = None
+    source: str | None = None
 
 
 class Prediction(BaseModel):
     station_id: str
-    predict_from: str               # 起算時間（通常是現在）
+    predict_from: str | None        # 起算時間（通常是現在）
+    status: str = "unavailable"
+    source: str = "unavailable"
+    model_version: str | None = None
+    missing_features: list[str] = Field(default_factory=list)
+    reason: str | None = None
     horizon_source: HorizonSource
     horizons: list[HorizonPrediction] = Field(default_factory=list)
     # 向後相容：陣列若只含一個元素等同舊的單一視野。

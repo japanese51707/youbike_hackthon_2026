@@ -9,6 +9,8 @@ mode="mock" 時（開發/Demo 預設）由工廠回傳本類別。
 
 from __future__ import annotations
 from typing import Optional
+from copy import deepcopy
+from .observations import normalize, parse_time
 
 from .data_source import DataSource
 
@@ -19,7 +21,7 @@ class MockDataSource(DataSource):
     def _all(self) -> dict:
         # 沿用既有 mock_store 的載入與快取，不重造輪子
         from mock_store import get_mock
-        return get_mock()
+        return deepcopy(get_mock())
 
     def get_stations(
         self,
@@ -32,12 +34,12 @@ class MockDataSource(DataSource):
         if status:
             wanted = set(status.split(","))
             stations = [s for s in stations if s["status"] in wanted]
-        return stations
+        return [normalize(station, "mock") for station in stations]
 
     def get_station(self, station_id: str) -> Optional[dict]:
         for s in self._all()["stations"]:
             if s["station_id"] == station_id:
-                return s
+                return normalize(s, "mock")
         return None
 
     def get_history(
@@ -53,9 +55,9 @@ class MockDataSource(DataSource):
         else:
             hist = []
         if start:
-            hist = [h for h in hist if h["timestamp"] >= start]
+            hist = [h for h in hist if parse_time(h["timestamp"]) >= parse_time(start)]
         if end:
-            hist = [h for h in hist if h["timestamp"] <= end]
+            hist = [h for h in hist if parse_time(h["timestamp"]) <= parse_time(end)]
         return hist
 
     def health(self) -> dict:

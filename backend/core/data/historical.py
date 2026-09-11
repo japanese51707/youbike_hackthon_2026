@@ -102,14 +102,30 @@ class HistoricalDataSource(DataSource):
         )
         return df
 
+    @staticmethod
+    @lru_cache(maxsize=2)
+    def _load_local(path):
+        import pandas as pd
+        df = pd.read_parquet(path).rename(columns=_COL_MAP)
+        df["station_id"] = df["station_name"].astype(str).map(_resolve_station_id)
+        return df
+
     def _df(self, month: Optional[str] = None):
-        return self._load_month(_bucket(), _prefix(), month or self._default_month)
+        month = month or self._default_month
+        local = os.environ.get("YOUBIKE_HISTORY_DIR", _cfg().get("historical_local_dir", ""))
+        if local:
+            base = Path(local)
+            if not base.is_absolute():
+                base = Path(__file__).resolve().parents[3] / base
+            return self._load_local(str(base / f"year_month={month}" / "data.parquet"))
+        return self._load_month(_bucket(), _prefix(), month)
 
     def _row_to_standard(self, row) -> dict:
         usage = float(row.get("usage_rate", 0) or 0)
         bikes = int(row.get("available_bikes", 0) or 0)
         docks = int(row.get("available_docks", 0) or 0)
-        ts = str(row.get("timestamp", ""))
+        from .observations import parse_time
+        ts = parse_time(row.get("timestamp")).isoformat()
         return {
             "station_id": str(row.get("station_id", "")),
             "station_name": str(row.get("station_name", "")),
@@ -124,6 +140,8 @@ class HistoricalDataSource(DataSource):
             "service_available": True,
             "timestamp": ts,
             "source_timestamp": ts,
+            "source": "historical",
+            "identity_source": "official_name_lookup" if str(row.get("station_name", "")).strip() in _load_station_id_lookup() else "unmapped_historical_name",
             "data_freshness": "historical",   # 歷史快照，非即時
         }
 
@@ -160,13 +178,26 @@ class HistoricalDataSource(DataSource):
         end: Optional[str] = None,
     ) -> list[dict]:
         """回傳單站的歷史時間序列（可用於時間軸/回放/降級同時段推估）。"""
-        df = self._df()
-        sub = df[df["station_id"] == station_id].sort_values("timestamp")
-        if start:
-            sub = sub[sub["timestamp"].astype(str) >= start]
-        if end:
-            sub = sub[sub["timestamp"].astype(str) <= end]
-        return [self._row_to_standard(r) for _, r in sub.iterrows()]
+        import pandas as pd
+        from .observations import parse_time, TAIPEI
+        start_dt = parse_time(start).astimezone(TAIPEI).replace(tzinfo=None) if start else None
+        end_dt = parse_time(end).astimezone(TAIPEI).replace(tzinfo=None) if end else None
+        months = [self._default_month]
+        if start_dt and end_dt:
+            if end_dt < start_dt or (end_dt - start_dt).days > 31:
+                raise ValueError("歷史查詢區間須在 31 天內")
+            months = [str(m) for m in pd.period_range(start_dt, end_dt, freq="M")]
+        rows = []
+        for month in months:
+            df = self._df(month)
+            sub = df[df["station_id"] == station_id].copy()
+            times = pd.to_datetime(sub["timestamp"])
+            if start_dt:
+                sub = sub[times >= start_dt]
+            if end_dt:
+                sub = sub[pd.to_datetime(sub["timestamp"]) <= end_dt]
+            rows.extend(self._row_to_standard(r) for _, r in sub.iterrows())
+        return sorted(rows, key=lambda r: r["timestamp"])
 
     def health(self) -> dict:
         try:

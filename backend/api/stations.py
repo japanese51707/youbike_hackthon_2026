@@ -3,16 +3,20 @@
 薄層：A0 回 mock。注意路由順序 — 靜態路徑(heatmap/timeline)先於動態路徑(/{id})。
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
+from datetime import timedelta
+from core.data.observations import parse_time
+from core.data.degradation import degradation_status
 from mock_store import get_mock
 from core.data import get_data_source, get_stations_with_degradation
 from auth import require_role
 from models_schema.params_ops import ParamsRollbackRequest
+from models_schema.station import StationStatus, StationDetail
 
 router = APIRouter(prefix="/api/v1", tags=["stations"])
 
 
-@router.get("/stations")
+@router.get("/stations", response_model=list[StationStatus])
 def list_stations(district: str | None = None, status: str | None = None):
     """3.1 所有站點即時狀態（前端畫地圖）
 
@@ -20,6 +24,11 @@ def list_stations(district: str | None = None, status: str | None = None):
     換源只改 config.data_source.mode（mock / historical / tdx / youbike_official）。
     """
     return get_stations_with_degradation(district=district, status=status)
+
+
+@router.get("/data/status")
+def data_status():
+    return degradation_status()
 
 
 # 靜態路徑要先於 /stations/{station_id} 註冊，否則會被當成 station_id
@@ -52,64 +61,88 @@ def heatmap(dimension: str = "district"):
 @router.get("/stations/timeline")
 def timeline(district: str = "中和區", date: str = "2026-06-02", interval: int = 30):
     """3.10 時間軸序列（讀預存歷史）"""
+    _require_mock("歷史時間軸")
     return get_mock()["timeline"]
 
 
-@router.get("/stations/{station_id}")
-def station_detail(station_id: str, history_range: str = "7d"):
-    """3.2 單站詳情 + 預測 + 參數 + 歷史
-
-    current/history 走 data_source 層；prediction 走真實 LightGBM（ADR-113，無模型時降級 mock）；
-    params 走 DB 三層疊加（無則 mock）。
-    """
-    ds = get_data_source()
-    current = ds.get_station(station_id)
+def _current_station(station_id):
+    current = next((s for s in get_stations_with_degradation() if s["station_id"] == station_id), None)
     if current is None:
         raise HTTPException(status_code=404, detail=f"找不到站點 {station_id}")
-    history = ds.get_history(station_id)
-    return {
-        "current": current,
-        "history": history,
-        "prediction": _build_prediction(current),
-        "params": _with_target_usage_rate(_get_params(station_id)),
-    }
+    return current
 
 
-def _build_prediction(station: dict) -> dict:
-    """用真實 LightGBM 出 4 視野區間（ADR-113）。模型缺失/失敗時降級回 mock，不中斷。"""
+def _history(station_id, start, end):
+    from core.data.historical import HistoricalDataSource
+    from config_loader import get_config
+    mode = get_config().get("data_source", {}).get("mode", "mock")
+    if mode == "mock":
+        return {"history": get_data_source().get_history(station_id, start, end),
+                "history_status": {"status": "ready", "source": "mock"}}
     try:
-        from core.interfaces import get_predictor
+        rows = HistoricalDataSource().get_history(station_id, start, end)
+        return {"history": rows, "history_status": {"status": "ready" if rows else "empty",
+                "source": "historical", "requested_start": start, "requested_end": end}}
+    except Exception:  # source errors must not make current station details unavailable
+        return {"history": [], "history_status": {"status": "unavailable", "source": "historical",
+                "reason": "此日期範圍的歷史資料尚未提供", "requested_start": start, "requested_end": end}}
+
+
+@router.get("/stations/{station_id}/history")
+def station_history(station_id: str, start: str, end: str):
+    try:
+        lo, hi = parse_time(start), parse_time(end)
+        if hi < lo or hi - lo > timedelta(days=31):
+            raise ValueError()
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="需有效時間與最多 31 天的歷史查詢範圍")
+    return _history(station_id, lo.isoformat(), hi.isoformat())
+
+
+@router.get("/stations/{station_id}", response_model=StationDetail)
+def station_detail(station_id: str, history_range: str = Query("7d", pattern="^(24h|1d|7d)$")):
+    current = _current_station(station_id)
+    anchor = current.get("observed_at")
+    if anchor:
+        end = parse_time(anchor)
+        history = _history(station_id, (end - timedelta(days=1 if history_range == "24h" else int(history_range[:-1]))).isoformat(), end.isoformat())
+    else:
+        history = {"history": [], "history_status": {"status": "unavailable", "reason": "無有效觀測時間"}}
+    return {"current": current, **history, "prediction": _build_prediction(current),
+            "params": _with_target_usage_rate(_get_params(station_id))}
+
+
+def _build_prediction(station):
+    from core.interfaces import get_predictor
+    from config_loader import get_config
+    mode = get_config().get("data_source", {}).get("mode", "mock")
+    base = {"station_id": station["station_id"], "predict_from": station.get("observed_at") or station.get("timestamp"),
+            "horizon_source": "default", "horizons": []}
+    try:
         pred = get_predictor()
-        if not hasattr(pred, "predict_multi"):
-            raise RuntimeError("predictor 無 predict_multi")
-        multi = pred.predict_multi(station)
-        return {
-            "source": "lightgbm",
-            "horizons": [{
-                "horizon_minutes": iv.horizon_minutes,
-                "raw_lower_bound": iv.raw_lower_bound,
-                "raw_predicted": iv.raw_predicted,
-                "raw_upper_bound": iv.raw_upper_bound,
-                "lower_bound": iv.lower_bound,
-                "predicted_available": iv.predicted_available,
-                "upper_bound": iv.upper_bound,
-            } for iv in sorted(multi.intervals, key=lambda x: x.horizon_minutes)],
-        }
-    except Exception:
-        # 降級：模型未就緒時回 mock 範例（NFR-5：明確標來源，不假裝真實）
-        mock_pred = get_mock()["station_detail"].get("prediction")
-        if isinstance(mock_pred, dict):
-            return {**mock_pred, "source": "mock_fallback"}
-        return {"source": "mock_fallback", "prediction": mock_pred}
+        if mode != "mock" and pred.__class__.__name__ == "MockPredictor":
+            return {**base, "source": "unavailable", "status": "unavailable", "reason": "真實模型尚未就緒"}
+        multi = pred.predict_multi(station) if hasattr(pred, "predict_multi") else None
+        intervals = multi.intervals if multi else [pred.predict(station, m) for m in (30, 60, 90, 120)]
+        anchor = parse_time(base["predict_from"])
+        return {**base, "source": intervals[0].source, "status": getattr(multi, "status", "ready"),
+                "model_version": getattr(multi, "model_version", None),
+                "missing_features": getattr(multi, "missing_features", []),
+                "horizons": [{**vars(iv), "predict_target_time": (anchor + timedelta(minutes=iv.horizon_minutes)).isoformat()}
+                             for iv in intervals]}
+    except (NotImplementedError, ValueError, OSError, KeyError, TypeError):
+        return {**base, "source": "unavailable", "status": "unavailable", "reason": "預測所需模型、特徵或有效觀測尚未就緒"}
 
 
-def _get_params(station_id: str) -> dict | None:
-    """站點參數：優先 DB 生效版（三層疊加），無則 mock。"""
+def _get_params(station_id):
     from params import get_current
-    current = get_current(station_id)
-    if current is not None:
-        return current
-    return get_mock()["station_detail"]["params"]
+    return get_current(station_id)
+
+
+def _require_mock(feature):
+    from config_loader import get_config
+    if get_config().get("data_source", {}).get("mode", "mock") != "mock":
+        raise HTTPException(status_code=501, detail=f"{feature} 尚未提供真實服務")
 
 
 def _with_target_usage_rate(params: dict | None) -> dict | None:
@@ -136,23 +169,23 @@ def station_static(station_id: str):
     這些不常變（地形永不變、POI/位置幾乎不變、指紋每天離線算一次），前端「開場拉一次」快取即可，
     不用即時輪詢。地形/指紋回預算好的快取；POI 現算（快）。
     """
-    ds = get_data_source()
-    st = ds.get_station(station_id)
-    if st is None:
-        raise HTTPException(status_code=404, detail=f"找不到站點 {station_id}")
+    st = _current_station(station_id)
     lat, lng = st.get("lat"), st.get("lng")
 
-    from features.terrain import get_terrain
+    from features.terrain import load_elevation_cache, terrain_class_of
     from features.poi_distance import get_poi_feature
     from features.station_profile import get_profile_cached
 
+    terrain = load_elevation_cache().get(st["station_key"]) or {}
     return {
         "station_id": station_id,
         "location": {
             "station_name": st.get("station_name"), "district": st.get("district"),
             "lat": lat, "lng": lng, "total_docks": st.get("total_docks"),
         },
-        "terrain": get_terrain(lat, lng),            # 快取（_elevation_cache）
+        "terrain": {"elevation": terrain.get("elevation"), "slope_pct": terrain.get("slope_pct"),
+                    "terrain_class": terrain_class_of(terrain.get("slope_pct")),
+                    "source": "cached" if terrain else "unavailable"},
         "poi": get_poi_feature(lat, lng),            # 現算（poi_data.json，快）
         "profile": get_profile_cached(station_id),   # 快取（_profile_cache，離線算）
         "note": "靜態/半靜態資料，前端開場拉一次即可，不需即時輪詢",
@@ -170,7 +203,7 @@ def station_params(station_id: str):
     if current is not None:
         return _with_target_usage_rate(current)
     # DB 尚無此站參數 → 回 mock 範例（開發階段）
-    return _with_target_usage_rate(get_mock()["station_detail"]["params"])
+    return None
 
 
 @router.get("/stations/{station_id}/params/history")
@@ -198,10 +231,12 @@ def station_params_rollback(
 @router.post("/stations")
 def create_station():
     """3.19 新增站別（冷啟動 + 連動重算）— A0 骨架"""
+    _require_mock("新增站點")
     return {"message": "mock：新站已建立，鄰近站群已重算", "station_id": "NEW-MOCK"}
 
 
 @router.delete("/stations/{station_id}")
 def delete_station(station_id: str):
     """3.19 刪除站別（+ 連動重算）— A0 骨架"""
+    _require_mock("刪除站點")
     return {"message": f"mock：站點 {station_id} 已移除，鄰近站群已重算"}

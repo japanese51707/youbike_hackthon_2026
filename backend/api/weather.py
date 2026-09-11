@@ -1,13 +1,13 @@
 """天氣端點（3.18，ADR-118）。by-location 接 CWA 即時（觀測站級）；舊 /weather 保留相容。"""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from mock_store import get_mock
 
 router = APIRouter(prefix="/api/v1", tags=["weather"])
 
 
 @router.get("/weather/by-location")
-def weather_by_location(lat: float, lng: float):
+def weather_by_location(lat: float = Query(ge=-90, le=90, allow_inf_nan=False), lng: float = Query(ge=-180, le=180, allow_inf_nan=False)):
     """3.18 指定座標的即時天氣（CWA 最近測站，ADR-118）。
 
     回：最近雨量站（now/past10/past1hr）+ 最近氣象站（condition/temp/humidity）。
@@ -27,4 +27,6 @@ def weather_by_location(lat: float, lng: float):
 @router.get("/weather")
 def weather(district: str = "中和區"):
     """3.18 天氣現況（相容端點，回 mock 摘要）。逐站即時請改用 /weather/by-location。"""
+    from api.stations import _require_mock
+    _require_mock("區域天氣摘要")
     return get_mock()["weather"]
