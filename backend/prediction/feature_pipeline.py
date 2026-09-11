@@ -543,6 +543,25 @@ def build_training_frame(
             frame["station_turnover"], bins=[-1, lo, hi, float("inf")],
             labels=["low", "mid", "high"]).astype("string").fillna("low")
 
+    # ADR-126：未受供給限制的需求估計用的凍結統計——該站訓練期「未觸底時」同一
+    # （放假型態 × 時段）的流出／流入量中位數。站點空著時觀測到的 Δ 是被壓抑的，
+    # 但這個站在「沒空的時候」流出多少是可以直接量測的，用它當被壓抑需求的估計。
+    # ★不進 feature_cols：這是輸出用的統計，不是模型輸入（ADR-122 §4 輸出語意界線）。
+    uncensored = frame[fit & (frame["available_bikes"] > 0) & (frame["available_docks"] > 0)]
+    if len(uncensored):
+        outflow = (-uncensored["delta_1step"]).clip(lower=0)
+        inflow = uncensored["delta_1step"].clip(lower=0)
+        demand = uncensored.assign(_out=outflow, _in=inflow).groupby(
+            ["station_key", "dtype", "time_slot"]).agg(
+            slot_outflow_p50=("_out", "median"), slot_inflow_p50=("_in", "median"),
+            slot_uncensored_n=("_out", "size")).reset_index()
+        frame = frame.merge(demand, on=["station_key", "dtype", "time_slot"], how="left")
+    else:
+        for col in ("slot_outflow_p50", "slot_inflow_p50"):
+            frame[col] = np.nan
+        frame["slot_uncensored_n"] = 0
+    frame["slot_uncensored_n"] = frame["slot_uncensored_n"].fillna(0).astype(int)
+
     feature_cols = [
         *LAG_SLOTS.keys(), "change_1hr", "change_2hr",
         "available_bikes", "available_docks", "total_docks",

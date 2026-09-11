@@ -105,10 +105,56 @@ def export_frame(frame, feature_cols):
     for key, group in frame.groupby("station_key", sort=False):
         features = {c: float(group[c].iloc[0]) if pd.notna(group[c].iloc[0]) and np.isfinite(group[c].iloc[0]) else None for c in names}
         slots = group[["is_weekend", "time_slot", "station_slot_p50"]].drop_duplicates(["is_weekend", "time_slot"])
-        result[str(key)] = {"features": features, "slots": {
+        entry = {"features": features, "slots": {
             f"{int(r.is_weekend)}:{int(r.time_slot)}": float(r.station_slot_p50) if pd.notna(r.station_slot_p50) and np.isfinite(r.station_slot_p50) else None
             for r in slots.itertuples()}}
+        # ADR-126：未觸底時的同時段流量（估計被壓抑的需求用）。欄位不存在的舊管線自動略過。
+        demand_cols = ["is_weekend", "time_slot", "slot_outflow_p50", "slot_inflow_p50", "slot_uncensored_n"]
+        if all(c in group.columns for c in demand_cols):
+            rows = group[demand_cols].drop_duplicates(["is_weekend", "time_slot"])
+            entry["demand"] = {
+                f"{int(r.is_weekend)}:{int(r.time_slot)}": {
+                    "out": float(r.slot_outflow_p50) if pd.notna(r.slot_outflow_p50) and np.isfinite(r.slot_outflow_p50) else None,
+                    "in": float(r.slot_inflow_p50) if pd.notna(r.slot_inflow_p50) and np.isfinite(r.slot_inflow_p50) else None,
+                    "n": int(r.slot_uncensored_n) if pd.notna(r.slot_uncensored_n) else 0,
+                } for r in rows.itertuples()}
+        result[str(key)] = entry
     return result
+
+
+def unconstrained_demand(station, bundle, action):
+    """ADR-126：估計被物理邊界壓抑的真實需求（站內自比，不跨站外推）。
+
+    只有在站點觸底（補車時空站／取車時滿站）才給估計；站況正常時觀測本身沒被壓抑，回 None。
+    樣本不足時回 (None, "insufficient_samples")——不得在樣本不足時給看起來很確定的數字。
+    回 (值或 None, 依據字串)。
+    """
+    from config_loader import get_config
+    cfg = get_config()
+    if not cfg.get("prediction", {}).get("輸出未受限需求估計", False):
+        return None, None
+    available = float(station.get("available_bikes", 0) or 0)
+    docks = float(station.get("available_docks", 0) or 0)
+    at_empty, at_full = available <= 0, docks <= 0
+    if not ((action == "補車" and at_empty) or (action == "取車" and at_full)):
+        return None, "not_censored"
+    try:
+        key = station_key(station)
+        asof = parse_time(station.get("observed_at") or station.get("timestamp")).astimezone(TAIPEI)
+    except (ValueError, TypeError, KeyError):
+        return None, "insufficient_samples"
+    dayoff = bundle.get("dayoff", {}).get(asof.strftime("%Y%m%d"))
+    if dayoff is None:
+        return None, "insufficient_samples"
+    slot = asof.hour * 2 + int(asof.minute >= 30)
+    entry = bundle.get("stations", {}).get(key, {}).get("demand", {}).get(f"{int(dayoff)}:{slot}")
+    minimum = cfg.get("prediction", {}).get("需求估計最小樣本數", 8)
+    if not entry or entry.get("n", 0) < minimum:
+        return None, "insufficient_samples"
+    value = entry.get("out") if action == "補車" else entry.get("in")
+    if value is None or not math.isfinite(value):
+        return None, "insufficient_samples"
+    return round(float(value), 1), "station_slot_uncensored"
 
 
 def save_bundle(model_dir, feature_cols, stations, train_start, train_end, provenance):
