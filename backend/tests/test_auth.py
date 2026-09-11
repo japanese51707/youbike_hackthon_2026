@@ -16,11 +16,11 @@ def test_confirm_rejects_operator_role(client):
     assert r.status_code == 403
 
 
-def test_confirm_allows_dispatcher(client):
-    """派發確認：dispatcher 角色 → 200。"""
+def test_confirm_dispatcher_still_requires_valid_draft(client):
+    """有角色仍須有效草稿，不能用 recommendation_ids 得到 mock 成功。"""
     r = client.post("/api/v1/dispatch/confirm",
                     json={"recommendation_ids": ["X"]}, headers=OP_DISPATCHER)
-    assert r.status_code == 200
+    assert r.status_code == 422
 
 
 def test_fake_operator_id_rejected(client):
@@ -32,11 +32,15 @@ def test_fake_operator_id_rejected(client):
 
 
 def test_optimization_approve_only_maintainer(client):
-    """②最適化 approve：只有 maintainer 能過，dispatcher 越權 403。"""
+    """②最適化 approve：只有 maintainer 能過，dispatcher 越權 403。
+
+    ADR-304：approve 改為必帶 review_id，故 maintainer 不帶 body 是 422（通過授權、輸入不合法），
+    與 dispatcher 的 403（授權就被擋）語意不同。
+    """
     r_disp = client.post("/api/v1/optimization/daily-review/approve", headers=OP_DISPATCHER)
     assert r_disp.status_code == 403
     r_maint = client.post("/api/v1/optimization/daily-review/approve", headers=OP_MAINTAINER)
-    assert r_maint.status_code == 200
+    assert r_maint.status_code == 422
 
 
 def test_readonly_endpoints_no_auth(client):

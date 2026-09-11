@@ -15,7 +15,8 @@ from __future__ import annotations
 from typing import Optional
 
 from .param_layers import get_effective_params
-from .versioning import set_base, commit_optimized, list_history, rollback
+from .versioning import (set_base, commit_optimized, commit_optimized_batch,
+                         list_history, rollback)
 
 
 def get_current(station_id: str) -> Optional[dict]:
@@ -30,5 +31,5 @@ def get_history(station_id: str) -> list[dict]:
 
 __all__ = [
     "get_current", "get_history", "rollback",
-    "set_base", "commit_optimized",
+    "set_base", "commit_optimized", "commit_optimized_batch",
 ]

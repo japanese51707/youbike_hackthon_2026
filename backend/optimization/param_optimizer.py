@@ -16,6 +16,13 @@
 偏差歸因（ADR-120）：先扣環境、再看基礎——
   晴天平日偏差 → 調基礎係數；特定情境（雨天）殘差 → 調該情境敏感度係數。
 
+ADR-304 補充（第三批 C）：
+  - 狀態必須可區分：status ∈ {ok, no_data, insufficient_samples, failed}，各附 reason。
+    計算失敗不得偽裝成「沒有資料」；樣本不足不得靜默跳過。
+  - review_id 為不可猜測識別（uuid4），供 approve 綁定與冪等比對。
+  - 本模組產出的係數「仍未」被 rule_engine／dispatcher／prediction 讀取（ADR-120 做法 Y），
+    effective_note 為誠實標記，並由 tests/test_optimizer_apply.py 固定此事實。
+
 對外暴露：
     compute_daily_review(review_date, lookback_days) -> dict   # daily-review 建議清單
 """
@@ -23,6 +30,7 @@
 from __future__ import annotations
 import datetime as _dt
 from typing import Optional
+from uuid import uuid4
 
 from config_loader import get_config
 
@@ -62,40 +70,51 @@ def compute_daily_review(
     max_pct = float(cfg.get("單次最大調幅百分比", 10))
     review_date = review_date or _dt.date.today().isoformat()
 
-    try:
-        changes = _analyze_stations(lookback, max_pct)
-    except Exception as e:   # 資料不可用時不中斷，回空建議 + 標明
+    def _envelope(status, reason, changes=None, diag=None):
+        changes = changes or []
+        all_pcts = [abs(p["change_pct"]) for c in changes for p in c["params"]]
         return {
-            "review_id": f"REV-{review_date.replace('-', '')}",
-            "review_date": review_date, "lookback_days": lookback,
-            "summary": {"total_stations_adjusted": 0, "avg_change_pct": 0,
-                        "significant_count": 0},
-            "station_changes": [], "status": "no_data",
-            "note": f"偏差資料不可用（{type(e).__name__}），無建議",
-            "effective_note": "做法Y:建議層,調整係數生效接線待補(ADR-120尚未解決項)",
+            "review_id": f"REV-{review_date.replace('-', '')}-{uuid4().hex}",
+            "review_date": review_date,
+            "lookback_days": lookback,
+            "summary": {
+                "total_stations_adjusted": len(changes),
+                "avg_change_pct": round(sum(all_pcts) / len(all_pcts), 1) if all_pcts else 0,
+                "significant_count": len([c for c in changes if c.get("is_significant")]),
+            },
+            "station_changes": changes,
+            "status": status,          # ok / no_data / insufficient_samples / failed
+            "reason": reason,
+            "diagnostics": diag or {},
+            "effective_note": ("做法Y:建議層,調整係數存 ai_optimized 版本;"
+                               "尚未被 rule_engine/dispatcher/prediction 讀取(ADR-120 未解決項)"),
         }
 
+    try:
+        changes, diag = _analyze_stations(lookback, max_pct)
+    except Exception as exc:   # ADR-304：計算失敗必須明說失敗，不得偽裝成沒有資料
+        return _envelope("failed", f"偏差計算失敗：{type(exc).__name__}: {exc}",
+                         diag={"stage": "analyze"})
+
+    if diag.get("rows", 0) == 0 or diag.get("stations_considered", 0) == 0:
+        return _envelope("no_data", "歷史來源沒有可用資料列", diag=diag)
+
     adjusted = [c for c in changes if c["params"]]
-    all_pcts = [abs(p["change_pct"]) for c in adjusted for p in c["params"]]
-    avg_pct = round(sum(all_pcts) / len(all_pcts), 1) if all_pcts else 0
-    significant = [c for c in adjusted if c.get("is_significant")]
+    if not adjusted:
+        if diag.get("skipped_insufficient", 0) > 0:
+            return _envelope(
+                "insufficient_samples",
+                f"有資料但所有站的情境樣本數皆低於門檻 {_MIN_SAMPLES}，不產生建議",
+                diag=diag)
+        return _envelope("ok", "有足夠樣本，但沒有站達到建議調整門檻", diag=diag)
 
-    return {
-        "review_id": f"REV-{review_date.replace('-', '')}",
-        "review_date": review_date,
-        "lookback_days": lookback,
-        "summary": {
-            "total_stations_adjusted": len(adjusted),
-            "avg_change_pct": avg_pct,
-            "significant_count": len(significant),
-        },
-        "station_changes": adjusted,
-        "status": "pending_approval",
-        "effective_note": "做法Y:建議層,調整係數存ai_optimized版本;生效接線待補(ADR-120尚未解決項)",
-    }
+    env = _envelope("ok", f"產生 {len(adjusted)} 站調整建議", adjusted, diag)
+    env["status"] = "ok"
+    env["approval_state"] = "pending_approval"
+    return env
 
 
-def _analyze_stations(lookback: int, max_pct: float) -> list[dict]:
+def _analyze_stations(lookback: int, max_pct: float) -> tuple[list[dict], dict]:
     """用 S3 歷史，分情境算各站偏差 → 調整係數建議。
 
     偏差定義：以站點自身歷史為基準——「近 lookback 天各情境的平均淨流出」相對
@@ -111,6 +130,10 @@ def _analyze_stations(lookback: int, max_pct: float) -> list[dict]:
 
     h = HistoricalDataSource()
     df = h._df().copy()
+    diag = {"rows": int(len(df)), "stations_considered": 0,
+            "skipped_insufficient": 0, "skipped_flat": 0, "skipped_stations": []}
+    if df.empty:
+        return [], diag
     df["dt"] = pd.to_datetime(df["timestamp"])
     df = df.sort_values(["station_id", "dt"])
     df["delta"] = df.groupby("station_id")["available_bikes"].diff()
@@ -126,6 +149,7 @@ def _analyze_stations(lookback: int, max_pct: float) -> list[dict]:
     # 只對「近期有足夠樣本」的站算（避免全 1576 站慢；取周轉較高的站示範，可調）
     active_stations = (df.groupby("station_id")["outflow"].sum()
                        .sort_values(ascending=False).head(200).index)
+    diag["stations_considered"] = int(len(active_stations))
 
     for sid in active_stations:
         g = df[df["station_id"] == sid]
@@ -136,7 +160,12 @@ def _analyze_stations(lookback: int, max_pct: float) -> list[dict]:
         base_mask = ~g["is_weekend"]
         recent_base = g[base_mask & g["is_recent"]]["outflow"]
         all_base = g[base_mask]["outflow"]
-        if len(recent_base) >= _MIN_SAMPLES and all_base.mean() > 0.05:
+        enough_base = len(recent_base) >= _MIN_SAMPLES
+        if not enough_base:
+            pass
+        elif not all_base.mean() > 0.05:
+            diag["skipped_flat"] += 1
+        if enough_base and all_base.mean() > 0.05:
             ratio = recent_base.mean() / all_base.mean()
             if abs(ratio - 1.0) >= 0.05:   # 偏差 ≥5% 才建議調
                 old = 1.0
@@ -153,7 +182,10 @@ def _analyze_stations(lookback: int, max_pct: float) -> list[dict]:
         we_mask = g["is_weekend"]
         recent_we = g[we_mask & g["is_recent"]]["outflow"]
         all_we = g[we_mask]["outflow"]
-        if len(recent_we) >= _MIN_SAMPLES and all_we.mean() > 0.05:
+        enough_we = len(recent_we) >= _MIN_SAMPLES
+        # 兩個情境都因樣本數不足而無法評估 → 該站標為樣本不足（ADR-304 不得靜默跳過）
+        insufficient = not enough_base and not enough_we
+        if enough_we and all_we.mean() > 0.05:
             ratio_we = recent_we.mean() / all_we.mean()
             if abs(ratio_we - 1.0) >= 0.05:
                 old = 1.0
@@ -172,5 +204,12 @@ def _analyze_stations(lookback: int, max_pct: float) -> list[dict]:
                 "is_significant": any(abs(p["change_pct"]) >= max_pct * 0.8 for p in params),
                 "params": params,
             })
+        elif insufficient:
+            # ADR-304：樣本不足不得靜默跳過，逐站記錄原因
+            diag["skipped_insufficient"] += 1
+            if len(diag["skipped_stations"]) < 50:
+                diag["skipped_stations"].append(
+                    {"station_id": str(sid), "reason": "insufficient_samples",
+                     "min_samples": _MIN_SAMPLES})
 
-    return changes
+    return changes, diag

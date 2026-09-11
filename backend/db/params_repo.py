@@ -13,7 +13,7 @@ import datetime as _dt
 import json
 from typing import Optional
 
-from db.connection import get_connection
+from db.connection import commit, get_connection
 
 
 def _now() -> str:
@@ -55,7 +55,7 @@ def save_version(
          json.dumps(conditions or [], ensure_ascii=False), reason, _now(),
          1 if make_active else 0),
     )
-    conn.commit()
+    commit(conn)
     return get_version(station_id, version)
 
 
@@ -99,7 +99,7 @@ def activate_version(station_id: str, version: str) -> Optional[dict]:
     conn.execute(
         "UPDATE station_params SET is_active = 1 WHERE station_id = ? AND version = ?",
         (station_id, version))
-    conn.commit()
+    commit(conn)
     return get_active(station_id)
 
 
@@ -109,4 +109,4 @@ def set_override_active(station_id: str, active: bool) -> None:
     conn.execute(
         "UPDATE station_params SET override_active = ? WHERE station_id = ? AND is_active = 1",
         (1 if active else 0, station_id))
-    conn.commit()
+    commit(conn)
