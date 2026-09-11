@@ -13,7 +13,7 @@
 
 # ── 資料源（NFR-7 可抽換）──
 data_source:
-  mode: "mock"              # mock / historical / tdx / youbike_official（現場改這裡切換）
+  mode: "youbike_official"  # mock / historical / tdx / youbike_official（現場改這裡切換）
   tdx_api_key: ""           # 若用 TDX，正式環境填（勿寫進版控，用環境變數）
   youbike_official_url: ""  # 若現場用 YouBike 公司自己的即時源，填這裡
   refresh_interval_sec: 60  # 多久抓一次即時資料

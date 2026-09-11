@@ -3,6 +3,7 @@ import ReactECharts from "echarts-for-react";
 import {
   areaTypeLabels,
   formatDateTime,
+  formatStationTime,
   freshnessLabels,
   stationStatusLabels,
 } from "../../utils/formatters.js";
@@ -201,8 +202,19 @@ export default function StationDrawer({ open, onClose, detail, loading, error, w
             <Descriptions.Item label="資料新鮮度">
               {freshnessLabels[current.data_freshness] ?? current.data_freshness ?? "—"}
             </Descriptions.Item>
-            <Descriptions.Item label="資料時間">
-              {formatDateTime(current.timestamp)}
+            <Descriptions.Item label="資料源更新">
+              <span className="mono">
+                {current.source_timestamp
+                  ? formatStationTime({ source_timestamp: current.source_timestamp })
+                  : "—"}
+              </span>
+            </Descriptions.Item>
+            <Descriptions.Item label="系統取得">
+              <span className="mono">
+                {current.timestamp
+                  ? formatStationTime({ timestamp: current.timestamp })
+                  : "—"}
+              </span>
             </Descriptions.Item>
           </Descriptions>
 

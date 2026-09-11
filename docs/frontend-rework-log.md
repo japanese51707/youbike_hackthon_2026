@@ -214,3 +214,39 @@
 - 確認送出真環境需 dispatcher 權限；mock 僅本機展示，不進 payload、不寫 DB。
 - **站數完全動態**：後端給幾站畫幾站（地圖／清單／KPI 皆不寫死），不提供站點增刪 UI。
 - 本分支只做調度面板；跨頁「司機接走」與後端串接不在此範圍。
+
+---
+
+## 後端接線探索 · 調度面板站點接真實 API（spike）
+
+- 狀態：站點已接後端並可用；其餘資料因外部依賴未接。探索性 spike，尚未立正式前端資料層 ADR。
+- 目的：讓調度面板站點改吃後端 `GET /stations`，實測「不串 mock、走真後端」現在能到什麼地步。
+
+### 做了什麼
+
+| # | 項目 | 動作 | 結果 |
+|---|---|---|---|
+| 1 | 本機跑後端 | `.venv` 裝後端依賴（fastapi/uvicorn/pydantic/pyyaml/bcrypt/httpx，後續加 lightgbm/numpy/pandas/pyarrow/boto3）；`uvicorn main:app --app-dir backend :8000` | 後端可啟動 |
+| 2 | 資料源切換 | `config.yaml` `data_source.mode` 由 `mock` 改 `youbike_official`（新北開放資料，公開、無金鑰、無個資） | `GET /stations` 回**全新北 ~1600 站即時** |
+| 3 | 前端 gated 接線 | 新增 `api/apiConfig.js`（baseUrl＋`useBackendStations` 開關，可用 `VITE_API_BASE`/`VITE_BACKEND_STATIONS` 覆寫）、`api/backendStations.js`（fetch＋容錯正規化，缺欄位站點過濾不假造）；改寫 `api/stationsApi.js`：站點抓後端、**失敗安全退回 mock 並標明原因**，其餘（建議/警示/車輛/KPI/天氣）仍 mock | 站點走真後端、其餘 mock；工具列顯示「站點來源：後端 API/Mock」 |
+| 4 | 每站資料時間 | `formatters.js` 加 `parseStationTime`/`formatStationTime`（支援 ISO 與 `YYYYMMDDThhmmss` 緊湊格式）；地圖 tooltip 底部＋單站抽屜顯示**該站自己的** source_timestamp（資料源更新）與 timestamp（系統取得）；工具列另顯示整批最新時間 | 每站各自時間，非統一值 |
+| 5 | 修模型檔換行 bug | 見下方「LightGBM 模型檔 CRLF 修正」 | 12 模型可正常載入 |
+
+### LightGBM 模型檔 CRLF 修正（真 bug，對團隊有效）
+- 現象：`GET /dispatch/recommendations` / `/alerts` 一律 500，log 為 `[LightGBM] [Fatal] Model format error, expect a tree here`。
+- 根因：repo `core.autocrlf=true` 且模型檔無 `.gitattributes` 規範；`backend/prediction/_models/*.txt`（LightGBM 序列化樹）在 Windows 檢出時 LF 被轉 CRLF，破壞數值樹結構，lightgbm 解析失敗。
+- 修正：新增 `.gitattributes` 將模型檔標為 `-text`（二進位，Git 不做換行正規化），另標 `*.parquet/*.pkl/*.joblib` 為 binary。`git checkout` 重新以純 LF 檢出後，12 個模型（4 視野 × P10/P50/P90）全部載入正常（各 300 樹、45 特徵）。
+
+### 現在的真假狀態（誠實）
+- ✅ **真的**：調度面板**站點**（`GET /stations`，~1600 站即時，含每站資料時間）。
+- ⛔ **想接但被外部依賴擋住**：
+  - `GET /dispatch/recommendations`（需調度清單的**緊急度/排序**）、`GET /alerts`（**警示**）：模型已可載入，但真預測要算 lag 特徵 → 需 **S3 歷史資料**（`youbike-hackathon-2026`），本機**無 AWS 憑證**，1600 站逐站打 S3 會卡死。
+  - `GET /stations/{id}`（單站**歷史曲線/預測**）：現行資料源 `youbike_official` 為即時源，**不提供歷史查詢**（後端明示歷史請用 historical 源），故詳情端點 500。
+  - 共同根因：真預測/警示綁 S3 歷史資料，缺 S3 憑證。屬後端/資料面，非前端可解。
+- 🟡 **接了也還是假**（後端本身回 mock）：`GET /kpi`、`GET /weather`、`GET /operators`、`/stations/heatmap`、`/simulation/replay`；車輛無端點。
+- 前端現況：站點真實；**緊急度分數、警示、車輛、KPI、天氣仍為前端 mock/heuristic**。
+
+### 尚未決定 / 下一步
+- 若取得 AWS 憑證（放 `.env`、環境變數、不進版控）→ 資料源可切 `historical` 或讓預測讀 S3，規則引擎即可跑真緊急度/警示。
+- 本前端接線目前為 gated spike；若確定保留為正式方案，需補一支前端資料層（mock/http 切換、身分來源、失敗降級）的 proposed ADR（2xx 號段）。
+- 注意：`config.yaml` 的 `data_source.mode` 改為 `youbike_official` 是**全系統預設資料源切換**（影響團隊）；本次為展示切換，是否維持為預設待團隊決定。

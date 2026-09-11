@@ -7,7 +7,11 @@ import { createVoronoiLayer } from "../map/layers/voronoiLayer.js";
 import { createDensityLayer } from "../map/layers/densityLayer.js";
 import { createPlanRouteLayers } from "../map/layers/planLayers.js";
 import presentationConfig from "../../config/presentation.json";
-import { areaTypeLabels, stationStatusLabels } from "../../utils/formatters.js";
+import {
+  areaTypeLabels,
+  formatStationTime,
+  stationStatusLabels,
+} from "../../utils/formatters.js";
 import {
   deriveStationTags,
   getStationElevation,
@@ -37,6 +41,7 @@ function buildTooltipHtml(station) {
   const stale = station.data_freshness && station.data_freshness !== "live";
   const elevation = getStationElevation(station);
   const tags = deriveStationTags(station);
+  const dataTime = formatStationTime(station);
 
   return `
     <div style="font-family:'Noto Sans TC',sans-serif;min-width:210px">
@@ -57,6 +62,7 @@ function buildTooltipHtml(station) {
         <span>可還 ${Number(station.available_docks) || 0}</span>
         <span>${ratio}%／${capacity}</span>
       </div>
+      <div style="margin-top:6px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:#8ea0b5">資料時間 ${dataTime}</div>
     </div>
   `;
 }

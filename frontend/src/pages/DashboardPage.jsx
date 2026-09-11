@@ -1,5 +1,9 @@
-import { CloudOutlined, EnvironmentOutlined } from "@ant-design/icons";
-import { Card, Select, Space, Tag, Typography } from "antd";
+import {
+  ClockCircleOutlined,
+  CloudOutlined,
+  EnvironmentOutlined,
+} from "@ant-design/icons";
+import { Card, Select, Space, Tag, Tooltip, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AsyncState from "../components/common/AsyncState.jsx";
 import MetricCard from "../components/common/MetricCard.jsx";
@@ -15,6 +19,7 @@ import {
   estimateQuantity,
   stationUrgency,
 } from "../utils/tripPlanner.js";
+import { parseStationTime } from "../utils/formatters.js";
 
 const statusOptions = [
   { value: "all", label: "全部狀態" },
@@ -26,6 +31,18 @@ const statusOptions = [
 ];
 
 const ACTION_STATUS = new Set(["empty", "low", "high", "full"]);
+
+function formatClock(date) {
+  if (!date) return "—";
+  return date.toLocaleString("zh-TW", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
 
 // 送出後的狀態生命週期示意推進：assigned → accepted → in_progress（逐站完成）→ completed。
 function advanceOrder(order) {
@@ -61,6 +78,20 @@ export default function DashboardPage() {
     () => [...new Set(stations.map((s) => s.district))].sort(),
     [stations],
   );
+
+  // 站點資料時間：取這批站點中最新的 source_timestamp（資料源更新時間）
+  // 與 timestamp（系統取得時間），讓調派員知道「看到的是幾點的站況」。
+  const dataTime = useMemo(() => {
+    let src = null;
+    let fetched = null;
+    for (const s of stations) {
+      const sp = parseStationTime(s.source_timestamp);
+      const ft = parseStationTime(s.timestamp);
+      if (sp && (!src || sp > src)) src = sp;
+      if (ft && (!fetched || ft > fetched)) fetched = ft;
+    }
+    return { src, fetched };
+  }, [stations]);
 
   const filteredStations = useMemo(
     () =>
@@ -210,6 +241,24 @@ export default function DashboardPage() {
           <div className="dashboard-toolbar">
             <Typography.Title level={2}>調度決策儀表板</Typography.Title>
             <Space wrap size={8}>
+              <Tag color={dashboard.data.stationsSource === "backend" ? "green" : "gold"}>
+                站點來源：{dashboard.data.stationsSource === "backend" ? "後端 API" : dashboard.data.stationsSource}
+              </Tag>
+              {dataTime.src || dataTime.fetched ? (
+                <Tooltip
+                  title={
+                    <span className="mono">
+                      資料源更新：{formatClock(dataTime.src)}
+                      <br />
+                      系統取得：{formatClock(dataTime.fetched)}
+                    </span>
+                  }
+                >
+                  <Tag icon={<ClockCircleOutlined />} color="default">
+                    資料時間 {formatClock(dataTime.src ?? dataTime.fetched)}
+                  </Tag>
+                </Tooltip>
+              ) : null}
               <Tag icon={<EnvironmentOutlined />}>{dashboard.data.weather.district}</Tag>
               <Tag icon={<CloudOutlined />} color="blue">
                 {dashboard.data.weather.description}｜{dashboard.data.weather.temperature}°C
