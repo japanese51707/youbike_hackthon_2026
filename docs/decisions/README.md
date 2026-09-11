@@ -54,6 +54,9 @@
 | [ADR-122](ADR-122-時序評估協議與標籤完整性.md) | 時序評估協議與標籤完整性 | accepted | prediction, evaluation, data | 第三批A；supersedes ADR-106；逐fold擬合／依目標時間切分／補值與整段介入遮罩／輸出語意為淨變化非需求；不覆蓋現行上線模型 |
 | [ADR-123](ADR-123-路線載量守恆與逐站到達可行性.md) | 路線載量守恆與逐站到達可行性 | accepted | dispatch, database, prediction | 第三批B；車輛初始載量可追溯（未知擋確認）／逐站載量守恆／各站對應預測視野／班別工時與任務重疊；預覽與確認共用驗證 |
 | [ADR-304](ADR-304-派工可行性閘門與最適化套用一致性.md) | 派工可行性閘門與最適化套用一致性 | accepted | api, dispatch, optimization, database | 第三批B4+C；預覽回 blocking_reasons／optimizer 四種狀態語意／approve 綁 review_id 冪等且全成或全退／回滾驗證；係數仍不生效（ADR-120 做法Y） |
+| [ADR-124](ADR-124-最適化調整係數的生效接線.md) | 最適化調整係數的生效接線 | accepted | dispatch, optimization, prediction | 第四批；係數乘在 ADR-115 動態目標水位的預期流量項；off/shadow/on 三態預設 off；累積絕對護欄 0.8~1.25；建議帶生效版本與係數 |
+| [ADR-125](ADR-125-預測區間的conformal校準.md) | 預測區間的 conformal 校準 | accepted | prediction, dispatch | 第四批；CQR 修條件覆蓋率（Δ≠0 僅 67.9~75.3%）；校準集取訓練期尾端不得重疊；偏移成套存 conformal.json；預設關 |
+| [ADR-126](ADR-126-未受供給限制的需求估計.md) | 未受供給限制的需求估計 | accepted | prediction, data | 第四批；站內自比（不跨站外推）；獨立欄位輸出、不進觸發與派工量；凍結統計進模型包；預設關 |
 
 ## 新決策流程
 
