@@ -184,10 +184,27 @@ def test_rollback_conflict_when_not_effective(monkeypatch):
         rollback("S-RB2", base["version"], "OP-003")
 
 
+# ── 生效模式對前端可見（ADR-124/304 §7）──
+
+def test_daily_review_exposes_coefficient_mode(client, stub_review):
+    """前端要靠這個欄位決定怎麼描述「核准」的效果，不能自己猜。"""
+    from config_loader import get_config
+    review = _fetch(client, stub_review)
+    assert review["coefficient_mode"] == "off"          # config 預設
+    get_config()["optimization"]["係數套用模式"] = "shadow"
+    try:
+        assert _fetch(client, stub_review)["coefficient_mode"] == "shadow"
+    finally:
+        get_config()["optimization"]["係數套用模式"] = "off"
+
+
 # ── 誠實標記：係數仍未生效（ADR-120 做法 Y / ADR-304 第 7 條）──
 
-def test_approved_coefficients_do_not_change_rule_engine(client, stub_review):
-    """approve 後規則引擎輸出不變——把「係數尚未被消費」固定成可回歸的事實。"""
+def test_approved_coefficients_do_not_change_rule_engine_when_mode_off(client, stub_review):
+    """off 模式下 approve 後規則引擎輸出不變——把「不生效就是不生效」固定成可回歸的事實。
+
+    ADR-124 讓係數「可以」生效，但預設仍是 off；這個測試守住預設行為。
+    """
     from core.rule_engine import evaluate_station
     station = {"station_id": "S-A", "station_name": "站S-A", "district": "板橋區",
                "available_bikes": 1, "available_docks": 19, "total_docks": 20,

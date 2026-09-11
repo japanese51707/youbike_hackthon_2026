@@ -67,7 +67,11 @@ def daily_review(review_date: str | None = None, lookback_days: int | None = Non
     ok / no_data / insufficient_samples / failed（ADR-304）。
     """
     from optimization.param_optimizer import compute_daily_review
-    return _remember(compute_daily_review(review_date, lookback_days))
+    from params import current_mode
+    review = compute_daily_review(review_date, lookback_days)
+    # ADR-124/304：讓前端能誠實顯示「核准後到底會不會影響調度」，不靠前端自己猜
+    review["coefficient_mode"] = current_mode()
+    return _remember(review)
 
 
 @router.post("/optimization/daily-review/station/{station_id}")

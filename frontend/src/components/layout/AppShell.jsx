@@ -4,6 +4,7 @@ import {
   DeploymentUnitOutlined,
   MobileOutlined,
   ReloadOutlined,
+  SlidersOutlined,
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Select, Space, Tag, Typography, message } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -15,6 +16,7 @@ import { isApiMode, request, getActorId, setActorId } from "../../api/httpClient
 const navigation = [
   { key: "/dashboard", icon: <DashboardOutlined />, label: "調度面板" },
   { key: "/driver", icon: <MobileOutlined />, label: "司機手機端" },
+  { key: "/optimization", icon: <SlidersOutlined />, label: "最適化審核" },
   { key: "/overview", icon: <BarChartOutlined />, label: "長官導覽面板" },
   { key: "/twin", icon: <DeploymentUnitOutlined />, label: "數位孿生戰情室" },
 ];
