@@ -5,9 +5,12 @@ import {
   MobileOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { Button, Layout, Menu, Space, Tag, Typography, message } from "antd";
+import { Button, Layout, Menu, Select, Space, Tag, Typography, message } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import { resetDemoData } from "../../api/operationsApi.js";
+
+import { useEffect, useState } from "react";
+import { isApiMode, request, getActorId, setActorId } from "../../api/httpClient.js";
 
 const navigation = [
   { key: "/dashboard", icon: <DashboardOutlined />, label: "調度面板" },
@@ -17,6 +20,11 @@ const navigation = [
 ];
 
 export default function AppShell({ children }) {
+  const [operators, setOperators] = useState([]);
+  const [operatorError, setOperatorError] = useState("");
+  useEffect(() => {
+    if (isApiMode) request("/operators").then(setOperators).catch(error => setOperatorError(error.message));
+  }, []);
   const location = useLocation();
   const navigate = useNavigate();
   const [messageApi, contextHolder] = message.useMessage();
@@ -46,18 +54,24 @@ export default function AppShell({ children }) {
           onClick={({ key }) => navigate(key)}
         />
         <Space className="demo-actions">
-          <Tag color="gold">MOCK DEMO</Tag>
+          <Tag color={isApiMode ? "cyan" : "gold"}>{isApiMode ? "後端連線 · 受控 Demo" : "MOCK DEMO"}</Tag>
+          {isApiMode && <Select showSearch optionFilterProp="label" aria-label="操作身分"
+            placeholder={operatorError || "選擇操作身分"} value={getActorId() || undefined} style={{ width: 185 }}
+            options={operators.map(o => ({ value: o.operator_id, label: `${o.operator_id} · ${o.name} (${o.role})` }))}
+            onChange={id => { setActorId(id); window.location.reload(); }} />}
           <Button
             type="text"
             icon={<ReloadOutlined />}
-            onClick={handleReset}
+            onClick={isApiMode ? () => window.location.reload() : handleReset}
           >
-            重置
+            {isApiMode ? "重新整理" : "重置"}
           </Button>
         </Space>
       </header>
       <div className="mock-notice">
-        展示資料來自本機 Mock，不代表真實即時站況；前端操作不會寫入後端或資料庫。
+        {isApiMode && location.pathname !== "/twin"
+          ? "操作會寫入後端。請依資料來源與觀測時間判讀；此處的身分選擇僅供受控展示。"
+          : "此頁為本機 Mock 示範，不代表即時站況；操作僅影響展示資料。"}
       </div>
       <Layout.Content className="page-content">{children}</Layout.Content>
     </Layout>

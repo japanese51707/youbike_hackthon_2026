@@ -14,6 +14,8 @@ import {
   getStationElevation,
   PENDING_DATA_SOURCES,
 } from "../../config/stationEnrichment.js";
+import { isApiMode } from "../../api/httpClient.js";
+import BackendForecastChart from "./BackendForecastChart.jsx";
 import StationForecastChart from "./StationForecastChart.jsx";
 
 const weatherConditionLabels = {
@@ -28,6 +30,7 @@ const weatherConditionLabels = {
 // 其他區明確標示「無此區即時天氣 Mock」，不套用不相符的資料。
 function StationWeather({ station, weather }) {
   if (!weather) return null;
+  if (weather.available === false) return <Alert type="info" title="此站即時天氣尚未提供" />;
   const sameDistrict = station.district === weather.district;
 
   if (!sameDistrict) {
@@ -201,7 +204,8 @@ export default function StationDrawer({ open, onClose, detail, loading, error, w
             <Descriptions.Item label="資料新鮮度">
               {freshnessLabels[current.data_freshness] ?? current.data_freshness ?? "—"}
             </Descriptions.Item>
-            <Descriptions.Item label="資料時間">
+            <Descriptions.Item label="資料來源">{current.source || "Mock"}</Descriptions.Item>
+            <Descriptions.Item label="觀測時間">
               {formatDateTime(current.timestamp)}
             </Descriptions.Item>
           </Descriptions>
@@ -231,8 +235,8 @@ export default function StationDrawer({ open, onClose, detail, loading, error, w
             </Typography.Text>
           </div>
 
-          {/* 地理與流動 */}
-          <Descriptions title="地理與流動" column={2} size="small" bordered>
+          {/* 地理與流動：範例僅在 Mock 模式 */}
+          {!isApiMode && <Descriptions title="地理與流動" column={2} size="small" bordered>
             <Descriptions.Item label="海拔（範例）">
               {getStationElevation(current) != null ? (
                 <span className="mono">{getStationElevation(current)} m</span>
@@ -261,13 +265,15 @@ export default function StationDrawer({ open, onClose, detail, loading, error, w
             </Descriptions.Item>
           </Descriptions>
 
+          }
+
           {/* 環境 */}
           <StationWeather station={current} weather={weather} />
 
           {/* 未來預測（固定 +30／+60 展示曲線） */}
-          <StationForecastChart stationId={current.station_id} />
+          {isApiMode ? <BackendForecastChart current={current} prediction={detail.prediction} /> : <StationForecastChart stationId={current.station_id} />}
 
-          {detail.prediction ? (
+          {!isApiMode && (detail.prediction ? (
             <div className="drawer-stack">
               <Alert
                 type="warning"
@@ -282,21 +288,21 @@ export default function StationDrawer({ open, onClose, detail, loading, error, w
             </div>
           ) : (
             <Alert type="info" showIcon message="此站目前沒有 Mock 預測明細" />
-          )}
+          ))}
 
           <div>
             <Typography.Title level={5}>站點歷史</Typography.Title>
             {detail.history?.length ? (
               <ReactECharts option={historyOption(detail.history)} style={{ height: 260 }} />
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="此站沒有歷史 Mock" />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={isApiMode ? detail.history_status?.reason || "此範圍沒有歷史資料" : "此站沒有歷史 Mock"} />
             )}
           </div>
 
           <Alert
             type="info"
             showIcon
-            message="待接真實資料源"
+            message="加值屬性仍含推斷"
             description={
               <span>
                 以下屬性目前為範例／推斷或尚未提供，將由真實資料源取代：

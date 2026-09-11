@@ -7,8 +7,8 @@ export default function useAsyncResource(loader) {
     loading: true,
   });
 
-  const reload = useCallback(async () => {
-    setState((current) => ({ ...current, error: null, loading: true }));
+  const reload = useCallback(async ({ silent = false } = {}) => {
+    setState((current) => ({ ...current, error: null, loading: silent ? current.loading : true }));
     try {
       const data = await loader();
       setState({ data, error: null, loading: false });

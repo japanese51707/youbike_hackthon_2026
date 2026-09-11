@@ -1,3 +1,5 @@
+import BackendOverviewPage from "./BackendOverviewPage.jsx";
+import { isApiMode } from "../api/httpClient.js";
 import {
   CalendarOutlined,
   CheckCircleFilled,
@@ -59,7 +61,7 @@ function ServiceStat({ label, value, suffix, target, onClick }) {
   );
 }
 
-export default function OverviewPage() {
+function MockOverviewPage() {
   const operations = useOverviewData();
   const data = operations.data;
   const [modal, setModal] = useState(null);
@@ -359,4 +361,8 @@ export default function OverviewPage() {
       </div>
     </AsyncState>
   );
+}
+
+export default function OverviewPage() {
+  return isApiMode ? <BackendOverviewPage /> : <MockOverviewPage />;
 }

@@ -8,6 +8,8 @@ import DeficitRankingPanel from "../components/dashboard/DeficitRankingPanel.jsx
 import RecommendationPanel from "../components/dashboard/RecommendationPanel.jsx";
 import StationDrawer from "../components/dashboard/StationDrawer.jsx";
 import StationMap from "../components/dashboard/StationMap.jsx";
+import { isApiMode } from "../api/httpClient.js";
+import DataSourceNotice from "../components/common/DataSourceNotice.jsx";
 import useDashboardData from "../hooks/useDashboardData.js";
 
 const statusOptions = [
@@ -17,6 +19,7 @@ const statusOptions = [
   { value: "normal", label: "正常" },
   { value: "high", label: "偏高" },
   { value: "full", label: "滿站" },
+  { value: "offline", label: "停用／離線" },
 ];
 
 export default function DashboardPage() {
@@ -68,13 +71,14 @@ export default function DashboardPage() {
     >
       {dashboard.data ? (
         <div className="fixed-page">
+          {isApiMode && <DataSourceNotice stations={stations} />}
           {/* 精簡工具列：標題 + 天氣 + 地圖篩選 */}
           <div className="dashboard-toolbar">
             <Typography.Title level={2}>調度決策儀表板</Typography.Title>
             <Space wrap size={8}>
-              <Tag icon={<EnvironmentOutlined />}>{dashboard.data.weather.district}</Tag>
+              <Tag icon={<EnvironmentOutlined />}>{dashboard.data.weather.district || "全市站況"}</Tag>
               <Tag icon={<CloudOutlined />} color="blue">
-                {dashboard.data.weather.description}｜{dashboard.data.weather.temperature}°C
+                {dashboard.data.weather.description}{dashboard.data.weather.temperature != null ? `｜${dashboard.data.weather.temperature}°C` : ""}
               </Tag>
               <Select
                 size="small"
@@ -113,7 +117,7 @@ export default function DashboardPage() {
             <MetricCard title="滿站率" value={dashboard.data.kpi.full_rate} suffix="%" precision={2} tone="warning" />
             <MetricCard title="平均使用率" value={dashboard.data.kpi.avg_usage_rate} suffix="%" precision={1} />
             <MetricCard title="待調度站點" value={dashboard.data.kpi.stations_need_dispatch} suffix="站" tone="danger" />
-            <MetricCard title="全系統站點" value={dashboard.data.kpi.total_stations} suffix="站" note="地圖顯示 10 筆 Mock" />
+            <MetricCard title="全系統站點" value={dashboard.data.kpi.total_stations} suffix="站" note={`地圖顯示 ${filteredStations.length} 站`} />
           </div>
 
           {/* 主區：左地圖 / 右操作分頁（填滿、不捲動） */}

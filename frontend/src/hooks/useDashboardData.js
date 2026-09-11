@@ -7,10 +7,16 @@ import {
   getDashboardData,
   getStationDetail,
 } from "../api/stationsApi.js";
+import { isApiMode } from "../api/httpClient.js";
 import useAsyncResource from "./useAsyncResource.js";
 
 export default function useDashboardData() {
   const resource = useAsyncResource(getDashboardData);
+  useEffect(() => {
+    if (!isApiMode) return undefined;
+    const timer = setInterval(() => resource.reload({ silent: true }).catch(() => {}), 60000);
+    return () => clearInterval(timer);
+  }, [resource.reload]);
   const [selectedStationId, setSelectedStationId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [detailError, setDetailError] = useState(null);
@@ -43,8 +49,8 @@ export default function useDashboardData() {
   }, [selectedStationId, resource.data]);
 
   const handleConfirmRecommendation = useCallback(
-    async (recommendationId) => {
-      await confirmRecommendation(recommendationId);
+    async (draft) => {
+      await confirmRecommendation(draft);
       await resource.reload();
     },
     [resource.reload],

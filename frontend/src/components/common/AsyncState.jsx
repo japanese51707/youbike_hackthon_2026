@@ -4,7 +4,7 @@ export default function AsyncState({ loading, error, data, onRetry, children }) 
   if (loading) {
     return (
       <div className="center-state">
-        <Spin size="large" tip="載入 Mock 資料中…" />
+        <Spin size="large" tip="資料載入中…" />
       </div>
     );
   }
@@ -14,8 +14,8 @@ export default function AsyncState({ loading, error, data, onRetry, children }) 
       <Result
         status="error"
         title="資料載入失敗"
-        subTitle={error.message || "Mock 資料格式不正確"}
-        extra={<Button onClick={onRetry}>重新載入</Button>}
+        subTitle={error.message || "資料格式不正確"}
+        extra={<Button onClick={() => Promise.resolve(onRetry?.()).catch(() => {})}>重新載入</Button>}
       />
     );
   }

@@ -1,3 +1,5 @@
+import BackendDriverPage from "./BackendDriverPage.jsx";
+import { isApiMode } from "../api/httpClient.js";
 import {
   CompassOutlined,
   EnvironmentOutlined,
@@ -58,7 +60,7 @@ function fullNavUrl(from, route) {
   return base + waypoints;
 }
 
-export default function DriverPage() {
+function MockDriverPage() {
   const driver = useDriverData();
   const [messageApi, contextHolder] = message.useMessage();
   const [mode, setMode] = useState("pool");
@@ -316,4 +318,8 @@ export default function DriverPage() {
       </AsyncState>
     </div>
   );
+}
+
+export default function DriverPage() {
+  return isApiMode ? <BackendDriverPage /> : <MockDriverPage />;
 }
