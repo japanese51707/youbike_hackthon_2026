@@ -59,6 +59,7 @@
 | `/dispatch/build/from-station` | POST | 🟢 | 以站組草稿 + vehicle_candidates（body: station_id...） | 組單入口 b |
 | `/dispatch/build/emergency` | POST | 🟢 | 緊急組草稿 + resource_suggestion（body: station_ids[]） | 組單入口 c |
 | `/dispatch/confirm-trip` | POST | 🟢 | 草稿落地（需 dispatcher，body: draft） | 確認派發閘門 |
+| `/vehicles/{id}/onboard` | POST | 🟢 | 回報車上台數（ADR-123，值+來源+時間） | 載量回報 |
 | `/dispatch/confirm` | POST | 🔴 | （舊）確認結果 | 舊派發（改用 confirm-trip） |
 | `/dispatch/tasks/{id}/report` | POST | 🟢 | 逐站回報（body: station_id/actual_available） | 逐站回報 |
 | `/dispatch/tasks/{id}/stations/{sid}` | DELETE | 🟢 | 後台抽離個別站（需 dispatcher） | 後台介入 |
@@ -86,6 +87,49 @@
 | `basis` | str | 判斷依據（截斷訊號/區間下界/保底門檻/降級） |
 | `override_active` | bool | 是否被③即時覆寫（排序置頂） |
 | `lat` / `lng` | float | 座標 |
+
+---
+
+### 第三批新增（ADR-123／304）：組單草稿的可行性欄位
+
+build 三入口的回傳除了原有欄位，另帶：
+
+| 欄位 | 型別 | 意義 |
+|---|---|---|
+| `blocking_reasons` | array | 阻擋原因，每筆 `{code, message}`。**空陣列＝可以按確認**；非空＝確認會被 409 擋下，原因在預覽就看得到 |
+| `load_plan` | array | 逐站計畫：`seq` / `arrival_offset_min`（預估到達分鐘）/ `horizon_used_min`（該站採用的預測視野）/ `onboard_before` / `onboard_after`（車上台數） |
+| `onboard_start` / `onboard_end` | int/null | 出車、預估收車時的車上台數；`null` 代表車輛尚未回報載量 |
+
+`stations[]` 內每站也帶 `arrival_offset_min`、`horizon_used_min`、`onboard_after`。
+
+常見 `blocking_reasons.code`：
+
+| code | 意義 | 前端建議處理 |
+|---|---|---|
+| `vehicle_onboard_unknown` | 車輛未回報車上台數 | 引導先呼叫 `POST /vehicles/{id}/onboard` |
+| `vehicle_onboard_stale` | 載量回報過期（預設 240 分鐘） | 同上，請司機重新回報 |
+| `load_below_zero` | 途中要補的車比車上多 | 提示先裝載或改為先取後放 |
+| `load_exceeds_capacity` | 途中取車後超過車容量 | 減少站點或換大車 |
+| `total_quantity_exceeds_capacity` | 總搬運量超過車容量 | 減少站點 |
+| `stop_beyond_forecast_horizon` | 某站預估 120 分鐘後才到，超出預測視野 | 縮短路線 |
+| `cross_district_not_allowed` | 早／晚班不可跨區（緊急模式除外） | 改成同區或改走緊急入口 |
+| `labor_hours_exceeded` | 執行人員剩餘連續工時不足 | 換人或縮短本趟 |
+| `task_time_overlap` | 人／車與既有未結束任務時間重疊 | 換人車或等前一趟結束 |
+
+> ★重點：**`blocking_reasons` 非空就不要讓使用者按確認**。確認回的 409 訊息，一定是預覽裡已經出現過的其中一個原因。
+
+### 第三批新增（ADR-304）：最適化狀態與套用
+
+`GET /optimization/daily-review` 多回 `review_id`、`status`、`reason`、`diagnostics`。
+`status` 有四種：`ok` / `no_data`（沒有資料）/ `insufficient_samples`（樣本不足）/ `failed`（計算失敗）。
+只有 `ok` 可以套用，其餘按下 approve 會回 409。
+
+`POST /optimization/daily-review/approve` 的 body 必填 `{"review_id": "..."}`：
+缺少 422、不存在或過期 409、**同一個 review_id 重送會回原結果且不重複寫版本**。
+一次套用是全成或全退，不會出現部分成功。
+
+> ⚠️ 調整係數目前**仍未**進入即時調度判斷（ADR-120 做法 Y），回應的 `effective_note` 已標明；
+> 前端不要把「已套用」呈現成「調度行為已改變」。
 
 ---
 
@@ -175,7 +219,7 @@
 | `/events` | GET/POST/DELETE | 🔴 | 活動事件 | 活動影響 |
 | `/optimization/daily-review` | GET | 🟢 | optimizer 分情境偏差建議（調整係數）；做法Y建議層 | ②AI 最適化 |
 | `/optimization/daily-review/station/{id}` | POST | 🟢 | 逐站決定 accept/keep/re_adjust（需 maintainer） | 最適化決策 |
-| `/optimization/daily-review/approve` | POST | 🟢 | 核准→存 ai_optimized 版本（需 maintainer） | 套用最適化 |
+| `/optimization/daily-review/approve` | POST | 🟢 | 核准→存版本（需 maintainer，**body 必填 review_id**） | 套用最適化 |
 | `/optimization/daily-review/reject` | POST | 🟢 | 退回不留版本（需 maintainer） | 退回 |
 | `/weather/by-location?lat=&lng=` | GET | 🟢 | 該點最近雨量站+氣象站即時（見 §8.3） | 站點天氣/驟雨 |
 | `/weather` | GET | 🟡 | 天氣摘要（相容，回 mock；逐站改用 by-location） | 天氣顯示 |

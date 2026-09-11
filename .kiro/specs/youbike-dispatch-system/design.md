@@ -376,7 +376,7 @@ data_source:
   mode: "mock"              # mock / historical / tdx / youbike_official（現場改這裡切換）
   tdx_api_key: ""           # 若用 TDX，正式環境填
   youbike_official_url: ""  # 若現場用 YouBike 公司自己的即時源，填這裡
-  refresh_interval_sec: 60  # 多久抓一次即時資料
+  refresh_interval_sec: 300  # 多久抓一次即時資料
 
 # ── 資料保留（FR-12 熱溫冷）──
 retention:
@@ -503,7 +503,7 @@ security:
 
 > **A1~A4 新增設定（實作階段補入，此處與 config.yaml 同步）**
 >
-> - **`data_source`（A1 資料源層）**：`mode`（mock/historical/tdx/youbike_official，換源只改這裡）、`stale_after_sec: 180`（即時資料超過幾秒視為過期，觸發降級標記）、`s3_bucket`/`s3_prefix`（historical 讀 S3 Parquet 分區位置）、`historical_default_month: "2026-06"`（未指定月份時的預設分區）、`tdx_api_key`/`youbike_official_url`（即時源憑證，勿進版控）、`refresh_interval_sec: 60`。
+> - **`data_source`（A1 資料源層）**：`mode`（mock/historical/tdx/youbike_official，換源只改這裡）、`stale_after_sec: 600`（即時資料超過幾秒視為過期，觸發降級標記）、`s3_bucket`/`s3_prefix`（historical 讀 S3 Parquet 分區位置）、`historical_default_month: "2026-06"`（未指定月份時的預設分區）、`tdx_api_key`/`youbike_official_url`（即時源憑證，勿進版控）、`refresh_interval_sec: 300`。
 > - **`priority_band`（A2 dispatcher 分級）**：`high_min: 70` / `medium_min: 40`，把緊急度分數 0~100 對照成 high/medium/low。**與 `alert` 段的 `warning_urgency`/`critical_urgency` 用途不同**：`priority_band` 用於調度建議清單分級，`alert` 門檻用於警示分級；兩者未來若要一致化由 A3/A2 協調。
 > - **`security` 收斂（A4）**：`allowed_methods` / `allowed_headers` 從 `*` 收斂為明確白名單；`rate_limit_exempt_paths` 讓健康檢查豁免限流。
 
@@ -682,3 +682,8 @@ frontend-local Mock
 ### 12.3 邊界與未決項目
 
 本增量不修改 backend tree、Pydantic Schema、B 的 `predict()`／`calc_urgency()`、Alert flow、fallback、dispatch context 或 SQLite schema。這些跨人契約集中列於 ADR-203「待決策」，在核准前不得轉成 A／B 任務。
+
+
+## 2026-09-11 第二批實作增量
+
+依 ADR-121／206／303，當前觀測與歷史查詢分離；同源最後快照及 unavailable/503 狀態替代靜默歷史 fallback。LightGBM 與凍結特徵包成套驗證，真實觀測時間組 lag，來源不足明示 degraded。前端 api 模式實作草稿／版本確認與指派司機的真實回報；孿生 Mock 時序仍獨立。詳見 api_contract.md §6 及 docs/analysis/service_integration_phase2_20260911.md。雲端常駐與第三批模型評估／路線演算法不在本次實作範圍。

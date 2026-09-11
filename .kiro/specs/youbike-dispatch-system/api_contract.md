@@ -139,9 +139,14 @@ A 把三方對接、整合到 Git
   "status": "low",
   "area_type": "transit",
   "terrain": "gentle_down",
-  "timestamp": "2026-06-02T08:00:00",
-  "source_timestamp": "2026-06-02T08:00:00",
-  "data_freshness": "live"
+  "timestamp": "2026-06-02T08:00:00+08:00",
+  "source_timestamp": "2026-06-02T08:00:00+08:00",
+  "observed_at": "2026-06-02T08:00:00+08:00",
+  "received_at": "2026-06-02T08:00:05+08:00",
+  "source": "youbike_official",
+  "data_freshness": "live",
+  "quality_reasons": [],
+  "dispatch_eligible": true
 }
 ```
 
@@ -150,9 +155,14 @@ A 把三方對接、整合到 Git
 |----|------|---------|
 | `live` | 即時資料源正常 | 正常 |
 | `stale` | 用最後一次成功資料（第一層降級） | 顯示「資料可能過期」 |
-| `historical_fallback` | 用歷史同時段估計（第二層降級） | 顯示「估計值，非即時」 |
+| `historical` | 明確查詢歷史快照 | 歷史資料，不能正式派工 |
+| `mock` | 明確 Mock 模式 | 展示資料 |
 
-`source_timestamp`：資料源實際更新時間（TDX SrcUpdateTime），與 `timestamp`（系統取得時間）分開，用來判斷新鮮度。
+`historical_fallback` 僅保留舊客戶端讀取相容，新 API 不再產出此值。
+
+ADR-303：`observed_at`／`source_timestamp`／相容欄位 `timestamp` 均為資料源觀測時間；`received_at` 才是收到回應的時間。時間使用含時區的 ISO8601；新北官方 mday 的無時區值視為台北時間。來源 ID (`sno`／TDX `StationUID`) 與 `source` 分開。未知時間為 null 並標品質原因，不得假設為現在。
+
+`observation_age_sec` 是回應時的資料年齡。未啟用或可借與可還同時為零時 status=offline。`dispatch_eligible=false` 的站不能組單或確認。正式來源斷線只保留同源最後成功快照並標 stale；没有快照回 HTTP 503 (`error=data_unavailable`)，不偷偷讀六月資料或 Mock。新鮮度門檻、更新頻率與有界觀測窗口由 config 控制。
 
 **欄位來源說明（正式環境對接 TDX）：**
 
@@ -226,7 +236,11 @@ A 把三方對接、整合到 Git
 {
   "station_id": "500101001",
   "predict_from": "2026-06-02T08:00:00",
-  "horizon_source": "dispatch",
+  "horizon_source": "default",
+  "source": "lightgbm",
+  "status": "ready",
+  "model_version": "model-content-sha256",
+  "missing_features": [],
   "horizons": [
     {"horizon_minutes": 30,  "predict_target_time": "2026-06-02T08:30:00",
      "predicted_available": 6.0, "lower_bound": 3.0, "upper_bound": 9.0},
@@ -251,13 +265,14 @@ A 把三方對接、整合到 Git
   - 規則引擎用**下界**觸發防空、**上界**觸發防滿（預測可失手、判斷不跟著失手）。
 - **`horizon_minutes` 一律為「分鐘數」，不綁資料格數（ADR-107）**：
   - 訓練用 30 分格歷史；上線若為 5 分格即時源，horizon 分鐘語意不變，差別在 lag 格數與更新頻率。
-  - 上線粒度落差解法：(a) 5 分聚合回 30 分（Demo 建議）或 (b) 用 5 分粒度重訓（roadmap）。
+  - ADR-121：以實際觀測时间滑動起算，lag 查目標時間以前、容許落差內的同源觀測；不移動快照日期、不在推論時重擬合訓練統計。
 - `horizon_source`：**兩種來源（C-03）**，決定「規則引擎挑哪個 horizon」：
   | horizon_source | 用途 | 規則引擎取用 |
   |----------------|------|-------------|
   | `dispatch` | 派任務時 | 依調度員預估到達時間，**挑 horizons[] 中最接近的視野**的區間 |
   | `default` | 警示掃描、歷史時間軸 | 用 30 分那個 horizon（對齊 config.fleet.響應時間_分鐘）|
-- `predict_from`：預測的起算時間（通常是現在）。
+- `predict_from`：必須等於當前站點的觀測時間；`predict_target_time` 為此時間加 horizon，使用含時區 ISO8601。
+- ADR-121：`status=ready/degraded/unavailable`。缺 lag／天氣仍可由 LightGBM 處理 NaN，但必須列 `missing_features`；模型／特徵包缺失、觀測不可用、分位數不合法時 `horizons=[]`、`source=unavailable` 並給 reason。Mock 只有在明確模式下回 `source=mock`。規則引擎無預測時可走現況保底，建議附 `prediction_status`。
 
 > 已移除 `confidence`：不確定性由 lower/upper_bound 表達。
 > ⚠️ B（模型輸出）、C（前端顯示）、A（規則引擎取用）都須依此多視野結構對接。
@@ -623,7 +638,13 @@ GET /stations/{station_id}?history_range=7d
   "history": [ { HistoryPoint }, ... ]   // 歷史趨勢，預設近一週
 }
 ```
-參數 `history_range`：`24h` / `7d`（預設，近一週）— 呼應資料保留策略，不撈全部歷史
+參數 `history_range`：`24h`（相容舊契約）／`1d` / `7d`（預設）；以 current.observed_at 為結束點。歷史由獨立 Historical adapter 讀取，跨月份分區有明確時間限制，不向官方即時 adapter 呼叫 get_history。
+
+另回 `history_status={status: ready/empty/unavailable, source, requested_start, requested_end, reason?}`；無歷史時 history=[]，current 與 prediction 仍可回傳。沒有本站參數時 params=null，不借用別站範例。
+
+`GET /stations/{station_id}/history?start=ISO8601&end=ISO8601`：獨立查詢最多 31 天歷史，使用同一 history／history_status 包裝；非法時間或超出範圍 422。
+
+`GET /data/status`：mode／source、primary_available、freshness_counts、dispatch_eligible_count；完全失敗以 data_freshness=unavailable 明示。
 
 ### 3.3 取得調度建議清單
 ```
@@ -636,15 +657,68 @@ GET /dispatch/recommendations
 - `?limit=15` — 最多回傳幾筆
 - `?priority=high` — 只取高優先
 
-### 3.4 確認調度建議（閘門：預覽→確認）
+### 3.4 預覽與確認派工（ADR-119／302）
+
+三個組單入口與確認皆需 `X-Operator-Id`，後端角色為 `dispatcher`／`maintainer`。
+所有路徑均以 `/api/v1` 為前綴。
+
+| 入口 | JSON body |
+|---|---|
+| `POST /dispatch/build/from-vehicle` | `{ "vehicle_id": "CAR-001", "operator_id": "OP-004", "district": "板橋區" }`（district 可省略） |
+| `POST /dispatch/build/from-station` | `{ "station_id": "站號", "vehicle_id": "CAR-001", "operator_id": "OP-004" }`（人車可省略，由後端建議） |
+| `POST /dispatch/build/emergency` | `{ "station_ids": ["站號"], "vehicle_id": "CAR-001", "operator_id": "OP-004" }`（人車可省略） |
+
+build 回傳 `is_draft`、`draft_id`、`version`、`created_by`、`expires_at`、stations、人車及 estimate；
+草稿在後端記憶體保存，預設 300 秒、最多 256 張（`config.dispatch_drafts`）。未確認不認領站点或占用人車。
+修改人車、目標區或站點必須重新 build；不得直接改回傳的草稿當作新指令。
+
+**ADR-123／304（第三批）新增欄位**：build 另回傳
+`blocking_reasons`（阻擋原因陣列，每筆 `{code, message, ...}`；**空陣列代表可確認**）、
+`load_plan`（逐站計畫：`seq`／`arrival_offset_min`／`horizon_used_min`／`onboard_before`／`onboard_after`）、
+`onboard_start`、`onboard_end`。stations 內每站另帶 `arrival_offset_min`／`horizon_used_min`／`onboard_after`。
+
+預覽與確認呼叫**同一份可行性評估**：載量守恆（取車 +q、補車 −q，全程須落在 `[0, 車容量]`）、
+逐站到達時間對應最接近的預測視野（30／60／90／120，超出最長視野明確標記不外推）、
+班別跨區限制、執行人員剩餘連續工時、與既有未結束任務的時間重疊。
+預覽通過而確認失敗，只應源於期間內狀態改變；確認回傳的原因必定是預覽已顯示過的其中一個。
+
+**車輛載量須可追溯**：車輛未回報 `onboard_bikes`，或回報超過 `config.fleet.車上載量有效期_分鐘`（預設 240），
+草稿仍會產生但帶阻擋原因，**確認一律回 409**；不得假設車上為零。回報端點：
+
+```http
+POST /vehicles/{vehicle_id}/onboard
+X-Operator-Id: OP-002
+{ "onboard_bikes": 12, "source": "manual_report" }
 ```
-Header: X-Operator-Id: OP-002          # C-08：需 dispatcher/主管角色
-POST /dispatch/confirm
-Body: { "recommendation_ids": ["REC-...001", "REC-...002"] }
+dispatcher／maintainer 可回報任何車；driver／depot_standby 只能回報自己任務中的車。
+值須為 `0 ≤ n ≤ max_capacity` 的整數（否則 422），車輛不存在回 404。
+任務結案時後端會由實際回報推算收車載量並以 `source=task_completion` 寫回；無法推算時標回「未知」。
+
+```http
+POST /dispatch/confirm-trip
+X-Operator-Id: OP-002
+Content-Type: application/json
+
+{ "draft_id": "DRAFT-後端產生的ID", "version": 1 }
 ```
-回傳：建立的 `DispatchTask[]`
-用途：主管在前端按「確認派發」後呼叫。**這是人在迴圈的唯一閘門**。
-> 身分驗證（NFR-8，C-08）：後端驗證此人角色為 `dispatcher`/`maintainer` 才可派發。前端隱藏按鈕不算保護——任何人都能直接打此端點，所以權限一定在後端驗。
+
+也接受 `{ "draft": 原封不動的build回傳物件 }`。`POST /dispatch/confirm` 是同一確認流程的相容路徑；
+舊的 `recommendation_ids` 請求不再回 mock 成功，需先 build。
+
+回傳 `{ "trip_id": "TRIP-...", "confirmed": true, "status": "assigned" }`；重送已確認的同一草稿版本
+回原任務及其目前狀態，不再派遣，也不重複稽核。確認收據持久化，未確認草稿重啟後須重新預覽。
+只能確認自己建立的草稿；角色相同也不能替另一位建立者確認。
+
+确认在同一 SQLite 交易內檢查人車及站點認領、建立任務、占用資源及寫稽核／收據。人員必須啟用、
+`on_duty` 且具 `driver`／`depot_standby` 營運角色，不能用後台帳號充當執行人力。
+車輛須啟用且 available；緊急草稿另允許 standby，結案後恢復派出前狀態。
+
+錯誤：401 無有效身分、403 權限／建立者不符、404 任務不存在、409 草稿過期／竄改／資源衝突／非法狀態、
+422 輸入格式或數量錯誤。交易失敗會整筆回滾，不可將失敗解讀成已派遣。
+
+`POST /emergency/check` 需相同後台權限，body 為 `{ "in_transit_eta_min": 45 }`（可省略 ETA）。
+它只回 `triggered`、`deadlock_districts`、`suggestions`、`alerts` 及 `dispatched: []`，不寫入派工、人車或警報。
+`persist: false` 保留相容，`persist: true` 回 422；正式救火走 emergency build → confirm。
 
 ### 3.5 取得任務清單
 ```
@@ -652,15 +726,54 @@ GET /dispatch/tasks
 ```
 回傳：`DispatchTask[]`
 
-### 3.6 回報任務狀態（調度員用）
+### 3.6 開始、逐站回報與結案（ADR-117／302）
+
+開始、回報、退回皆由 `X-Operator-Id` 驗證身分，且必须是任務的 `assigned_operator`；不接受 body 自報操作者。
+
+```http
+POST /dispatch/tasks/{task_id}/start
+X-Operator-Id: OP-004
 ```
-Header: X-Operator-Id: OP-001          # C-08 身分驗證
+
+回傳 `{ "task_id": "TRIP-...", "status": "in_progress" }`。
+
+```http
 POST /dispatch/tasks/{task_id}/report
-Body: { "operator_id": "OP-001", "status": "completed", "note": "已補車，2 台故障回報" }
+X-Operator-Id: OP-004
+Content-Type: application/json
+
+{ "station_id": "站號", "actual_available": 12 }
 ```
-> 身分驗證（NFR-8）：後端驗證 `X-Operator-Id` 對應的角色，且該 operator_id 必須是此任務的 `assigned_operator`（調度員只能回報自己的任務）。
-回傳：更新後的 `DispatchTask`
-用途：調度員完成任務後回報，系統重新計算下一個任務
+
+`actual_available` 必須為非負整數，有站容量資料時不得超過 `total_docks`；小數、字串、布林及非有限數均拒絕。
+舊任務缺容量時仍驗證非負整數，不捏造容量。首次合法回報可相容地將 assigned 任務開始；
+pending／completed／cancelled／已釋放資源的任務不可回報。已完成或移除的站點不可重報覆寫。
+
+回傳 `{ "station": {...}, "gap": 0, "all_done": false, "remaining": 1, "status": "in_progress" }`。
+route 每站保存 station_id、action、target_available、est_quantity、total_docks（可能 null）、
+station_status（pending／completed／removed）、claimed_by；回報增加 actual_available、reported_at、reported_by、target_gap。
+最後一站完成後 status 為 completed，任務、人車釋放及稽核一起提交。gap 是紀錄，不作模型自動調參依據。
+
+```http
+POST /dispatch/tasks/{task_id}/return
+X-Operator-Id: OP-004
+Content-Type: application/json
+
+{ "reason": "車輛故障，退回重排" }
+```
+
+reason 不可空白。assigned 退回為 cancelled；in_progress 退回為 manual_required。
+兩者皆釋放認領及所屬人車，保留歷史指派與原因，回 `{task_id, released: true, reason, status}`。
+已釋放的任務不能直接恢復執行，須重新組單確認。
+
+後台增減站點需 dispatcher／maintainer：
+- `POST /dispatch/tasks/{task_id}/stations`，body `{ "station_id": "站號", "reason": "原因" }`。
+  相容舊的 `{ "station": { "station_id": "站號" }, "reason": "原因" }`；指令與目標皆取後端當前建議，
+  不採信客戶端其他站點欄位，並檢查容量、任務狀態及其他任務認領。
+- `DELETE /dispatch/tasks/{task_id}/stations/{station_id}?reason=原因`：移除 pending 站，需求仍在則回待調度池；
+  若剩餘站皆完成／移除則結案。回應 `needs_notify: true` 表示現場通知需求；實際通知整合仍屬後續工作。
+
+資源釋放只清除仍指向此 task_id 的人車，不影響後續新任務。來源覆寫到期取消未開始任務也走同一流程。
 
 ### 3.7 取得 KPI
 ```
@@ -882,6 +995,19 @@ POST /optimization/daily-review/approve   # 套用（含逐站二次定義的結
 POST /optimization/daily-review/reject     # 全部退回，維持原參數
 ```
 
+**ADR-304（第三批）**：
+- `GET /optimization/daily-review` 回傳 `review_id`（不可猜測）、`status`、`reason` 與 `diagnostics`。
+  `status` 值域：`ok`（有可套用建議或有足夠樣本但未達門檻）／`no_data`（來源沒有可用資料列）／
+  `insufficient_samples`（有資料但各站情境樣本數皆低於門檻）／`failed`（計算失敗，`reason` 帶例外類型）。
+  **計算失敗不得回 `no_data`**；樣本不足的站列在 `diagnostics.skipped_stations`。
+- `approve` body 必填 `{ "review_id": "..." }`：缺少回 422，不存在／過期／已退回回 409，
+  同一 `review_id` 重送**回傳原結果且不重複寫版本**（冪等）。
+- 一次 approve 內所有站在**單一交易**提交，任一站失敗整批回滾並回錯誤，**不回傳「部分成功」**。
+- `station/{id}` 可選帶 `review_id` 綁定該份建議；已結案的建議不可再改。
+- `rollback` 完成後會重讀當前生效參數並驗證等於目標版本，不一致視為失敗。
+- **調整係數目前仍未被 `rule_engine`／`dispatcher`／`prediction` 讀取**（ADR-120 做法 Y），
+  回應的 `effective_note` 為誠實標記；此事實由 `tests/test_optimizer_apply.py` 固定為可回歸的測試。
+
 **② 參數版本回溯：**
 ```
 GET /stations/{station_id}/params/history      # 參數變更歷史
@@ -897,21 +1023,11 @@ Body: { "lookback_days": 3 }
 
 ---
 
-### 3.13 調度員位置導向任務分配（③ 的排序邏輯）
+### 3.13 結案後的下一趟建議（ADR-117／119／302）
 
-**調度員回報完成後，取得下一個任務（結合位置）：**
-```
-Header: X-Operator-Id: OP-001
-POST /dispatch/tasks/{task_id}/report
-Body: { "operator_id": "OP-001", "status": "completed", "operator_location": {"lat": 25.01, "lng": 121.46} }
-```
-回傳：下一個任務（系統依調度員當前位置 + 最優先站 + 急迫度綜合排序）
-```json
-{
-  "next_task": { DispatchTask },
-  "assignment_reason": "距您 1.2km 的中和國小站為最優先（覆寫中），同區另有審計大樓站一併安排"
-}
-```
+逐站回報沿用 §3.6，回報本身不自動派發下一個任務。結案釋放車輛後可讀取
+`GET /dispatch/next-trip?vehicle_id=CAR-001` 的候選建議，再由後台 build → 預覽 → confirm。
+這保留「人拍板」閘門；下一趟候選排序與位置／ETA 精度屬後續調度品質批次。
 
 ### 3.14 稽核記錄（對應 Schema 2.6）
 ```
@@ -945,8 +1061,9 @@ GET /operators/{operator_id}/stream   # SSE：只推該調度員工作範圍內�
 ```
 GET /dispatch/overview
 ```
-回傳：`DispatchOverview`
-用途：後台調派員與長官的宏觀儀表板。
+ADR-303 實作回傳：`{tasks: DispatchTask[], operators: Operator[], vehicles: Vehicle[], task_counts: {assigned, in_progress, completed, cancelled, manual_required}, source: "backend"}`。統計範圍是資料庫保留的所有任務，不冒充當日改善成效。
+
+`GET /kpi` 回當前站況統計，附真實 source 與 freshness_counts。Frontend API 模式使用上述實際指標；未接入的模擬成效不顯示假改善百分比。
 
 ### 3.18 天氣現況（對應 Schema 2.10）
 ```
@@ -1118,7 +1235,7 @@ data_source:
 | 3.3 | `GET /dispatch/recommendations` | 調度建議清單 | 優化調度 | C |
 | 3.4 | `POST /dispatch/confirm` | 確認派發（閘門） | 人在迴圈 | C |
 | 3.5 | `GET /dispatch/tasks` | 任務清單 | 調度管理 | C |
-| 3.6 / 3.13 | `POST /dispatch/tasks/{id}/report` | 回報任務+取下一任務（位置導向） | 調度管理 | 調度員 |
+| 3.6 / 3.13 | `POST /dispatch/tasks/{id}/report` | 逐站回報、最後一站結案（下一趟另行確認） | 調度管理 | 調度員 |
 
 ### KPI 與成效
 | 編號 | 端點 | 用途 | 題目對應 | 使用者 |
@@ -1194,3 +1311,14 @@ data_source:
 | Google Elevation API | 傳經緯度即回高程、可批次、開發快 | 開發期快速實作 |
 
 實作：對 1583 站批次查高程 → 用站點與周邊點的高程差算坡度（%）→ 依 parameter_groups.md 的坡度分級 + 坡向 → 寫入 terrain 參數（批次一次算完，非手動）。
+
+
+## 6. 第二批服務整合補充（ADR-121／206／303，2026-09-11）
+
+- 前端預設 api 模式，透過同源 `/api/v1`；Vite 開發代理到 FastAPI。`VITE_DATA_MODE=mock` 才使用獨立本機展示；孿生頁仍明確標示 Mock。
+- Demo 身分必須明確選擇，寫入傳 X-Operator-Id，後端查角色。正式 session／token 認證仍未實作。
+- `POST /operators/me/duty {status: "on_duty"|"off_duty"}`：調度車司機／總站待命人員只能變更自己的值勤狀態；有未結束資源占用則 409，非法營運角色 403。原子更新並記稽核。
+- 預覽需選已簽到人員及可用車輛；任何選項改變都需重新 build。確認仍使用 draft_id/version；資料來源模式改變、觀測已更新／過期／停用均 409，需新預覽。重送已確認草稿回原收據，不重派。
+- 司機頁只執行後端指派任務，依路線順序顯示；完成必填實際站內存量，最後一站由後端結案並釋放人車。
+- `/stations/timeline`、`/simulation/replay`、`/weather` 摘要以及未實作站點新增／刪除，在非 Mock 模式回 501，不能回假成功；逐站天氣用 `/weather/by-location`，來源及観測時間可追溯。
+- 近一週五分鐘資料尚未累積時，不以六月歷史補成九月 lag。CWA 未設定或時間不可用時缺少天氣特徵；API 必須明列降級。歷史原始資料與 API Key 不進 Git。
