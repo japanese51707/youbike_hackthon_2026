@@ -16,9 +16,10 @@ export default function BasemapStatus({ status, reason }) {
   const showStatusTag = status !== "ready"; // 正常時不再放大顆標籤，只留小字來源
   const showAttribution = BASEMAP_ACTIVE.has(status);
   // 精簡來源文字：去連結、以小灰字呈現，仍保留授權要求的來源標示
-  const attributionText = mapConfig.attribution
-    .map((item) => item.label)
-    .join(" · ");
+  const attributionLines = [
+    mapConfig.attribution.slice(0, 2).map((item) => item.label).join(" · "),
+    mapConfig.attribution.slice(2).map((item) => item.label).join(" · "),
+  ].filter(Boolean);
 
   return (
     <div
@@ -33,7 +34,13 @@ export default function BasemapStatus({ status, reason }) {
       {showStatusTag ? <Tag color={state.color}>{state.text}</Tag> : null}
       {reason ? <Typography.Text type="secondary">{reason}</Typography.Text> : null}
       {showAttribution ? (
-        <span className="map-attribution">{attributionText}</span>
+        <span className="map-attribution">
+          {attributionLines.map((line) => (
+            <span key={line} className="map-attribution-line">
+              {line}
+            </span>
+          ))}
+        </span>
       ) : null}
     </div>
   );

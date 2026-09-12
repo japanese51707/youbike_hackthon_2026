@@ -74,17 +74,22 @@
   box-shadow: 0 20px 55px -34px var(--ct-shadow);
 }
 
-/* ── 手機沉浸預覽（比照找車 RiderPage 的手機外框，兩邊呈現一致）─────────── */
-/* 深底舞台：把整個工作區當背景，中央置中一支全螢幕手機。 */
+/* ── 手機版：真機滿版；桌機預覽才加外框 ─────────── */
 .dw.is-phone {
   overflow: hidden;
   padding: 0;
-  background: color-mix(in srgb, var(--ct-bg) 70%, #000);
   justify-content: center;
+  background: var(--ct-bg);
 }
 
-/* 手機模式：版面切換列改浮在畫面底部中央（避開頂部瀏海），像手機底部工具列 */
-.dw.is-phone .dw-toolbar {
+.dw.has-bezel {
+  background: color-mix(in srgb, var(--ct-bg) 70%, #000);
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px 72px;
+}
+
+.dw.has-bezel .dw-toolbar {
   position: fixed;
   bottom: 14px;
   left: 50%;
@@ -100,21 +105,38 @@
   z-index: 25;
 }
 
-/* 手機外框本體：粗左右邊框 + 大陰影暈開 + 瀏海/home 空間 */
+.dw.is-phone:not(.has-bezel) .dw-toolbar,
+.dw.is-phone:not(.has-bezel) .dw-phone-exit,
+.dw.is-phone:not(.has-bezel) .dw-hint {
+  display: none;
+}
+
 .dw.is-phone .dw-stage {
   position: relative;
-  width: min(412px, 100%);
-  max-width: 412px;
+  width: 100%;
+  max-width: none;
   height: 100%;
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 40px 12px 8px;
+  padding: 12px 14px calc(16px + env(safe-area-inset-bottom, 0px));
   border: 0;
-  border-left: 3px solid color-mix(in srgb, var(--ct-border) 80%, #111);
-  border-right: 3px solid color-mix(in srgb, var(--ct-border) 80%, #111);
   border-radius: 0;
   background: var(--ct-bg);
-  box-shadow: 0 0 64px rgba(0, 0, 0, 0.35);
+}
+
+.dw.has-bezel .dw-stage {
+  /* 桌機預覽：像一支現代直式手機（約 9:20），可高但不能拉成整屏細長條。
+     視窗較矮時先縮寬度，比例維持不變。 */
+  width: min(390px, calc((100dvh - 96px) * 9 / 20), calc(100vw - 48px));
+  max-width: 390px;
+  aspect-ratio: 9 / 20;
+  height: auto;
+  max-height: calc(100dvh - 96px);
+  flex: none;
+  padding: 36px 12px 10px;
+  border: 10px solid #111;
+  border-radius: 36px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
 }
 
 .dw-phone-notch {
@@ -199,6 +221,40 @@ body.driver-phone-preview .app-shell {
 }
 
 /* ── 版面骨架 ─────────────────────────────────────────────────────── */
+
+.dw-who {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dw-who-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.dw-who-select .ant-select-selector {
+  min-height: 44px !important;
+  border-radius: 12px !important;
+}
+
+.dw-more {
+  border-top: 1px solid var(--ct-border);
+  padding-top: 8px;
+}
+
+.dw-more summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ct-text-dim);
+  padding: 6px 0;
+}
+
+.dw-more[open] summary {
+  margin-bottom: 8px;
+}
 
 .dw-task-switch {
   flex: none;
@@ -375,40 +431,118 @@ body.driver-phone-preview .app-shell {
   text-align: center;
 }
 
+.dw-map .maplibregl-ctrl-group,
+.dw-map-recenter {
+  opacity: 0.78;
+  transition: opacity 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.dw-map .maplibregl-ctrl-group:hover,
+.dw-map .maplibregl-ctrl-group:focus-within,
+.dw-map .maplibregl-ctrl-group:has(:active),
+.dw-map-recenter:hover,
+.dw-map-recenter:focus-visible,
+.dw-map-recenter:active {
+  opacity: 1;
+}
+
+.dw-map .basemap-status {
+  left: auto;
+  right: 8px;
+  bottom: 6px;
+  max-width: 42%;
+  padding: 0 2px;
+  gap: 2px;
+  font-size: 8px;
+  line-height: 1.2;
+  box-shadow: none;
+  z-index: 2;
+}
+
+.dw-map .basemap-status-ready {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.dw-map .basemap-status .map-attribution {
+  font-size: 7px;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.dw-map-recenter {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--ct-border);
+  border-radius: 999px;
+  background: var(--ct-overlay);
+  color: var(--ct-text);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 6px 16px var(--ct-shadow);
+  cursor: pointer;
+}
+
+.dw-map-recenter:hover,
+.dw-map-recenter:focus-visible {
+  border-color: var(--ct-accent);
+  color: var(--ct-accent);
+  outline: none;
+}
+
+.dw.is-phone .dw-map-recenter {
+  min-height: 40px;
+  padding: 8px 14px;
+}
+
 .dw-map-legend {
   position: absolute;
   left: 8px;
   bottom: 8px;
+  max-width: calc(100% - 46%);
   display: flex;
-  gap: 10px;
-  padding: 5px 9px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px;
   border-radius: 8px;
   background: var(--ct-overlay);
   border: 1px solid var(--ct-border);
-  font-size: 11px;
+  font-size: 10px;
   color: var(--ct-text-dim);
+  white-space: nowrap;
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
 }
 
 .dw-map-legend span {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  flex: none;
+  gap: 3px;
 }
 
 .dw-map-legend .dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   display: inline-block;
 }
 
 .dw-route-mode {
-  padding: 0 6px;
+  padding: 0 5px;
   border-radius: 999px;
   border: 1px solid var(--ct-border);
   color: var(--ct-text-dim);
+  font-size: 9px;
 }
 
 .dw-route-mode.is-road {
@@ -476,6 +610,57 @@ body.driver-phone-preview .app-shell {
 
 .dw-stop.is-removed {
   opacity: 0.45;
+}
+
+.dw-stop.is-compact {
+  padding: 10px 12px;
+  gap: 6px;
+}
+
+.dw-stop.is-compact .dw-stop-name {
+  font-size: 15px;
+}
+
+.dw.is-phone .dw-map {
+  height: 220px;
+  min-height: 200px;
+  max-height: 240px;
+  flex: none;
+  order: -1;
+}
+
+.dw.is-phone:not(.has-bezel) .dw-map {
+  height: 28vh;
+  max-height: none;
+}
+
+.dw.is-phone .dw-top {
+  display: flex;
+  flex-direction: column;
+}
+
+.dw.is-phone .dw-vehicle {
+  padding: 10px 12px;
+  gap: 8px;
+}
+
+.dw.is-phone .dw-vehicle-id {
+  font-size: 17px;
+}
+
+.dw.is-phone .dw-vehicle-actions .ant-btn {
+  min-height: 44px;
+}
+
+.dw.is-phone .dw-report .ant-input-number,
+.dw.is-phone .dw-report .ant-btn,
+.dw.is-phone .dw-stop-actions .ant-btn {
+  min-height: 44px;
+}
+
+.dw.is-phone .dw-next {
+  font-size: 14px;
+  padding: 10px 12px;
 }
 
 .dw-stop-head {

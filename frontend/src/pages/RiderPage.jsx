@@ -10,6 +10,7 @@ import { createStationGaugeLayer } from "../components/map/layers/stationGaugeLa
 import presentationConfig from "../config/presentation.json";
 import useDashboardData from "../hooks/useDashboardData.js";
 import useGeolocation from "../hooks/useGeolocation.js";
+import useNarrowPhone from "../hooks/useNarrowPhone.js";
 import { stationStatusLabels } from "../utils/formatters.js";
 import { getStationColor } from "../utils/mapPresentation.js";
 import {
@@ -22,6 +23,16 @@ import {
 
 const FALLBACK_ORIGIN = { lat: 25.01427, lng: 121.46256 };
 const PHONE_UI_KEY = "rider-phone-ui";
+
+function readPhoneUi() {
+  try {
+    const saved = sessionStorage.getItem(PHONE_UI_KEY);
+    if (saved === "0") return false;
+    return true;
+  } catch {
+    return true;
+  }
+}
 const INTENT_OPTIONS = [
   { value: "rent", label: "我要借車" },
   { value: "return", label: "我要還車" },
@@ -38,13 +49,10 @@ export default function RiderPage() {
   const [locateNote, setLocateNote] = useState(null);
   const [faultOpen, setFaultOpen] = useState(false);
   const [faultSummaries, setFaultSummaries] = useState({});
-  const [phoneUi, setPhoneUi] = useState(() => {
-    try {
-      return sessionStorage.getItem(PHONE_UI_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
+  const [phoneUi, setPhoneUi] = useState(readPhoneUi);
+  const narrowPhone = useNarrowPhone();
+  const isPhoneLayout = phoneUi || narrowPhone;
+  const useBezel = phoneUi && !narrowPhone;
 
   useEffect(() => {
     try {
@@ -52,9 +60,12 @@ export default function RiderPage() {
     } catch {
       /* ignore quota / private mode */
     }
-    document.body.classList.toggle("rider-phone-preview", phoneUi);
-    return () => document.body.classList.remove("rider-phone-preview");
   }, [phoneUi]);
+
+  useEffect(() => {
+    document.body.classList.toggle("rider-phone-preview", isPhoneLayout);
+    return () => document.body.classList.remove("rider-phone-preview");
+  }, [isPhoneLayout]);
 
   useEffect(() => {
     if (geo.locating) setLocateNote(null);
@@ -160,22 +171,22 @@ export default function RiderPage() {
   const toolbar = (
     <div className="rider-toolbar">
       <div>
-        <Typography.Title level={phoneUi ? 4 : 3}>附近找車</Typography.Title>
-        {phoneUi ? null : (
+        <Typography.Title level={isPhoneLayout ? 4 : 3}>附近找車</Typography.Title>
+        {isPhoneLayout ? null : (
           <Typography.Text type="secondary">
             把地圖中心對準要找的地方，停下來才會更新附近推薦。排序以步行距離為主，庫存與站點等級只做小幅參考。等級依站名與規模推估，與實際調度會有誤差。
           </Typography.Text>
         )}
       </div>
       <div className="rider-toolbar-actions">
-        <Segmented size={phoneUi ? "small" : "middle"} value={intent} options={INTENT_OPTIONS} onChange={setIntent} />
-        <Button size={phoneUi ? "small" : "middle"} icon={<CompassOutlined />} loading={geo.locating} onClick={geo.locate}>
-          {phoneUi ? "定位" : "回到我的位置"}
+        <Segmented size={isPhoneLayout ? "small" : "middle"} value={intent} options={INTENT_OPTIONS} onChange={setIntent} />
+        <Button size={isPhoneLayout ? "small" : "middle"} icon={<CompassOutlined />} loading={geo.locating} onClick={geo.locate}>
+          {isPhoneLayout ? "定位" : "回到我的位置"}
         </Button>
-        <Button size={phoneUi ? "small" : "middle"} icon={<WarningOutlined />} onClick={() => setFaultOpen(true)}>
-          通報故障
+        <Button size={isPhoneLayout ? "small" : "middle"} icon={<WarningOutlined />} onClick={() => setFaultOpen(true)}>
+          {isPhoneLayout ? "通報" : "通報故障"}
         </Button>
-        {phoneUi ? null : (
+        {isPhoneLayout ? null : (
           <Button icon={<MobileOutlined />} onClick={() => setPhoneUi(true)}>
             手機 UI
           </Button>
@@ -217,7 +228,7 @@ export default function RiderPage() {
                     </span>
                   </div>
                 ))}
-                {phoneUi ? null : (
+                {isPhoneLayout ? null : (
                   <div className="rider-legend-note">目前依站名與規模推估，與實際調度會有誤差。圖釘顏色仍是可借／可還狀態。</div>
                 )}
               </div>
@@ -287,21 +298,21 @@ export default function RiderPage() {
   );
 
   return (
-    <div className={`fixed-page rider-page${phoneUi ? " is-phone" : ""}`}>
-      {phoneUi ? (
+    <div className={`fixed-page rider-page${isPhoneLayout ? " is-phone" : ""}${useBezel ? " has-bezel" : ""}`}>
+      {useBezel ? (
         <Button className="rider-phone-exit" icon={<DesktopOutlined />} onClick={() => setPhoneUi(false)}>
           桌面 UI
         </Button>
       ) : null}
-      <div className={phoneUi ? "rider-phone-stage" : "rider-shell"}>
-        <div className={phoneUi ? "rider-phone" : "rider-shell-inner"}>
-          {phoneUi ? <div className="rider-phone-notch" aria-hidden="true" /> : null}
+      <div className={isPhoneLayout ? "rider-phone-stage" : "rider-shell"}>
+        <div className={isPhoneLayout ? "rider-phone" : "rider-shell-inner"}>
+          {useBezel ? <div className="rider-phone-notch" aria-hidden="true" /> : null}
           {toolbar}
           {geo.error || locateNote ? (
             <Alert type="info" showIcon className="rider-banner" title={geo.error || locateNote} />
           ) : null}
           {main}
-          {phoneUi ? <div className="rider-phone-home" aria-hidden="true" /> : null}
+          {useBezel ? <div className="rider-phone-home" aria-hidden="true" /> : null}
         </div>
       </div>
       <RiderFaultModal
