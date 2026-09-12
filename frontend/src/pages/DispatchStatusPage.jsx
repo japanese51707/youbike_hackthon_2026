@@ -1,5 +1,5 @@
 import { ReloadOutlined, CarOutlined, UserOutlined, EnvironmentOutlined, HomeOutlined } from "@ant-design/icons";
-import { Button, Card, Empty, Progress, Space, Tag, Tooltip, Typography } from "antd";
+import { Button, Card, Empty, Progress, Space, Tabs, Tag, Tooltip, Typography } from "antd";
 import { useEffect, useState } from "react";
 import AsyncState from "../components/common/AsyncState.jsx";
 import useDispatchStatus from "../hooks/useDispatchStatus.js";
@@ -131,8 +131,8 @@ function TaskCard({ task, now }) {
   );
 }
 
-// ── A：一組（行政區或總部）內的車 + 人清單 ──
-function ResourceGroup({ title, icon, vehicles, operators }) {
+// ── A：一組（行政區或總部）內的人清單（可選車輛；車不分班，只在車輛區塊顯示）──
+function ResourceGroup({ title, icon, vehicles = null, operators }) {
   const idleOps = operators.filter((o) => o.status === "on_duty").length;
   const busyOps = operators.filter((o) => o.status === "busy").length;
   const offOps = operators.filter((o) => o.status === "off_duty").length;
@@ -140,19 +140,22 @@ function ResourceGroup({ title, icon, vehicles, operators }) {
     <Card size="small" className="dispatch-group-card"
       title={<Space size={6}>{icon}<span>{title}</span>
         <Typography.Text type="secondary" className="dts-muted">
-          車 {vehicles.length}｜人 {operators.length}（閒置 {idleOps}・任務中 {busyOps}・未上班 {offOps}）
+          {vehicles !== null ? `車 ${vehicles.length}｜` : ""}人 {operators.length}
+          （閒置 {idleOps}・任務中 {busyOps}・未上班 {offOps}）
         </Typography.Text></Space>}>
-      {vehicles.length ? (
-        <div className="dts-chip-row">
-          {vehicles.map((v) => (
-            <span key={v.vehicle_id} className="dts-chip">
-              <CarOutlined /> <span className="mono">{v.vehicle_id}</span>
-              <StatusDot map={VEHICLE_STATUS} value={v.status} />
-              {v.current_task_id ? <span className="dts-muted mono">{v.current_task_id}</span> : null}
-            </span>
-          ))}
-        </div>
-      ) : <Typography.Text type="secondary" className="dts-muted">無車輛</Typography.Text>}
+      {vehicles !== null ? (
+        vehicles.length ? (
+          <div className="dts-chip-row">
+            {vehicles.map((v) => (
+              <span key={v.vehicle_id} className="dts-chip">
+                <CarOutlined /> <span className="mono">{v.vehicle_id}</span>
+                <StatusDot map={VEHICLE_STATUS} value={v.status} />
+                {v.current_task_id ? <span className="dts-muted mono">{v.current_task_id}</span> : null}
+              </span>
+            ))}
+          </div>
+        ) : <Typography.Text type="secondary" className="dts-muted">無車輛</Typography.Text>
+      ) : null}
       {operators.length ? (
         <div className="dts-chip-row">
           {operators.map((o) => (
@@ -167,6 +170,29 @@ function ResourceGroup({ title, icon, vehicles, operators }) {
         </div>
       ) : <Typography.Text type="secondary" className="dts-muted">無人員</Typography.Text>}
     </Card>
+  );
+}
+
+// 一個班別分頁的內容：該班人力依行政區分組（+ 該班的總部預備）。
+function ShiftPanel({ operators, depotOperators }) {
+  const districts = [...new Set(operators.map((o) => o.current_district).filter(Boolean))].sort();
+  const noDist = operators.filter((o) => !o.current_district);
+  if (!operators.length && !depotOperators.length) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="此班別目前無排班人力" />;
+  }
+  return (
+    <div className="dts-group-grid">
+      {depotOperators.length ? (
+        <ResourceGroup title="總部預備" icon={<HomeOutlined />} operators={depotOperators} />
+      ) : null}
+      {districts.map((d) => (
+        <ResourceGroup key={d} title={d} icon={<EnvironmentOutlined />}
+          operators={operators.filter((o) => o.current_district === d)} />
+      ))}
+      {noDist.length ? (
+        <ResourceGroup title="未指派責任區" icon={<EnvironmentOutlined />} operators={noDist} />
+      ) : null}
+    </div>
   );
 }
 
@@ -192,14 +218,45 @@ export default function DispatchStatusPage() {
   // 其餘依 current_district 分組（沒有區的歸「未指派區」）
   const fieldOps = operators.filter((o) => o.role_type !== "depot_standby");
   const fieldVehicles = vehicles.filter((v) => !v.is_depot);
-  const districts = [...new Set([
-    ...fieldOps.map((o) => o.current_district),
-    ...fieldVehicles.map((v) => v.current_district),
-  ].filter(Boolean))].sort();
 
   const idleOps = operators.filter((o) => o.status === "on_duty").length;
   const busyOps = operators.filter((o) => o.status === "busy").length;
   const offOps = operators.filter((o) => o.status === "off_duty").length;
+
+  // 班別分組（ADR-312）：早/晚/大夜。車不分班（隨任務移動），只在車輛區塊依行政區顯示。
+  const SHIFTS = [
+    { key: "morning", label: "早班", hint: "06:30–15:30・含早高峰" },
+    { key: "evening", label: "晚班", hint: "15:30–22:00・含晚高峰" },
+    { key: "night", label: "大夜班", hint: "22:00–06:30・跨區大宗復原" },
+  ];
+  const opsByShift = (shift) => fieldOps.filter((o) => o.shift === shift);
+  const depotByShift = (shift) => depotOps.filter((o) => o.shift === shift);
+  const noShiftOps = fieldOps.filter((o) => !o.shift);
+
+  const shiftTabs = SHIFTS.map((s) => {
+    const ops = opsByShift(s.key);
+    const dep = depotByShift(s.key);
+    return {
+      key: s.key,
+      label: `${s.label}（${ops.length + dep.length}）`,
+      children: (
+        <>
+          <Typography.Text type="secondary" className="dts-muted">{s.hint}</Typography.Text>
+          <ShiftPanel operators={ops} depotOperators={dep} />
+        </>
+      ),
+    };
+  });
+  // 未排班（含未分派 shift 的總部預備）另開一個分頁，避免漏看。
+  const unshiftedOps = [...noShiftOps, ...depotOps.filter((o) => !o.shift)];
+  if (unshiftedOps.length) {
+    shiftTabs.push({
+      key: "unassigned",
+      label: `未排班（${unshiftedOps.length}）`,
+      children: <ShiftPanel operators={unshiftedOps.filter((o) => o.role_type !== "depot_standby")}
+        depotOperators={unshiftedOps.filter((o) => o.role_type === "depot_standby")} />,
+    });
+  }
 
   return (
     <div className="page-stack">
@@ -230,24 +287,31 @@ export default function DispatchStatusPage() {
           )}
         </Card>
 
-        {/* A：人力與車輛（依行政區 + 總部預備） */}
-        <Card size="small" title="調度人力與車輛（依行政區）">
+        {/* A-1：調度員依班別（早/晚/大夜）分組，班內再依行政區 */}
+        <Card size="small" title="調度人力排班（依班別 → 行政區）">
+          <Typography.Paragraph type="secondary" className="dts-muted">
+            人力分早/晚/大夜三班，班內依各行政區歷史工作量分派（早班含早高峰最多、晚班次之、
+            大夜離峰做跨區大宗復原）。狀態：閒置待命 / 任務中 / 未上班。
+          </Typography.Paragraph>
+          <Tabs size="small" items={shiftTabs} />
+        </Card>
+
+        {/* A-2：車輛依行政區（車不分班，隨任務移動） */}
+        <Card size="small" title="調度車輛（依行政區）">
           <div className="dts-group-grid">
-            {depotOps.length || depotVehicles.length ? (
-              <ResourceGroup title="總部預備" icon={<HomeOutlined />}
-                vehicles={depotVehicles} operators={depotOps} />
+            {depotVehicles.length ? (
+              <ResourceGroup title="總部預備車" icon={<HomeOutlined />}
+                vehicles={depotVehicles} operators={[]} />
             ) : null}
-            {districts.map((d) => (
+            {[...new Set(fieldVehicles.map((v) => v.current_district).filter(Boolean))].sort().map((d) => (
               <ResourceGroup key={d} title={d} icon={<EnvironmentOutlined />}
-                vehicles={fieldVehicles.filter((v) => v.current_district === d)}
-                operators={fieldOps.filter((o) => o.current_district === d)} />
+                vehicles={fieldVehicles.filter((v) => v.current_district === d)} operators={[]} />
             ))}
             {(() => {
-              const noDistOps = fieldOps.filter((o) => !o.current_district);
               const noDistVeh = fieldVehicles.filter((v) => !v.current_district);
-              return noDistOps.length || noDistVeh.length ? (
+              return noDistVeh.length ? (
                 <ResourceGroup title="未指派責任區" icon={<EnvironmentOutlined />}
-                  vehicles={noDistVeh} operators={noDistOps} />
+                  vehicles={noDistVeh} operators={[]} />
               ) : null;
             })()}
           </div>

@@ -39,7 +39,10 @@ backend/data/
 .env.example
 node_modules/
 
-# 文件（image 不需要）
-docs/
+# 文件（image 不需要）——但放行人力分派分析結果，seed_workforce_allocation 啟動時要讀（ADR-308/312）
+docs/*
+!docs/analysis
+docs/analysis/*
+!docs/analysis/workforce_allocation.json
 *.md
 .kiro/

@@ -152,6 +152,7 @@ _MIGRATIONS = [
     ("tasks", "onboard_start", "INTEGER"),           # ADR-123 出車載量
     ("tasks", "onboard_planned_end", "INTEGER"),     # ADR-123 計畫收車載量
     ("tasks", "assigned_escort", "TEXT"),            # ADR-308 隨車人員（第二名，可選）
+    ("operators", "shift", "TEXT"),                  # ADR-312 排班班別（morning/evening/night）
 ]
 
 

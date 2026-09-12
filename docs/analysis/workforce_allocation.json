@@ -14,8 +14,18 @@
     "n_districts": 29,
     "n_drivers": 350,
     "n_stationed": 30,
-    "method": "工作量=周轉量(權重2,主導)+空站絕對次數+滿站絕對次數(皆標準化) → 最大餘數法整數分配(調度員每區至少1)；駐點員依高周轉站(≥全市P75)數分配，候選站取各區周轉量前列。改用周轉量主導+絕對次數,避免偏遠山區空/滿站率高但無車流被誤配人力",
-    "turnover_p75": 79.6
+    "shift_ratios": {
+      "morning": 0.4,
+      "evening": 0.35,
+      "night": 0.25
+    },
+    "method": "工作量=周轉量(權重2,主導)+空站絕對次數+滿站絕對次數(皆標準化) → 最大餘數法整數分配(調度員每區至少1)；駐點員依高周轉站(≥全市P75)數分配，候選站取各區周轉量前列。改用周轉量主導+絕對次數,避免偏遠山區空/滿站率高但無車流被誤配人力。ADR-312：各區配額再依班別比例(早40/晚35/夜25)切三班,班內對應行政區。",
+    "turnover_p75": 79.6,
+    "shift_totals": {
+      "morning": 136,
+      "evening": 121,
+      "night": 93
+    }
   },
   "districts": [
     {
@@ -27,7 +37,12 @@
       "turnover_sum": 17796.3,
       "workload_score": 3.616,
       "drivers": 41,
-      "stationed": 7
+      "stationed": 7,
+      "drivers_by_shift": {
+        "morning": 16,
+        "evening": 14,
+        "night": 11
+      }
     },
     {
       "district": "新莊區",
@@ -38,7 +53,12 @@
       "turnover_sum": 10601.3,
       "workload_score": 1.9761,
       "drivers": 23,
-      "stationed": 3
+      "stationed": 3,
+      "drivers_by_shift": {
+        "morning": 9,
+        "evening": 8,
+        "night": 6
+      }
     },
     {
       "district": "中和區",
@@ -49,7 +69,12 @@
       "turnover_sum": 8905.5,
       "workload_score": 1.8968,
       "drivers": 22,
-      "stationed": 3
+      "stationed": 3,
+      "drivers_by_shift": {
+        "morning": 8,
+        "evening": 8,
+        "night": 6
+      }
     },
     {
       "district": "土城區",
@@ -60,7 +85,12 @@
       "turnover_sum": 7163.9,
       "workload_score": 1.7372,
       "drivers": 20,
-      "stationed": 2
+      "stationed": 2,
+      "drivers_by_shift": {
+        "morning": 8,
+        "evening": 7,
+        "night": 5
+      }
     },
     {
       "district": "新店區",
@@ -71,7 +101,12 @@
       "turnover_sum": 7526.2,
       "workload_score": 1.7354,
       "drivers": 20,
-      "stationed": 3
+      "stationed": 3,
+      "drivers_by_shift": {
+        "morning": 8,
+        "evening": 7,
+        "night": 5
+      }
     },
     {
       "district": "永和區",
@@ -82,7 +117,12 @@
       "turnover_sum": 4510.3,
       "workload_score": 1.7271,
       "drivers": 20,
-      "stationed": 2
+      "stationed": 2,
+      "drivers_by_shift": {
+        "morning": 8,
+        "evening": 7,
+        "night": 5
+      }
     },
     {
       "district": "三重區",
@@ -93,7 +133,12 @@
       "turnover_sum": 9611.9,
       "workload_score": 1.6886,
       "drivers": 20,
-      "stationed": 3
+      "stationed": 3,
+      "drivers_by_shift": {
+        "morning": 8,
+        "evening": 7,
+        "night": 5
+      }
     },
     {
       "district": "汐止區",
@@ -104,7 +149,12 @@
       "turnover_sum": 4384.0,
       "workload_score": 1.3783,
       "drivers": 16,
-      "stationed": 1
+      "stationed": 1,
+      "drivers_by_shift": {
+        "morning": 6,
+        "evening": 6,
+        "night": 4
+      }
     },
     {
       "district": "平溪區",
@@ -115,7 +165,12 @@
       "turnover_sum": 82.0,
       "workload_score": 1.1973,
       "drivers": 14,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 5,
+        "evening": 5,
+        "night": 4
+      }
     },
     {
       "district": "石門區",
@@ -126,7 +181,12 @@
       "turnover_sum": 88.5,
       "workload_score": 1.1859,
       "drivers": 14,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 5,
+        "evening": 5,
+        "night": 4
+      }
     },
     {
       "district": "淡水區",
@@ -137,7 +197,12 @@
       "turnover_sum": 4686.5,
       "workload_score": 1.0401,
       "drivers": 12,
-      "stationed": 1
+      "stationed": 1,
+      "drivers_by_shift": {
+        "morning": 5,
+        "evening": 4,
+        "night": 3
+      }
     },
     {
       "district": "瑞芳區",
@@ -148,7 +213,12 @@
       "turnover_sum": 265.8,
       "workload_score": 0.9952,
       "drivers": 12,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 5,
+        "evening": 4,
+        "night": 3
+      }
     },
     {
       "district": "萬里區",
@@ -159,7 +229,12 @@
       "turnover_sum": 118.0,
       "workload_score": 0.9928,
       "drivers": 12,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 5,
+        "evening": 4,
+        "night": 3
+      }
     },
     {
       "district": "蘆洲區",
@@ -170,7 +245,12 @@
       "turnover_sum": 4385.0,
       "workload_score": 0.9705,
       "drivers": 12,
-      "stationed": 2
+      "stationed": 2,
+      "drivers_by_shift": {
+        "morning": 5,
+        "evening": 4,
+        "night": 3
+      }
     },
     {
       "district": "林口區",
@@ -181,7 +261,12 @@
       "turnover_sum": 5343.2,
       "workload_score": 0.9525,
       "drivers": 11,
-      "stationed": 1
+      "stationed": 1,
+      "drivers_by_shift": {
+        "morning": 4,
+        "evening": 4,
+        "night": 3
+      }
     },
     {
       "district": "坪林區",
@@ -192,7 +277,12 @@
       "turnover_sum": 90.0,
       "workload_score": 0.8946,
       "drivers": 11,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 4,
+        "evening": 4,
+        "night": 3
+      }
     },
     {
       "district": "三峽區",
@@ -203,7 +293,12 @@
       "turnover_sum": 3507.8,
       "workload_score": 0.7198,
       "drivers": 9,
-      "stationed": 1
+      "stationed": 1,
+      "drivers_by_shift": {
+        "morning": 3,
+        "evening": 3,
+        "night": 3
+      }
     },
     {
       "district": "石碇區",
@@ -214,7 +309,12 @@
       "turnover_sum": 54.7,
       "workload_score": 0.7112,
       "drivers": 9,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 3,
+        "evening": 3,
+        "night": 3
+      }
     },
     {
       "district": "樹林區",
@@ -225,7 +325,12 @@
       "turnover_sum": 3531.5,
       "workload_score": 0.6648,
       "drivers": 8,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 3,
+        "evening": 3,
+        "night": 2
+      }
     },
     {
       "district": "三芝區",
@@ -236,7 +341,12 @@
       "turnover_sum": 137.8,
       "workload_score": 0.5123,
       "drivers": 7,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 3,
+        "evening": 2,
+        "night": 2
+      }
     },
     {
       "district": "雙溪區",
@@ -247,7 +357,12 @@
       "turnover_sum": 134.3,
       "workload_score": 0.4815,
       "drivers": 6,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 2,
+        "evening": 2,
+        "night": 2
+      }
     },
     {
       "district": "烏來區",
@@ -258,7 +373,12 @@
       "turnover_sum": 33.6,
       "workload_score": 0.4698,
       "drivers": 6,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 2,
+        "evening": 2,
+        "night": 2
+      }
     },
     {
       "district": "五股區",
@@ -269,7 +389,12 @@
       "turnover_sum": 1021.0,
       "workload_score": 0.457,
       "drivers": 6,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 2,
+        "evening": 2,
+        "night": 2
+      }
     },
     {
       "district": "鶯歌區",
@@ -280,7 +405,12 @@
       "turnover_sum": 2273.8,
       "workload_score": 0.4148,
       "drivers": 5,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 2,
+        "evening": 2,
+        "night": 1
+      }
     },
     {
       "district": "泰山區",
@@ -291,7 +421,12 @@
       "turnover_sum": 1495.1,
       "workload_score": 0.2799,
       "drivers": 4,
-      "stationed": 1
+      "stationed": 1,
+      "drivers_by_shift": {
+        "morning": 2,
+        "evening": 1,
+        "night": 1
+      }
     },
     {
       "district": "金山區",
@@ -302,7 +437,12 @@
       "turnover_sum": 90.1,
       "workload_score": 0.2648,
       "drivers": 4,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 2,
+        "evening": 1,
+        "night": 1
+      }
     },
     {
       "district": "八里區",
@@ -313,7 +453,12 @@
       "turnover_sum": 827.3,
       "workload_score": 0.1629,
       "drivers": 3,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 1,
+        "evening": 1,
+        "night": 1
+      }
     },
     {
       "district": "深坑區",
@@ -324,7 +469,12 @@
       "turnover_sum": 120.2,
       "workload_score": 0.056,
       "drivers": 2,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 1,
+        "evening": 1,
+        "night": 0
+      }
     },
     {
       "district": "貢寮區",
@@ -335,7 +485,12 @@
       "turnover_sum": 21.8,
       "workload_score": 0.0,
       "drivers": 1,
-      "stationed": 0
+      "stationed": 0,
+      "drivers_by_shift": {
+        "morning": 1,
+        "evening": 0,
+        "night": 0
+      }
     }
   ],
   "driver_allocation": {
@@ -441,5 +596,219 @@
     "泰山區": [
       "捷運泰山貴和站"
     ]
+  },
+  "driver_allocation_by_shift": {
+    "板橋區": {
+      "morning": 16,
+      "evening": 14,
+      "night": 11
+    },
+    "新莊區": {
+      "morning": 9,
+      "evening": 8,
+      "night": 6
+    },
+    "中和區": {
+      "morning": 8,
+      "evening": 8,
+      "night": 6
+    },
+    "土城區": {
+      "morning": 8,
+      "evening": 7,
+      "night": 5
+    },
+    "新店區": {
+      "morning": 8,
+      "evening": 7,
+      "night": 5
+    },
+    "永和區": {
+      "morning": 8,
+      "evening": 7,
+      "night": 5
+    },
+    "三重區": {
+      "morning": 8,
+      "evening": 7,
+      "night": 5
+    },
+    "汐止區": {
+      "morning": 6,
+      "evening": 6,
+      "night": 4
+    },
+    "平溪區": {
+      "morning": 5,
+      "evening": 5,
+      "night": 4
+    },
+    "石門區": {
+      "morning": 5,
+      "evening": 5,
+      "night": 4
+    },
+    "淡水區": {
+      "morning": 5,
+      "evening": 4,
+      "night": 3
+    },
+    "瑞芳區": {
+      "morning": 5,
+      "evening": 4,
+      "night": 3
+    },
+    "萬里區": {
+      "morning": 5,
+      "evening": 4,
+      "night": 3
+    },
+    "蘆洲區": {
+      "morning": 5,
+      "evening": 4,
+      "night": 3
+    },
+    "林口區": {
+      "morning": 4,
+      "evening": 4,
+      "night": 3
+    },
+    "坪林區": {
+      "morning": 4,
+      "evening": 4,
+      "night": 3
+    },
+    "三峽區": {
+      "morning": 3,
+      "evening": 3,
+      "night": 3
+    },
+    "石碇區": {
+      "morning": 3,
+      "evening": 3,
+      "night": 3
+    },
+    "樹林區": {
+      "morning": 3,
+      "evening": 3,
+      "night": 2
+    },
+    "三芝區": {
+      "morning": 3,
+      "evening": 2,
+      "night": 2
+    },
+    "雙溪區": {
+      "morning": 2,
+      "evening": 2,
+      "night": 2
+    },
+    "烏來區": {
+      "morning": 2,
+      "evening": 2,
+      "night": 2
+    },
+    "五股區": {
+      "morning": 2,
+      "evening": 2,
+      "night": 2
+    },
+    "鶯歌區": {
+      "morning": 2,
+      "evening": 2,
+      "night": 1
+    },
+    "泰山區": {
+      "morning": 2,
+      "evening": 1,
+      "night": 1
+    },
+    "金山區": {
+      "morning": 2,
+      "evening": 1,
+      "night": 1
+    },
+    "八里區": {
+      "morning": 1,
+      "evening": 1,
+      "night": 1
+    },
+    "深坑區": {
+      "morning": 1,
+      "evening": 1,
+      "night": 0
+    },
+    "貢寮區": {
+      "morning": 1,
+      "evening": 0,
+      "night": 0
+    }
+  },
+  "stationed_allocation_by_shift": {
+    "板橋區": {
+      "morning": 3,
+      "evening": 2,
+      "night": 2
+    },
+    "新莊區": {
+      "morning": 1,
+      "evening": 1,
+      "night": 1
+    },
+    "中和區": {
+      "morning": 1,
+      "evening": 1,
+      "night": 1
+    },
+    "土城區": {
+      "morning": 1,
+      "evening": 1,
+      "night": 0
+    },
+    "新店區": {
+      "morning": 1,
+      "evening": 1,
+      "night": 1
+    },
+    "永和區": {
+      "morning": 1,
+      "evening": 1,
+      "night": 0
+    },
+    "三重區": {
+      "morning": 1,
+      "evening": 1,
+      "night": 1
+    },
+    "汐止區": {
+      "morning": 1,
+      "evening": 0,
+      "night": 0
+    },
+    "淡水區": {
+      "morning": 1,
+      "evening": 0,
+      "night": 0
+    },
+    "蘆洲區": {
+      "morning": 1,
+      "evening": 1,
+      "night": 0
+    },
+    "林口區": {
+      "morning": 1,
+      "evening": 0,
+      "night": 0
+    },
+    "三峽區": {
+      "morning": 1,
+      "evening": 0,
+      "night": 0
+    },
+    "泰山區": {
+      "morning": 1,
+      "evening": 0,
+      "night": 0
+    }
   }
 }

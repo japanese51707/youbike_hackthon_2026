@@ -21,6 +21,10 @@ COPY backend/ /app/
 COPY config.yaml /app/config.yaml
 ENV YOUBIKE_CONFIG_PATH=/app/config.yaml
 
+# 人力分派分析結果（ADR-308/312）：seed_workforce_allocation 啟動時讀，讓雲端也能
+# 依「行政區×班別」預設分派人力。路徑對齊 operators_repo._ALLOC_PATH（parents[2]/docs/analysis）。
+COPY docs/analysis/workforce_allocation.json /docs/analysis/workforce_allocation.json
+
 EXPOSE 8000
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

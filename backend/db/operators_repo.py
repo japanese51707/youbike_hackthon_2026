@@ -167,6 +167,16 @@ def update_status(operator_id: str, status: str) -> bool:
     return cur.rowcount > 0
 
 
+def set_shift(operator_id: str, shift: Optional[str]) -> bool:
+    """設定人員排班班別（ADR-312：morning/evening/night）。只寫 shift 欄，不動 status。"""
+    conn = get_connection()
+    cur = conn.execute(
+        "UPDATE operators SET shift = ?, updated_at = ? WHERE operator_id = ?",
+        (shift, _now(), operator_id))
+    commit(conn)
+    return cur.rowcount > 0
+
+
 def set_home_district(operator_id: str, district: Optional[str]) -> bool:
     """設定人員「預設責任區」（seed 依歷史分派用）。只寫 current_district，不動 status。
 
@@ -314,8 +324,9 @@ def seed_workforce_allocation() -> dict:
 
     conn = get_connection()
 
-    # ── 調度員：把 OP-004 起、尚未分派的 driver 依各區配額鋪進去 ──
+    # ── 調度員：把 OP-004 起、尚未分派的 driver 依「行政區×班別」細配額鋪進去（ADR-312）──
     driver_alloc: dict = alloc.get("driver_allocation", {})
+    driver_by_shift: dict = alloc.get("driver_allocation_by_shift", {})
     # 待分派的 driver（排除 OP-001~003 具名帳號、已有 current_district 的）
     free_drivers = [r["operator_id"] for r in conn.execute(
         """SELECT operator_id FROM operators
@@ -325,16 +336,30 @@ def seed_workforce_allocation() -> dict:
            ORDER BY operator_id""").fetchall()]
     di = 0
     driver_assigned = 0
+    # 依工作量高→低區，區內依班別（早→晚→夜）設 current_district + shift。
+    # 無 by_shift 資料（舊版 json）時退回只設區、shift 留空。
     for district, quota in sorted(driver_alloc.items(), key=lambda kv: -kv[1]):
-        for _ in range(int(quota)):
-            if di >= len(free_drivers):
-                break
-            set_home_district(free_drivers[di], district)
-            di += 1
-            driver_assigned += 1
+        shifts = driver_by_shift.get(district)
+        if shifts:
+            for shift_name in ("morning", "evening", "night"):
+                for _ in range(int(shifts.get(shift_name, 0))):
+                    if di >= len(free_drivers):
+                        break
+                    set_home_district(free_drivers[di], district)
+                    set_shift(free_drivers[di], shift_name)
+                    di += 1
+                    driver_assigned += 1
+        else:
+            for _ in range(int(quota)):
+                if di >= len(free_drivers):
+                    break
+                set_home_district(free_drivers[di], district)
+                di += 1
+                driver_assigned += 1
 
-    # ── 駐點員：按各區配額設 current_district + stationed_at（駐點候選站）──
+    # ── 駐點員：按各區配額設 current_district + stationed_at（駐點候選站）+ 班別（ADR-312）──
     stationed_alloc: dict = alloc.get("stationed_allocation", {})
+    stationed_by_shift: dict = alloc.get("stationed_allocation_by_shift", {})
     candidates: dict = alloc.get("stationed_candidates", {})
     free_stationed = [r["operator_id"] for r in conn.execute(
         """SELECT operator_id FROM operators
@@ -345,12 +370,18 @@ def seed_workforce_allocation() -> dict:
     stationed_assigned = 0
     for district, quota in sorted(stationed_alloc.items(), key=lambda kv: -kv[1]):
         cand_stations = candidates.get(district, [])
+        # 依班別展開該區的駐點員（早→晚→夜）；無 by_shift 則整區不分班。
+        shifts = stationed_by_shift.get(district) or {}
+        shift_seq = []
+        for shift_name in ("morning", "evening", "night"):
+            shift_seq += [shift_name] * int(shifts.get(shift_name, 0))
         for j in range(int(quota)):
             if si >= len(free_stationed):
                 break
             oid = free_stationed[si]
             set_home_district(oid, district)
-            # 有候選站就對到一站（依序），沒有就只設區
+            if j < len(shift_seq):
+                set_shift(oid, shift_seq[j])
             if j < len(cand_stations):
                 set_stationed_at(oid, _station_name_to_id(cand_stations[j]))
             si += 1

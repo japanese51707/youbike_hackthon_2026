@@ -40,6 +40,10 @@ MONTHS = [f"2026-{m:02d}" for m in range(1, 7)]  # 1–6 月官方資料
 N_DRIVERS = 350
 N_STATIONED = 30
 
+# ── 班別人力配置比例（ADR-312，對齊 config.yaml shift_allocation）──
+# 早班含早高峰(最忙)→最多；晚班含晚高峰→次多；大夜離峰跨區復原→最少。三值加總=1。
+SHIFT_RATIOS = {"morning": 0.40, "evening": 0.35, "night": 0.25}
+
 OUT_PATH = Path("docs/analysis/workforce_allocation.json")
 
 _COL_MAP = {
@@ -130,6 +134,20 @@ def normalize(series: pd.Series) -> pd.Series:
     return (series - lo) / (hi - lo)
 
 
+def split_by_shift(total: int, min_each: int = 0) -> dict[str, int]:
+    """把某區的人力配額依 SHIFT_RATIOS 切成三班（最大餘數法保整數，總和=total）。
+
+    min_each：每班保底人數（該區配額夠時每班至少留 min_each）。配額太少時退回不保底，
+    優先把人放到早班（最忙）→晚班→大夜。
+    """
+    if total <= 0:
+        return {s: 0 for s in SHIFT_RATIOS}
+    # 配額足夠才保底每班 min_each，否則不保底（避免小區被迫每班都放）
+    reserve = min_each * len(SHIFT_RATIOS)
+    me = min_each if total >= reserve + 0 and total >= len(SHIFT_RATIOS) else 0
+    return largest_remainder(dict(SHIFT_RATIOS), total, min_each=me)
+
+
 def main() -> None:
     print("=" * 60)
     print("行政區人力分派分析（調度員 + 駐點員）")
@@ -202,6 +220,15 @@ def main() -> None:
                .nlargest(quota, "avg_daily_turnover")["station_name"].tolist())
         stationed_candidates[d] = top
 
+    # ── 班別維度：把各區的 driver/stationed 配額再依 SHIFT_RATIOS 切三班（ADR-312）──
+    # driver 每班至少 1（該區配額夠時）；stationed 不保底（駐點量少，優先早晚班顧尖峰）。
+    driver_by_shift = {d: split_by_shift(q, min_each=1) for d, q in driver_alloc.items()}
+    stationed_by_shift = {d: split_by_shift(q, min_each=0)
+                          for d, q in stationed_alloc.items() if q > 0}
+    # 各班總人數（跨區加總，供 seed/前端快速核對）
+    shift_totals = {s: sum(driver_by_shift[d].get(s, 0) for d in driver_by_shift)
+                    for s in SHIFT_RATIOS}
+
     # ── 彙整輸出 ──
     result = {
         "meta": {
@@ -212,15 +239,21 @@ def main() -> None:
             "n_districts": int(df["district"].nunique()),
             "n_drivers": N_DRIVERS,
             "n_stationed": N_STATIONED,
+            "shift_ratios": SHIFT_RATIOS,
             "method": "工作量=周轉量(權重2,主導)+空站絕對次數+滿站絕對次數(皆標準化) → "
                       "最大餘數法整數分配(調度員每區至少1)；駐點員依高周轉站(≥全市P75)數分配，"
-                      "候選站取各區周轉量前列。改用周轉量主導+絕對次數,避免偏遠山區空/滿站率高但無車流被誤配人力",
+                      "候選站取各區周轉量前列。改用周轉量主導+絕對次數,避免偏遠山區空/滿站率高但無車流被誤配人力。"
+                      "ADR-312：各區配額再依班別比例(早40/晚35/夜25)切三班,班內對應行政區。",
             "turnover_p75": round(float(p75), 1),
+            "shift_totals": shift_totals,
         },
         "districts": [],
         "driver_allocation": driver_alloc,
         "stationed_allocation": {k: v for k, v in stationed_alloc.items() if v > 0},
         "stationed_candidates": stationed_candidates,
+        # ADR-312 班別維度：{行政區: {morning, evening, night}}
+        "driver_allocation_by_shift": driver_by_shift,
+        "stationed_allocation_by_shift": stationed_by_shift,
     }
     for d, row in metrics.iterrows():
         result["districts"].append({
@@ -233,19 +266,23 @@ def main() -> None:
             "workload_score": round(float(row["workload_score"]), 4),
             "drivers": driver_alloc.get(d, 0),
             "stationed": stationed_alloc.get(d, 0),
+            "drivers_by_shift": driver_by_shift.get(d, {}),
         })
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    print("\n" + "=" * 60)
-    print("分派結果（依工作量排序）")
-    print("=" * 60)
-    print(f"{'行政區':<8}{'調度員':>6}{'駐點員':>6}   工作量分數")
+    print("\n" + "=" * 68)
+    print("分派結果（依工作量排序）｜調度員含班別分布 早/晚/夜")
+    print("=" * 68)
+    print(f"{'行政區':<8}{'調度員':>6}{'  早/晚/夜':>12}{'駐點員':>6}   工作量")
     for d in metrics.index:
-        print(f"{d:<8}{driver_alloc.get(d,0):>6}{stationed_alloc.get(d,0):>6}"
+        bs = driver_by_shift.get(d, {})
+        shift_str = f"{bs.get('morning',0)}/{bs.get('evening',0)}/{bs.get('night',0)}"
+        print(f"{d:<8}{driver_alloc.get(d,0):>6}{shift_str:>12}{stationed_alloc.get(d,0):>6}"
               f"   {metrics.loc[d,'workload_score']:.3f}")
-    print(f"\n調度員合計 {sum(driver_alloc.values())} / {N_DRIVERS}，"
+    print(f"\n調度員合計 {sum(driver_alloc.values())} / {N_DRIVERS}"
+          f"（早 {shift_totals['morning']}・晚 {shift_totals['evening']}・夜 {shift_totals['night']}），"
           f"駐點員合計 {sum(stationed_alloc.values())} / {N_STATIONED}")
     print(f"\n💾 已輸出：{OUT_PATH}")
 
