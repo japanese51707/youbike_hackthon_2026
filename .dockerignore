@@ -1,8 +1,8 @@
-# ECS Fargate 後端 image build context（專案根）——只需要 backend/ + config.yaml。
-# 排除大檔與非必要，讓 build context 精簡快速。
+# ECS Fargate 後端 image build context（專案根）。
+# ADR-314：前端原始碼要進多階段 build，但排除依賴與產物。
 
-# 前端整包（後端 image 不需要）
-frontend/
+frontend/node_modules/
+frontend/dist/
 
 # Python 虛擬環境與快取
 .venv/
