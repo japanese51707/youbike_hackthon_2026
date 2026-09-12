@@ -192,16 +192,25 @@ def evaluate_station(
             reason = (f"{horizon} 分鐘後預測可還位最低 {returnable_lower:.1f} 個，"
                       f"低於安全緩衝 {buffer_bikes:.0f} 個，即將滿站")
 
-    # 降級/保底：沒有預測，或預測未觸發但踩到保底水位（警示層）
+    # 降級/保底：沒有預測，或預測未觸發但踩到保底水位。
+    # 已空／已滿是物理邊界，即使沒有預測也屬截斷層（ADR-111）；其餘低／高水位仍是警示。
     if action is None:
-        if usage_rate < trig["低水位_借用率百分比"]:
-            action, basis, urgency_tier = "補車", "保底門檻（借用率低水位）", "warning"
+        at_limit_empty = available <= 0
+        at_limit_full = available >= total
+        if usage_rate < trig["低水位_借用率百分比"] or at_limit_empty:
+            action, basis = "補車", "保底門檻（借用率低水位）"
+            urgency_tier, is_censored_demand = (
+                ("censored", True) if at_limit_empty else ("warning", False)
+            )
             at_arrival = available
             reason = (f"借用率 {usage_rate:.0f}% 低於保底門檻 "
                       f"{trig['低水位_借用率百分比']}%"
                       + ("（無預測，降級判斷）" if prediction is None else "（動態判斷未觸發）"))
-        elif usage_rate > trig["高水位_借用率百分比"]:
-            action, basis, urgency_tier = "取車", "保底門檻（借用率高水位）", "warning"
+        elif usage_rate > trig["高水位_借用率百分比"] or at_limit_full:
+            action, basis = "取車", "保底門檻（借用率高水位）"
+            urgency_tier, is_censored_demand = (
+                ("censored", True) if at_limit_full else ("warning", False)
+            )
             at_arrival = available
             reason = (f"借用率 {usage_rate:.0f}% 高於保底門檻 "
                       f"{trig['高水位_借用率百分比']}%"
