@@ -79,9 +79,14 @@ superseded-by:
 
 ## 介面與相容性
 
-- 新增 API 3.21：`POST /api/v1/assistant/twin`。
+- 新增 API 3.21：`POST /api/v1/assistant/twin`；另有 `GET /api/v1/assistant/status` 供診斷（不回金鑰）。
 - 回應含 `source=bedrock|fallback`、`advisory=true`。
 - 不改派工、預測、資料源契約。
+- 雲端部署配置（ADR-307 ECS Fargate，2026-09-11 接上）：`youbike-ecs-task` role 加最小權限
+  inline policy `bedrock-nova-lite`（`bedrock:InvokeModel`/`Converse`，限定 `amazon.nova-lite-v1:0`
+  的 foundation-model 與 inference-profile ARN）；task definition 加環境變數 `BEDROCK_REGION=us-east-1`、
+  `BEDROCK_MODEL_ID=amazon.nova-lite-v1:0`、`BEDROCK_ENABLED=true`。雲端後端走 IAM task role，
+  使用者從 GitHub 拉前端指向雲端後端即可用 Bedrock，不需任何本機憑證。
 
 ## 資安與隱私
 
