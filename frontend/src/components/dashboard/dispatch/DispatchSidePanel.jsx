@@ -32,149 +32,107 @@ export const TRACK_STATUS = {
 };
 
 // critical（含截斷 censored）＝最高緊急，緊急度直接呈現 100；warning 顯示其分數（若有）。
-function alertUrgency(a) {
-  if (a.level === "critical") return 100;
-  if (Number.isFinite(Number(a.priority_score))) return Math.round(Number(a.priority_score));
-  return null;
-}
-
-function AlertsSection({ alerts, onAcknowledge, onEmergency, onFocusAlert }) {
-  const sorted = [...(alerts ?? [])].sort((a, b) => {
-    const rank = { critical: 0, warning: 1, info: 2 };
-    return (rank[a.level] ?? 3) - (rank[b.level] ?? 3);
-  });
-
+// 合併卡片：一張卡同時呈現「站況警語（警報）」＋「該調度什麼（建議）」，最緊急排前。
+function UrgencySection({ items, onPickStation, onFocus, onAcknowledge, onEmergency }) {
   return (
     <section className="deck-section">
-      <div className="deck-section-title">
-        <AlertOutlined /> 警報區
-        <span className="deck-count">{sorted.filter((a) => !a.acknowledged).length} 未讀</span>
-      </div>
-      {sorted.length ? (
-        <div className="deck-alert-list">
-          {sorted.map((a) => {
-            const meta = ALERT_LEVEL[a.level] ?? ALERT_LEVEL.info;
-            const urgency = alertUrgency(a);
-            return (
-              <div
-                key={a.alert_id}
-                className={`deck-alert deck-alert-${a.level}`}
-                role="button"
-                tabIndex={0}
-                title="點擊定位到此站"
-                onClick={() => onFocusAlert?.(a)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") onFocusAlert?.(a);
-                }}
-              >
-                <div className="deck-alert-head">
-                  <span className="deck-alert-dot" style={{ background: meta.color }} />
-                  <Typography.Text className="deck-alert-name">{a.station_name}</Typography.Text>
-                  {urgency != null ? (
-                    <span className="deck-alert-urgency mono" style={{ color: meta.color }}>
-                      緊急度 {urgency}
-                    </span>
-                  ) : null}
-                  <Tag color={a.level === "critical" ? "red" : a.level === "warning" ? "orange" : "blue"}>
-                    {meta.label}
-                  </Tag>
-                  {a.acknowledged ? <Tag color="default">已讀</Tag> : null}
-                </div>
-                <div className="deck-alert-msg">{a.message}</div>
-                <div className="deck-alert-actions">
-                  {a.level === "critical" ? (
-                    <Button
-                      size="small"
-                      danger
-                      icon={<ThunderboltOutlined />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEmergency?.(a);
-                      }}
-                    >
-                      緊急出車
-                    </Button>
-                  ) : null}
-                  {!a.acknowledged ? (
-                    <Button
-                      size="small"
-                      type="text"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAcknowledge?.(a.alert_id);
-                      }}
-                    >
-                      標記已讀
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="目前無警報" />
-      )}
-    </section>
-  );
-}
-
-function UrgencySection({ items, onPickStation, onFocus }) {
-  return (
-    <section className="deck-section">
-      <div className="deck-section-title">
-        需調度清單
-        <span className="deck-count">{items.length} 站</span>
-      </div>
       {items.length ? (
         <div className="deck-urgency-list">
           {items.map((item) => {
             const tone = STATUS_TONE[item.station.status] ?? STATUS_TONE.normal;
+            const score = item.urgencyTier === "censored" ? 100 : Math.round(item.urgency);
+            // 站況警語等級：優先用警報等級；沒警報但 censored/critical 也視為 critical。
+            const level =
+              item.alertLevel ||
+              (item.urgencyTier === "censored" ? "critical" : score >= 60 ? "warning" : null);
+            const levelMeta = level ? ALERT_LEVEL[level] : null;
             return (
-              <button
-                type="button"
+              <div
                 key={item.station.station_id}
-                className="deck-urgency-row"
+                className={`deck-urgency-card${level ? ` deck-urgency-${level}` : ""}`}
+                role="button"
+                tabIndex={0}
+                title="點擊定位並以此站組單"
                 onClick={() => onPickStation?.(item.station)}
-                title={item.reason || "點擊以此站組單（站找車）"}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") onPickStation?.(item.station);
+                }}
               >
-                <span className="deck-urgency-score mono" style={{ color: tone.color }}>
-                  {item.urgencyTier === "censored" ? 100 : Math.round(item.urgency)}
-                </span>
-                <span className="deck-urgency-main">
-                  <span className="deck-urgency-name">
-                    {item.station.station_name}
-                    {item.predictionStatus === "degraded" ? (
-                      <Tag color="default" style={{ marginLeft: 6, fontSize: 11 }}>
-                        緊急度：即時降級
-                      </Tag>
-                    ) : null}
+                {/* 上排：緊急度分數 + 站名 + 警報等級徽章 + 定位鈕 */}
+                <div className="deck-urgency-top">
+                  <span className="deck-urgency-score mono" style={{ color: tone.color }}>
+                    {score}
                   </span>
-                  <span className="deck-urgency-sub mono">
-                    {item.station.district}｜{tone.label}｜{item.action} {item.quantity} 台
-                    {Number.isFinite(Number(item.targetAvailable))
-                      ? `｜補到 ${item.targetAvailable} 台`
-                      : Number.isFinite(Number(item.predicted))
-                        ? `｜到達時 ${item.predicted} 台`
-                        : ""}
-                  </span>
-                  {item.reason ? (
-                    <span className="deck-urgency-reason">{item.reason}</span>
+                  <span className="deck-urgency-name">{item.station.station_name}</span>
+                  {levelMeta ? (
+                    <Tag color={level === "critical" ? "red" : level === "warning" ? "orange" : "blue"}>
+                      {levelMeta.label}
+                    </Tag>
                   ) : null}
-                </span>
-                <span
-                  className="deck-icon-btn"
-                  role="button"
-                  tabIndex={-1}
-                  title="定位"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onFocus?.(item.station);
-                  }}
-                >
-                  <AimOutlined />
-                </span>
-              </button>
+                  <span
+                    className="deck-icon-btn"
+                    role="button"
+                    tabIndex={-1}
+                    title="定位地圖"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onFocus?.(item.station);
+                    }}
+                  >
+                    <AimOutlined />
+                  </span>
+                </div>
+
+                {/* 站況警語（來自警報，若有）：已空站/已滿站/即將… */}
+                {item.alertMessage ? (
+                  <div className="deck-urgency-alert" style={{ color: levelMeta?.color }}>
+                    <AlertOutlined /> {item.alertMessage}
+                  </div>
+                ) : null}
+
+                {/* 調度指令：該站在哪個區、該補/取多少、補到幾台 */}
+                <div className="deck-urgency-sub mono">
+                  {item.station.district}｜{tone.label}｜
+                  <b>{item.action} {item.quantity} 台</b>
+                  {Number.isFinite(Number(item.targetAvailable))
+                    ? `｜目標 ${item.targetAvailable} 台`
+                    : ""}
+                </div>
+
+                {/* 建議原因（可解釋）*/}
+                {item.reason ? <div className="deck-urgency-reason">{item.reason}</div> : null}
+
+                {/* 動作：緊急出車（critical）/ 標記已讀（有未讀警報）*/}
+                {level === "critical" || item.alertId ? (
+                  <div className="deck-urgency-actions">
+                    {level === "critical" ? (
+                      <Button
+                        size="small"
+                        danger
+                        icon={<ThunderboltOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEmergency?.({ station_id: item.station.station_id });
+                        }}
+                      >
+                        緊急出車
+                      </Button>
+                    ) : null}
+                    {item.alertId && !item.alertAcknowledged ? (
+                      <Button
+                        size="small"
+                        type="text"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAcknowledge?.(item.alertId);
+                        }}
+                      >
+                        標記已讀
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -251,34 +209,35 @@ export default function DispatchSidePanel({
   alerts,
   onAcknowledge,
   onEmergency,
-  onFocusAlert,
   urgencyItems,
   onPickStation,
   onFocus,
   orders,
   apiMode = false,
 }) {
-  const unreadAlerts = (alerts ?? []).filter((a) => !a.acknowledged).length;
-  const criticalCount = (alerts ?? []).filter((a) => a.level === "critical").length;
+  // 需調度清單已合併警報：critical（含空/滿站截斷）數量做為紅點提示。
+  const criticalCount = (urgencyItems ?? []).filter(
+    (it) => it.alertLevel === "critical" || it.urgencyTier === "censored",
+  ).length;
 
   const tabItems = [
     {
-      key: "alerts",
-      label: <TabLabel text="警報區" count={unreadAlerts} dot={criticalCount > 0 ? "danger" : undefined} />,
-      children: (
-        <AlertsSection
-          alerts={alerts}
-          onAcknowledge={onAcknowledge}
-          onEmergency={onEmergency}
-          onFocusAlert={onFocusAlert}
+      key: "urgency",
+      label: (
+        <TabLabel
+          text="需調度清單"
+          count={urgencyItems?.length ?? 0}
+          dot={criticalCount > 0 ? "danger" : undefined}
         />
       ),
-    },
-    {
-      key: "urgency",
-      label: <TabLabel text="需調度清單" count={urgencyItems?.length ?? 0} dot="danger" />,
       children: (
-        <UrgencySection items={urgencyItems} onPickStation={onPickStation} onFocus={onFocus} />
+        <UrgencySection
+          items={urgencyItems}
+          onPickStation={onPickStation}
+          onFocus={onFocus}
+          onAcknowledge={onAcknowledge}
+          onEmergency={onEmergency}
+        />
       ),
     },
     {
@@ -292,7 +251,7 @@ export default function DispatchSidePanel({
     <div className="dispatch-deck">
       <Tabs
         className="deck-tabs"
-        defaultActiveKey="alerts"
+        defaultActiveKey="urgency"
         size="small"
         items={tabItems}
       />

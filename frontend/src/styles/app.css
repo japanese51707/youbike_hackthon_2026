@@ -2049,3 +2049,71 @@ body {
 .drawer-ref-tabs .ant-tabs-nav {
   margin-bottom: 10px;
 }
+
+/* ── 需調度合併卡片（警報+建議同卡，20260912）── */
+.deck-urgency-card {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--ct-border);
+  border-left: 3px solid var(--ct-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: rgba(148, 163, 184, 0.05);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.deck-urgency-card:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+.deck-urgency-card.deck-urgency-critical {
+  border-left-color: var(--ct-danger);
+}
+.deck-urgency-card.deck-urgency-warning {
+  border-left-color: var(--ct-warning);
+}
+.deck-urgency-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.deck-urgency-card .deck-urgency-score {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 34px;
+}
+.deck-urgency-card .deck-urgency-name {
+  font-weight: 600;
+  color: var(--ct-text);
+  flex: 1;
+  min-width: 0;
+}
+.deck-urgency-alert {
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.deck-urgency-card .deck-urgency-sub {
+  font-size: 12px;
+  color: var(--ct-text-dim);
+  margin-top: 4px;
+}
+.deck-urgency-card .deck-urgency-sub b {
+  color: var(--ct-text);
+}
+.deck-urgency-card .deck-urgency-reason {
+  font-size: 11px;
+  color: var(--ct-text-dim);
+  line-height: 1.4;
+  margin-top: 4px;
+  opacity: 0.85;
+}
+.deck-urgency-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}

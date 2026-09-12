@@ -54,10 +54,13 @@ def build_dispatch_list(
     predictor=None,
     urgency_calc=None,
     override_station_ids: Optional[set[str]] = None,
+    apply_capacity: bool = True,
 ) -> list[dict]:
-    """產出最終排序 + 資源受限的調度建議清單。
+    """產出最終排序（+ 可選資源受限）的調度建議清單。
 
     override_station_ids：③即時覆寫的站，排序時強制置頂（最前綴）。
+    apply_capacity：True＝截到「一個時段車隊實際能處理的站數」（派工量能語意，預設）；
+      False＝回全部需調度站的完整排序清單（供前端『需調度清單』顯示，不因量能截掉空/滿站）。
     """
     cfg = config or get_config()
     pred = predictor or get_predictor()
@@ -93,7 +96,9 @@ def build_dispatch_list(
     recs.sort(key=lambda r: (not r["override_active"], -r["priority_score"],
                              _tier_rank.get(r.get("confidence_tier", "mid"), 1)))
 
-    # 4. 資源限制：時段上限
+    # 4. 資源限制：時段上限（僅在派工量能語意下套用；顯示用清單不截斷）
+    if not apply_capacity:
+        return recs
     fleet = cfg["fleet"]
     cap = min(int(fleet["每時段最大調度站數"]),
               int(fleet["調度車數量"]) * int(fleet["每趟最大站數"]))

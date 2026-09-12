@@ -50,7 +50,9 @@ def recommendations(limit: int = 15, priority: str | None = None):
     """
     stations = get_stations_with_degradation()
     overrides = get_override_service().active_station_ids()
-    recs = build_dispatch_list(stations, override_station_ids=overrides)
+    # 顯示用清單：不套用派工量能上限，回全部需調度站的完整排序（前端用 limit 控制顯示筆數），
+    # 避免空/滿站因車隊時段量能被截掉而看不到。
+    recs = build_dispatch_list(stations, override_station_ids=overrides, apply_capacity=False)
     if priority:
         recs = [r for r in recs if r["priority_level"] == priority]
     return recs[:limit]

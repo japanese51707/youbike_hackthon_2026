@@ -119,6 +119,8 @@ export default function DashboardPage() {
   // - 無後端建議（mock 模式或後端該塊降級）時，退回以站況估的示意排序。
   const urgencyItems = useMemo(() => {
     const stationById = new Map(stations.map((s) => [s.station_id, s]));
+    // 警報以站為單位對應，供合併卡片同時顯示「站況警語 + 調度建議」。
+    const alertByStation = new Map((alerts ?? []).map((a) => [a.station_id, a]));
 
     if (recommendations.length) {
       return recommendations
@@ -132,6 +134,7 @@ export default function DashboardPage() {
             lng: rec.lng,
             status: rec.status ?? (["補車"].includes(rec.action) ? "low" : "high"),
           };
+          const alert = alertByStation.get(rec.station_id);
           return {
             station,
             action: rec.action,
@@ -145,6 +148,11 @@ export default function DashboardPage() {
             predicted: rec.predicted_at_arrival,
             // 誠實標示：即時源無歷史 lag 特徵時緊急度為降級版，不假裝是完整預測。
             predictionStatus: rec.prediction_status,
+            // 併入警報：站況警語（已空/已滿/即將…）與等級，讓一張卡同時看到「怎麼了」與「該做什麼」。
+            alertLevel: alert?.level,
+            alertMessage: alert?.message,
+            alertId: alert?.alert_id,
+            alertAcknowledged: alert?.acknowledged,
           };
         })
         .sort((a, b) => b.urgency - a.urgency);
@@ -525,10 +533,8 @@ export default function DashboardPage() {
                   />
                 ) : (
                   <DispatchSidePanel
-                    alerts={alerts}
                     onAcknowledge={dashboard.acknowledgeAlert}
                     onEmergency={startEmergency}
-                    onFocusAlert={focusAlert}
                     urgencyItems={urgencyItems}
                     onPickStation={startFromStation}
                     onFocus={focusStation}

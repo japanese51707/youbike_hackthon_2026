@@ -30,8 +30,9 @@ data_source:
   retry_backoff_sec: 30
   observation_max_stations: 3000
   observation_max_points: 2100  # 約一週五分鐘觀測；有界記憶體，重啟需重新累積
-  # 歷史資料源（S3 Parquet，A1）
-  s3_bucket: "youbike-hackathon-2026"
+  # 歷史資料源（S3 Parquet）。ADR-307：競賽現場遷至 us-east-1 帳號的 bucket
+  # （原 youbike-hackathon-2026 在原帳號東京區；現場為全新帳號 us-east-1）。
+  s3_bucket: "youbike-hackathon-2026-use1"
   s3_prefix: "youbike_data"           # 分區：youbike_data/year_month=YYYY-MM/data.parquet
   historical_default_month: "2026-06" # 未指定月份時的預設分區
 

@@ -24,32 +24,126 @@ function buildOption(current, horizons, colors) {
   const sorted = [...horizons].sort((a, b) => a.horizon_minutes - b.horizon_minutes);
   const labels = ["現在", ...sorted.map((h) => `+${h.horizon_minutes} 分`)];
 
-  // 中線（P50）：起點放當前值，之後各視野 predicted_available。
-  const midline = [now, ...sorted.map((h) => Number(h.predicted_available))];
-  // 區間帶用堆疊面積：下界(透明) + (上界-下界)(填色)。起點無區間（現在是確定值）。
+  // 真實（未夾）區間邊界：可能 <0（空站悲觀情境仍在流出）或 >總柱數（滿站樂觀情境仍在流入）。
+  const rawLo = (h) =>
+    Number.isFinite(Number(h.raw_lower_bound)) ? Number(h.raw_lower_bound) : Number(h.lower_bound);
+  const rawHi = (h) =>
+    Number.isFinite(Number(h.raw_upper_bound)) ? Number(h.raw_upper_bound) : Number(h.upper_bound);
+
+  // 物理可行線（實線，P50 夾在 0~總柱數）：起點放當前值。
+  const clipped = [now, ...sorted.map((h) => Number(h.predicted_available))];
+  // 被壓抑＝真實區間穿透物理界線（下界<0 或 上界>總柱數）：代表需求被空/滿站壓抑，殘量是假象。
+  const hasSuppressed = sorted.some((h) => rawLo(h) < -0.05 || rawHi(h) > capacity + 0.05);
+  // 真實趨勢虛線：畫「未夾的真實區間邊界」——下界穿透 0 就顯示缺口，上界超過柱數就顯示溢出。
+  const rawLower = [now, ...sorted.map(rawLo)];
+  const rawUpper = [now, ...sorted.map(rawHi)];
+
+  // 區間帶（堆疊面積）：下界(透明) + (上界-下界)(填色)。起點無區間（現在是確定值）。
   const lowerBase = [null, ...sorted.map((h) => Number(h.lower_bound))];
   const bandHeight = [
     null,
     ...sorted.map((h) => Number(h.upper_bound) - Number(h.lower_bound)),
   ];
 
+  // y 軸範圍：讓被壓抑的真實邊界（<0 或 >柱數）也畫得出來，上下各留一點。
+  const yMin = hasSuppressed ? Math.floor(Math.min(0, ...rawLower) - 1) : 0;
+  const yMax = hasSuppressed ? Math.ceil(Math.max(capacity, ...rawUpper) + 1) : capacity || null;
+
+  const series = [
+    {
+      name: "區間下界",
+      type: "line",
+      stack: "ci",
+      data: lowerBase,
+      lineStyle: { opacity: 0 },
+      showSymbol: false,
+      areaStyle: { color: "transparent" },
+      tooltip: { show: false },
+      connectNulls: false,
+    },
+    {
+      name: "安全區間 P10–P90",
+      type: "line",
+      stack: "ci",
+      data: bandHeight,
+      lineStyle: { opacity: 0 },
+      showSymbol: false,
+      areaStyle: { color: colors.band },
+      connectNulls: false,
+    },
+    {
+      name: "預測可借（實際會發生）",
+      type: "line",
+      data: clipped,
+      smooth: true,
+      symbolSize: 8,
+      itemStyle: { color: colors.line },
+      lineStyle: { color: colors.line, width: 2 },
+      markLine: capacity
+        ? {
+            silent: true,
+            symbol: "none",
+            lineStyle: { color: colors.border, type: "dashed" },
+            data: [
+              { yAxis: capacity, name: "滿柱" },
+              { yAxis: 0, name: "空站" },
+            ],
+            label: { color: colors.muted, formatter: (p) => (p.value === 0 ? "空站 0" : `滿柱 ${capacity}`) },
+          }
+        : undefined,
+    },
+  ];
+
+  // 只有出現被壓抑需求時才畫「真實趨勢」虛線，避免正常站多一條重疊線干擾。
+  // 空站畫真實下界（穿透 0 的缺口）、滿站畫真實上界（超過柱數的溢出），哪個穿透畫哪個。
+  const suppressedLow = sorted.some((h) => rawLo(h) < -0.05);
+  const suppressedHigh = sorted.some((h) => rawHi(h) > capacity + 0.05);
+  if (hasSuppressed) {
+    series.push({
+      name: "真實趨勢（被壓抑需求）",
+      type: "line",
+      data: suppressedLow ? rawLower : rawUpper,
+      smooth: true,
+      showSymbol: false,
+      lineStyle: { color: colors.danger || "#ff6b6b", width: 2, type: "dashed", opacity: 0.6 },
+      itemStyle: { color: colors.danger || "#ff6b6b", opacity: 0.6 },
+      z: 1,
+    });
+  }
+
   return {
     backgroundColor: "transparent",
     textStyle: { color: colors.text },
+    legend: {
+      data: hasSuppressed
+        ? ["安全區間 P10–P90", "預測可借（實際會發生）", "真實趨勢（被壓抑需求）"]
+        : ["安全區間 P10–P90", "預測可借（實際會發生）"],
+      textStyle: { color: colors.muted, fontSize: 11 },
+      top: 0,
+      itemWidth: 18,
+      itemHeight: 8,
+    },
     tooltip: {
       trigger: "axis",
       backgroundColor: colors.panel,
       borderColor: colors.border,
       textStyle: { color: colors.text },
       formatter: (params) => {
-        // params 含三條 series；只顯示有意義的中線 + 區間文字。
         const idx = params[0].dataIndex;
         if (idx === 0) return `現在：${now} 台（實際）`;
         const h = sorted[idx - 1];
-        return `+${h.horizon_minutes} 分<br/>預測 ${h.predicted_available} 台<br/>區間 ${h.lower_bound}–${h.upper_bound} 台`;
+        const lo = rawLo(h);
+        const hi = rawHi(h);
+        let html = `+${h.horizon_minutes} 分<br/>實際會發生 ${h.predicted_available} 台<br/>安全區間 ${h.lower_bound}–${h.upper_bound} 台`;
+        if (lo < -0.05) {
+          html += `<br/><span style="opacity:.85">真實需求下界 ${lo.toFixed(1)} 台（穿透空站底，實際持續缺車，殘量是假象）</span>`;
+        } else if (hi > capacity + 0.05) {
+          html += `<br/><span style="opacity:.85">真實需求上界 ${hi.toFixed(1)} 台（穿透滿站頂，實際持續爆滿）</span>`;
+        }
+        return html;
       },
     },
-    grid: { left: 40, right: 18, top: 20, bottom: 28, containLabel: true },
+    grid: { left: 40, right: 18, top: 30, bottom: 28, containLabel: true },
     xAxis: {
       type: "category",
       data: labels,
@@ -60,54 +154,13 @@ function buildOption(current, horizons, colors) {
     yAxis: {
       type: "value",
       name: "可借車輛",
-      min: 0,
-      max: capacity || null, // y 軸上限＝總柱數（最多滿柱）
+      min: yMin,
+      max: yMax,
       nameTextStyle: { color: colors.muted },
       axisLabel: { color: colors.muted },
       splitLine: { lineStyle: { color: colors.grid } },
     },
-    series: [
-      {
-        name: "區間下界",
-        type: "line",
-        stack: "ci",
-        data: lowerBase,
-        lineStyle: { opacity: 0 },
-        showSymbol: false,
-        areaStyle: { color: "transparent" },
-        tooltip: { show: false },
-        connectNulls: false,
-      },
-      {
-        name: "安全區間 P10–P90",
-        type: "line",
-        stack: "ci",
-        data: bandHeight,
-        lineStyle: { opacity: 0 },
-        showSymbol: false,
-        areaStyle: { color: colors.band },
-        connectNulls: false,
-      },
-      {
-        name: "預測可借（P50）",
-        type: "line",
-        data: midline,
-        smooth: true,
-        symbolSize: 8,
-        itemStyle: { color: colors.line },
-        lineStyle: { color: colors.line, width: 2 },
-        // 起點到第一個預測點用虛線區隔「實際 → 預測」。
-        markLine: capacity
-          ? {
-              silent: true,
-              symbol: "none",
-              lineStyle: { color: colors.border, type: "dashed" },
-              data: [{ yAxis: capacity, name: "滿柱" }],
-              label: { color: colors.muted, formatter: `滿柱 ${capacity}` },
-            }
-          : undefined,
-      },
-    ],
+    series,
   };
 }
 

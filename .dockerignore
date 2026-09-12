@@ -1,0 +1,45 @@
+# ECS Fargate 後端 image build context（專案根）——只需要 backend/ + config.yaml。
+# 排除大檔與非必要，讓 build context 精簡快速。
+
+# 前端整包（後端 image 不需要）
+frontend/
+
+# Python 虛擬環境與快取
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+**/.pytest_cache/
+
+# 資料集與素材（大檔，後端從 S3 讀資料，不需打包進 image）
+youbike資料集/
+圖庫/
+aws上課內容/
+比賽規範/
+archive/
+output/
+Claude outputs/
+*.csv
+*.parquet
+*.key
+*.pptx
+*.pdf
+*.xlsx
+
+# 本機 DB 與快取（雲端用自己的）
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+
+# 版控與環境
+.git/
+.gitignore
+.env
+.env.example
+node_modules/
+
+# 文件（image 不需要）
+docs/
+*.md
+.kiro/

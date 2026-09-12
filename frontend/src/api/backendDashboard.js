@@ -101,7 +101,7 @@ export async function getBackendDashboard() {
   const point = pickWeatherPoint(stations);
 
   const [recs, alerts, kpi, vehicles, weather, tasks] = await Promise.all([
-    settle(request("/dispatch/recommendations?limit=50")),
+    settle(request("/dispatch/recommendations?limit=200")),
     settle(request("/alerts")),
     settle(request("/kpi")),
     settle(request("/vehicles")),

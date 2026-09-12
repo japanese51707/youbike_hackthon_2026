@@ -1,4 +1,6 @@
-# YouBike 後端（FastAPI）
+# YouBike 後端（FastAPI）— 雲端自包含版（ADR-307 ECS Fargate 部署）
+# 注意：build context 為「專案根目錄」，才能把根目錄的 config.yaml 一起打包。
+#   docker build -f backend/Dockerfile -t <image> .   （在專案根執行）
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -8,13 +10,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # 先裝依賴（利用 layer 快取）
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 複製後端程式碼
-COPY . .
+# 複製後端程式碼（放到 /app）
+COPY backend/ /app/
+
+# 複製專案根的 config.yaml 到 /app（容器內自包含，不靠掛載）。
+# config_loader 預設找 backend 上一層；雲端用 YOUBIKE_CONFIG_PATH 明確指向此檔。
+COPY config.yaml /app/config.yaml
+ENV YOUBIKE_CONFIG_PATH=/app/config.yaml
 
 EXPOSE 8000
 
-# config.yaml 在專案根目錄，容器內掛載到 /app 上層（見 docker-compose）
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
