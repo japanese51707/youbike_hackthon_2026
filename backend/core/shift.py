@@ -33,7 +33,11 @@ def _to_min(hhmm: str) -> int:
 
 
 def _now_min(now: Optional[_dt.datetime]) -> int:
-    now = now or _dt.datetime.now()
+    # 班別時段以台灣時間定義；雲端容器為 UTC，未給 now 時一律取台北現在時間，
+    # 否則會判錯班別（如 UTC 09:00 誤判早班，實際台灣 17:00 是晚班）。
+    # 傳入的 now（測試/指定）視為台北時間，直接用其時分。
+    if now is None:
+        now = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
     return now.hour * 60 + now.minute
 
 

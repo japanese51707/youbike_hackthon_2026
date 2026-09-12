@@ -8,13 +8,43 @@ from auth import get_operator
 router = APIRouter(prefix="/api/v1", tags=["operators"])
 
 
+def _apply_shift_duty(operators: list[dict]) -> list[dict]:
+    """ADR-312：依當前班別注入「在線狀態」（呈現層，不改 DB 真實 status）。
+
+    規則（只影響未派工的人；已派工 busy 者維持真實狀態不動）：
+      - 已派工（有 current_task_id）→ 維持原 status（任務中 busy）。
+      - 當班（shift == 現在班別）且未派工 → on_duty（上班中・閒置待命）。
+      - 總部預備（depot_standby，不綁班別）且未派工 → on_duty（隨時機動支援）。
+      - 其餘（非當班、未派工）→ off_duty（未上班）。
+    這樣「現在這個時段誰在線可調度」隨時段自動反映，不必背景改 DB。
+    """
+    from core.shift import current_shift
+    now_shift = current_shift()
+    out = []
+    for o in operators:
+        oo = dict(o)
+        if oo.get("current_task_id"):
+            pass  # 派工中：真實狀態（busy）不動
+        elif oo.get("role_type") == "depot_standby":
+            oo["status"] = "on_duty"
+        elif oo.get("shift") and oo.get("shift") == now_shift:
+            oo["status"] = "on_duty"
+        else:
+            oo["status"] = "off_duty"
+        out.append(oo)
+    return out
+
+
 @router.get("/operators")
 def list_operators(role_type: str | None = None, active_only: bool = True):
-    """3.16 調度員清單（接 operators_repo）。可篩營運角色 role_type（driver/stationed/controller/depot_standby）。"""
+    """3.16 調度員清單（接 operators_repo）。可篩營運角色 role_type（driver/stationed/controller/depot_standby）。
+
+    ADR-312：回傳依當前班別注入在線狀態（當班且未派工＝on_duty 閒置待命；非當班＝off_duty）。
+    """
     from db import operators_repo as repo
     if role_type:
-        return repo.list_by_role_type(role_type, active_only=active_only)
-    return repo.list_operators(active_only=active_only)
+        return _apply_shift_duty(repo.list_by_role_type(role_type, active_only=active_only))
+    return _apply_shift_duty(repo.list_operators(active_only=active_only))
 
 
 class DutyRequest(BaseModel):

@@ -134,8 +134,10 @@ def claim_map(district: str | None = None):
 def overview():
     """3.17 全域調度總覽（後台/長官）"""
     from db import tasks_repo, operators_repo, vehicles_repo
+    from api.operators import _apply_shift_duty
     rows = tasks_repo.list_tasks()
-    return {"tasks": rows, "operators": operators_repo.list_operators(),
+    # ADR-312：operators 依當前班別注入在線狀態（當班未派工＝on_duty）。
+    return {"tasks": rows, "operators": _apply_shift_duty(operators_repo.list_operators()),
             "vehicles": vehicles_repo.list_vehicles(),
             "task_counts": {status: sum(t["task_status"] == status for t in rows)
                             for status in ("assigned", "in_progress", "completed", "cancelled", "manual_required")},
