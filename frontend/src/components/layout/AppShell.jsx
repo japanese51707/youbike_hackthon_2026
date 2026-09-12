@@ -13,6 +13,8 @@ import { resetDemoData } from "../../api/operationsApi.js";
 
 import { useEffect, useState } from "react";
 import { isApiMode, request, getActorId, setActorId } from "../../api/httpClient.js";
+import { DRIVER_MANUAL_KEY } from "../../hooks/useDriverActor.js";
+import { driverActorOptions } from "../../utils/pickDriverActor.js";
 
 import EscalationBanner from "../alerts/EscalationBanner.jsx";
 import EscalationModal from "../alerts/EscalationModal.jsx";
@@ -102,9 +104,18 @@ export default function AppShell({ children }) {
           <Space className="demo-actions">
           <Tag color={isApiMode ? "cyan" : "gold"}>{isApiMode ? "後端連線 · 受控 Demo" : "MOCK DEMO"}</Tag>
           {isApiMode && <Select showSearch optionFilterProp="label" aria-label="操作身分"
-            placeholder={operatorError || "選擇操作身分"} value={getActorId() || undefined} style={{ width: 185 }}
-            options={operators.map(o => ({ value: o.operator_id, label: `${o.operator_id} · ${o.name} (${o.role})` }))}
-            onChange={id => { setActorId(id); window.location.reload(); }} />}
+            placeholder={operatorError || "選擇操作身分"} value={getActorId() || undefined}
+            style={{ width: location.pathname === "/driver" ? 220 : 185 }}
+            options={location.pathname === "/driver"
+              ? driverActorOptions(operators, getActorId())
+              : operators.map(o => ({ value: o.operator_id, label: `${o.operator_id} · ${o.name} (${o.role})` }))}
+            onChange={id => {
+              if (location.pathname === "/driver") {
+                try { sessionStorage.setItem(DRIVER_MANUAL_KEY, id); } catch { /* ignore */ }
+              }
+              setActorId(id);
+              window.location.reload();
+            }} />}
           <Button
             type="text"
             icon={<ReloadOutlined />}

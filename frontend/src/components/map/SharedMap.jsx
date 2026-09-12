@@ -298,10 +298,14 @@ export default function SharedMap({
     map.on("move", handleCameraMove);
     map.on("moveend", handleCameraIdle);
     window.addEventListener("offline", handleOffline);
-    const resizeObserver = new ResizeObserver(() => {
-      if (!disposed) map.resize();
-    });
+    const resizeMap = () => {
+      if (disposed || !map) return;
+      map.resize();
+      overlayRef.current?.setProps({ ...overlayPropsRef.current });
+    };
+    const resizeObserver = new ResizeObserver(resizeMap);
     resizeObserver.observe(containerRef.current);
+    window.requestAnimationFrame(resizeMap);
 
     if (!startsOffline) {
       styleLoadTimer = window.setTimeout(
@@ -344,7 +348,7 @@ export default function SharedMap({
   // 外部（例如缺口排行榜）觸發平滑飛越到指定站點。
   useEffect(() => {
     applyCameraFocus(mapRef.current, focusTarget, { animate: true });
-  }, [focusTarget?.id, focusTarget?.longitude, focusTarget?.latitude, focusTarget?.zoom, focusTarget?.bounds]);
+  }, [focusTarget?.id, focusTarget?.longitude, focusTarget?.latitude, focusTarget?.zoom]);
 
   return (
     <div className={`shared-map ${className}`} role="region" aria-label={ariaLabel}>

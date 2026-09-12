@@ -1,4 +1,5 @@
 import {
+  AimOutlined,
   CheckCircleOutlined,
   CompassOutlined,
   DesktopOutlined,
@@ -13,13 +14,16 @@ import {
   Modal,
   Progress,
   Segmented,
+  Select,
   Space,
   Tag,
   Typography,
   message,
 } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import useAsyncResource from "../hooks/useAsyncResource.js";
+import useDriverActor from "../hooks/useDriverActor.js";
+import { driverActorOptions } from "../utils/pickDriverActor.js";
 import {
   getAssignedWorkspace,
   reportStop,
@@ -35,6 +39,7 @@ import {
   createVehicleLayer,
 } from "../components/map/layers/planLayers.js";
 import { getRoadRoute } from "../api/routingApi.js";
+import { districtCenter } from "../utils/districtCenter.js";
 import { haversineKm } from "../utils/geo.js";
 import "../styles/driver-workspace.css";
 
@@ -60,10 +65,24 @@ const VIEW_NOTE = {
 function readView() {
   try {
     const saved = localStorage.getItem(VIEW_KEY);
-    return VIEW_OPTIONS.some((o) => o.value === saved) ? saved : "auto";
+    if (saved === "web" || saved === "tablet" || saved === "phone") return saved;
+    return "phone";
   } catch {
-    return "auto";
+    return "phone";
   }
+}
+
+function useNarrowPhone() {
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 520px)").matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 520px)");
+    const onChange = () => setNarrow(media.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+  return narrow;
 }
 
 // ── 小工具 ────────────────────────────────────────────────────────────
@@ -80,12 +99,40 @@ const point = (lat, lng) => {
 };
 
 // 起點：車輛現在位置 → 司機現在位置 → 第一站（都拿不到就不畫地圖）。
-function resolveStart(vehicle, operator, stops) {
+function resolveStart(vehicle, operator, stops, district) {
   return (
     point(vehicle?.current_lat, vehicle?.current_lng) ||
+    point(vehicle?.current_location?.lat, vehicle?.current_location?.lng) ||
     point(operator?.current_location?.lat, operator?.current_location?.lng) ||
+    districtCenter(district || stops[0]?.district) ||
     (stops[0] ? point(stops[0].lat, stops[0].lng) : null)
   );
+}
+
+function routeFocus(start, stops) {
+  const points = [
+    start ? [start.lng, start.lat] : null,
+    ...stops.map((stop) => [stop.lng, stop.lat]),
+  ].filter((pair) => pair && Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
+  if (!points.length) return null;
+  if (points.length === 1) {
+    return {
+      id: `${points[0][0]},${points[0][1]}`,
+      longitude: points[0][0],
+      latitude: points[0][1],
+      zoom: 14.2,
+    };
+  }
+  const lngs = points.map((pair) => pair[0]);
+  const lats = points.map((pair) => pair[1]);
+  return {
+    id: points.map((pair) => pair.join(",")).join(";"),
+    bounds: [
+      [Math.min(...lngs), Math.min(...lats)],
+      [Math.max(...lngs), Math.max(...lats)],
+    ],
+    padding: 32,
+  };
 }
 
 function routeDistanceKm(start, stops) {
@@ -181,13 +228,13 @@ function IdlePanel({ operator, busy, onToggleDuty, onReload }) {
 
 // ── 站點任務卡 ───────────────────────────────────────────────────────
 
-function StopCard({ stop, current, canReport, busy, value, onChange, onReport, start }) {
+function StopCard({ stop, current, canReport, busy, value, onChange, onReport, start, compact }) {
   const done = stop.station_status === "completed" || stop.station_status === "done";
   const removed = stop.station_status === "skipped" || stop.station_status === "removed";
   const target = num(stop.target_available);
   const coords = point(stop.lat, stop.lng);
   return (
-    <div className={`dw-stop${current ? " is-current" : ""}${done ? " is-done" : ""}${removed ? " is-removed" : ""}`}>
+    <div className={`dw-stop${current ? " is-current" : ""}${done ? " is-done" : ""}${removed ? " is-removed" : ""}${compact ? " is-compact" : ""}`}>
       <div className="dw-stop-head">
         <span className="dw-seq">{stop.seq}</span>
         <div className="dw-stop-title">
@@ -203,6 +250,12 @@ function StopCard({ stop, current, canReport, busy, value, onChange, onReport, s
         </Tag>
       </div>
 
+      {compact && !current ? (
+        done ? <Tag color="green">已回報</Tag> : removed ? <Tag>已移除</Tag> : null
+      ) : null}
+
+      {compact && !current ? null : (
+      <>
       <div className="dw-stop-facts">
         <div><span>目標存量</span><b className="mono">{target ?? "—"}</b></div>
         <div><span>組單當下</span><b className="mono">{num(stop.current_available) ?? "—"}</b></div>
@@ -257,6 +310,8 @@ function StopCard({ stop, current, canReport, busy, value, onChange, onReport, s
           </Space>
         </div>
       )}
+      </>
+      )}
     </div>
   );
 }
@@ -264,7 +319,12 @@ function StopCard({ stop, current, canReport, busy, value, onChange, onReport, s
 // ── 主畫面 ───────────────────────────────────────────────────────────
 
 export default function BackendDriverPage() {
-  const resource = useAsyncResource(getAssignedWorkspace);
+  const actor = useDriverActor();
+  const loader = useCallback(
+    () => (actor.ready ? getAssignedWorkspace(actor.actorId) : Promise.resolve(null)),
+    [actor.ready, actor.actorId],
+  );
+  const resource = useAsyncResource(loader);
   const [counts, setCounts] = useState({});
   const [load, setLoad] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -273,7 +333,15 @@ export default function BackendDriverPage() {
   const [pickedTaskId, setPickedTaskId] = useState(null);
   const [now, setNow] = useState(() => Date.now());
   const [view, setView] = useState(readView);
+  const [focusTick, setFocusTick] = useState(0);
   const [messageApi, contextHolder] = message.useMessage();
+  const narrowPhone = useNarrowPhone();
+  const isPhoneLayout = view === "phone" || (view === "auto" && narrowPhone);
+  const useBezel = view === "phone" && !narrowPhone;
+  const actorOptions = useMemo(
+    () => driverActorOptions(actor.operators, actor.actorId),
+    [actor.operators, actor.actorId],
+  );
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30000);
@@ -291,9 +359,9 @@ export default function BackendDriverPage() {
   // 手機預覽＝沉浸式：比照找車（RiderPage）在 body 掛 class，隱藏 App 頂部導覽列與
   // page padding，讓司機端手機版變成「深底置中一支全螢幕手機」，而非頁面裡縮小的卡片。
   useEffect(() => {
-    document.body.classList.toggle("driver-phone-preview", view === "phone");
+    document.body.classList.toggle("driver-phone-preview", isPhoneLayout);
     return () => document.body.classList.remove("driver-phone-preview");
-  }, [view]);
+  }, [isPhoneLayout]);
 
   const operator = resource.data?.operator ?? null;
   const vehicles = resource.data?.vehicles ?? {};
@@ -324,7 +392,10 @@ export default function BackendDriverPage() {
   );
 
   const vehicle = task?.assigned_vehicle ? vehicles[task.assigned_vehicle] : null;
-  const start = useMemo(() => resolveStart(vehicle, operator, stops), [vehicle, operator, stops]);
+  const start = useMemo(
+    () => resolveStart(vehicle, operator, stops, task?.district),
+    [vehicle, operator, stops, task?.district],
+  );
 
   const mapStops = useMemo(
     () =>
@@ -333,6 +404,15 @@ export default function BackendDriverPage() {
         .filter((stop) => Number.isFinite(stop.lat) && Number.isFinite(stop.lng)),
     [stops],
   );
+  const navStops = useMemo(
+    () => mapStops.filter((stop) => stop.station_status === "pending"),
+    [mapStops],
+  );
+  const mapFocus = useMemo(() => {
+    const base = routeFocus(start, navStops.length ? navStops : mapStops);
+    if (!base) return null;
+    return { ...base, id: `${base.id}#${focusTick}` };
+  }, [start, mapStops, navStops, focusTick]);
 
   // 實走道路路線：把「起點 + 各停靠點」丟給後端換沿路折線。
   // roadKey 是這組座標的指紋，座標沒變就不重打（後端也還有一層快取）。
@@ -368,16 +448,24 @@ export default function BackendDriverPage() {
 
   const roadGeometry = road?.key === roadKey && road?.mode === "road" ? road.geometry : null;
 
+  const pending = stops.filter((s) => s.station_status === "pending");
+  const currentStop = pending[0] ?? null;
+  const currentIndex = mapStops.findIndex(
+    (stop) => stop.station_id === currentStop?.station_id,
+  );
+
   const layers = useMemo(() => {
     if (!start || !mapStops.length) return [];
     return [
-      ...createPlanRouteLayers({ start, route: mapStops, geometry: roadGeometry }),
+      ...createPlanRouteLayers({
+        start,
+        route: mapStops,
+        geometry: roadGeometry,
+        currentIndex: currentIndex >= 0 ? currentIndex : null,
+      }),
       createVehicleLayer({ start }),
     ].filter(Boolean);
-  }, [start, mapStops, roadGeometry]);
-
-  const pending = stops.filter((s) => s.station_status === "pending");
-  const currentStop = pending[0] ?? null;
+  }, [start, mapStops, roadGeometry, currentIndex]);
   const doneCount = stops.filter(
     (s) => s.station_status === "completed" || s.station_status === "done",
   ).length;
@@ -428,14 +516,34 @@ export default function BackendDriverPage() {
     }
   };
 
-  const isPhone = view === "phone";
+  const whoBar = actorOptions.length ? (
+    <div className="dw-who">
+      <Select
+        aria-label="切換司機身分"
+        size="large"
+        className="dw-who-select"
+        placeholder="選擇司機"
+        value={operator?.operator_id || actor.actorId || undefined}
+        options={actorOptions}
+        onChange={actor.choose}
+        popupMatchSelectWidth={false}
+      />
+      {task ? (
+        <Tag color={running ? "processing" : "gold"}>{running ? "執行中" : "待開始"}</Tag>
+      ) : (
+        <Tag>閒置</Tag>
+      )}
+    </div>
+  ) : null;
 
   return (
-    <div className={`dw${isPhone ? " is-phone" : ""}`} data-view={view}>
+    <div
+      className={`dw${isPhoneLayout ? " is-phone" : ""}${useBezel ? " has-bezel" : ""}`}
+      data-view={view}
+    >
       {contextHolder}
 
-      {/* 手機沉浸預覽時，右上角浮出返回鈕（比照找車端「桌面 UI」）：切回網頁版面、離開手機外框 */}
-      {isPhone ? (
+      {useBezel ? (
         <Button
           className="dw-phone-exit"
           icon={<DesktopOutlined />}
@@ -457,8 +565,13 @@ export default function BackendDriverPage() {
       </div>
 
       <div className="dw-stage">
-      {isPhone ? <div className="dw-phone-notch" aria-hidden="true" /> : null}
-      <AsyncState {...resource} onRetry={resource.reload}>
+      {useBezel ? <div className="dw-phone-notch" aria-hidden="true" /> : null}
+      {whoBar}
+      <AsyncState
+        {...resource}
+        loading={resource.loading || !actor.ready}
+        onRetry={resource.reload}
+      >
         {!operator ? (
           <Alert type="info" showIcon title="請在頁首先選擇司機身分" />
         ) : !task ? (
@@ -486,81 +599,96 @@ export default function BackendDriverPage() {
             ) : null}
 
             <div className="dw-top">
-              {/* 左上：車輛與人員 */}
               <section className="dw-vehicle" aria-label="車輛與人員">
                 <div className="dw-vehicle-head">
-                  <TruckGlyph active={running} />
+                  {isPhoneLayout ? null : <TruckGlyph active={running} />}
                   <div>
                     <div className="dw-vehicle-id mono">{task.assigned_vehicle || "未配車"}</div>
                     <div className="dw-vehicle-sub">
                       {vehicle?.max_capacity ? `載運上限 ${vehicle.max_capacity} 台` : "調度貨車"}
+                      {isPhoneLayout && shownKm !== null
+                        ? `｜${shownKm} km${roadMin !== null ? `｜約 ${roadMin} 分` : ""}`
+                        : ""}
                     </div>
                   </div>
-                  <Tag color={running ? "processing" : "default"} className="dw-status-tag">
-                    {running ? "執行中" : "待開始"}
-                  </Tag>
+                  {isPhoneLayout ? null : (
+                    <Tag color={running ? "processing" : "default"} className="dw-status-tag">
+                      {running ? "執行中" : "待開始"}
+                    </Tag>
+                  )}
                 </div>
 
-                <dl className="dw-crew">
-                  <div>
-                    <dt>駕駛</dt>
-                    <dd>
-                      {operator.name}
-                      <span className="mono dw-dim"> · {operator.operator_id}</span>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>隨車</dt>
-                    <dd>
-                      {task.assigned_escort
-                        ? people[task.assigned_escort]?.name ?? task.assigned_escort
-                        : "單人作業"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>責任區</dt>
-                    <dd>{task.district || "跨區任務"}</dd>
-                  </div>
-                  <div>
-                    <dt>派工</dt>
-                    <dd className="mono">
-                      {clockOf(task.assigned_at) ?? "—"}
-                      {elapsed !== null ? ` · 已 ${elapsed} 分` : ""}
-                    </dd>
-                  </div>
-                </dl>
-
-                <div className="dw-onboard">
-                  <div className="dw-onboard-row">
-                    <span>出車車上</span>
-                    <b className="mono">{num(task.onboard_start) ?? "未回報"}</b>
-                    <span>預計收車</span>
-                    <b className="mono">{num(task.onboard_planned_end) ?? "—"}</b>
-                  </div>
-                  {task.assigned_vehicle ? (
-                    <Space.Compact className="dw-onboard-report">
-                      <InputNumber
-                        aria-label={`車上台數 ${task.assigned_vehicle}`}
-                        min={0}
-                        precision={0}
-                        placeholder="更正車上台數"
-                        value={load}
-                        onChange={setLoad}
-                      />
-                      <Button
-                        loading={busy}
-                        disabled={!Number.isInteger(load)}
-                        onClick={() =>
-                          run(() => reportVehicleLoad(task.assigned_vehicle, load)).then((ok) => {
-                            if (ok) setLoad(null);
-                          })
-                        }
-                      >
-                        回報
-                      </Button>
-                    </Space.Compact>
-                  ) : null}
-                </div>
+                {(() => {
+                  const details = (
+                    <>
+                      <dl className="dw-crew">
+                        <div>
+                          <dt>駕駛</dt>
+                          <dd>
+                            {operator.name}
+                            <span className="mono dw-dim"> · {operator.operator_id}</span>
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>隨車</dt>
+                          <dd>
+                            {task.assigned_escort
+                              ? people[task.assigned_escort]?.name ?? task.assigned_escort
+                              : "單人作業"}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>責任區</dt>
+                          <dd>{task.district || "跨區任務"}</dd>
+                        </div>
+                        <div>
+                          <dt>派工</dt>
+                          <dd className="mono">
+                            {clockOf(task.assigned_at) ?? "—"}
+                            {elapsed !== null ? ` · 已 ${elapsed} 分` : ""}
+                          </dd>
+                        </div>
+                      </dl>
+                      <div className="dw-onboard">
+                        <div className="dw-onboard-row">
+                          <span>出車車上</span>
+                          <b className="mono">{num(task.onboard_start) ?? "未回報"}</b>
+                          <span>預計收車</span>
+                          <b className="mono">{num(task.onboard_planned_end) ?? "—"}</b>
+                        </div>
+                        {task.assigned_vehicle ? (
+                          <Space.Compact className="dw-onboard-report">
+                            <InputNumber
+                              aria-label={`車上台數 ${task.assigned_vehicle}`}
+                              min={0}
+                              precision={0}
+                              placeholder="更正車上台數"
+                              value={load}
+                              onChange={setLoad}
+                            />
+                            <Button
+                              loading={busy}
+                              disabled={!Number.isInteger(load)}
+                              onClick={() =>
+                                run(() => reportVehicleLoad(task.assigned_vehicle, load)).then((ok) => {
+                                  if (ok) setLoad(null);
+                                })
+                              }
+                            >
+                              回報
+                            </Button>
+                          </Space.Compact>
+                        ) : null}
+                      </div>
+                    </>
+                  );
+                  return isPhoneLayout ? (
+                    <details className="dw-more">
+                      <summary>人員與車上載量</summary>
+                      {details}
+                    </details>
+                  ) : details;
+                })()}
 
                 <div className="dw-progress">
                   <Progress
@@ -623,10 +751,11 @@ export default function BackendDriverPage() {
                   <>
                     <SharedMap
                       /* 切換版面會改變舞台寬度；重新掛載地圖，避免 canvas 停在舊尺寸 */
-                      key={`${task.task_id}:${view}`}
+                      key={`${task.task_id}:${view}:${isPhoneLayout ? "phone" : "web"}`}
                       ariaLabel="本趟任務路線地圖"
                       className="map-fill"
-                      initialViewState={{ longitude: start.lng, latitude: start.lat, zoom: 12.4 }}
+                      initialViewState={{ longitude: start.lng, latitude: start.lat, zoom: 12.8 }}
+                      focusTarget={mapFocus}
                       layers={layers}
                       getTooltip={({ object }) =>
                         object?.station_name
@@ -634,6 +763,19 @@ export default function BackendDriverPage() {
                           : null
                       }
                     />
+                    <button
+                      type="button"
+                      className="dw-map-recenter"
+                      onClick={() => {
+                        setFocusTick((tick) => tick + 1);
+                        document.querySelector(".dw-stop.is-current")?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "nearest",
+                        });
+                      }}
+                    >
+                      <AimOutlined /> 回到路線
+                    </button>
                     <div className="dw-map-legend mono">
                       <span><i className="dot pickup" />取車</span>
                       <span><i className="dot dropoff" />補車</span>
@@ -669,6 +811,7 @@ export default function BackendDriverPage() {
                     stop={stop}
                     start={start}
                     current={currentStop?.station_id === stop.station_id}
+                    compact={isPhoneLayout && currentStop?.station_id !== stop.station_id}
                     canReport={running}
                     busy={busy}
                     value={counts[key]}
@@ -698,7 +841,7 @@ export default function BackendDriverPage() {
         <Typography.Text className="dw-hint">
           司機工作台｜執行中會盡量保持螢幕不熄滅
         </Typography.Text>
-      {isPhone ? <div className="dw-phone-home" aria-hidden="true" /> : null}
+      {useBezel ? <div className="dw-phone-home" aria-hidden="true" /> : null}
       </div>
 
       <Modal

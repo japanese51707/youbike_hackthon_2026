@@ -601,9 +601,14 @@ body {
 }
 
 .basemap-status .map-attribution {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   color: var(--ct-text-dim);
   font-size: 10px;
   letter-spacing: 0.02em;
+  line-height: 1.2;
+  text-align: right;
 }
 
 /* 正常有底圖時只剩小字來源，容器不必是明顯膠囊 */

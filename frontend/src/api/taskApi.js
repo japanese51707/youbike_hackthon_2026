@@ -5,8 +5,7 @@ const ACTIVE_STATUSES = ["assigned", "in_progress"];
 // 司機工作台需要的一次性資料：本人 + 指派任務 + 任務用到的車輛/隨車人員。
 // 車輛與隨車查詢失敗不應該讓整頁掛掉（司機在路上，有任務清單比有車牌重要），
 // 所以走 allSettled，查不到就留空、畫面顯示編號。
-export async function getAssignedWorkspace() {
-  const actor = getActorId();
+export async function getAssignedWorkspace(actor = getActorId()) {
   if (!actor) return { operator: null, tasks: [], vehicles: {}, people: {} };
   const [operator, tasks] = await Promise.all([
     request(`/operators/${encodeURIComponent(actor)}`),
