@@ -177,6 +177,25 @@ CREATE INDEX IF NOT EXISTS idx_alerts_ack ON alerts(acknowledged);
 CREATE INDEX IF NOT EXISTS idx_vehicles_status ON vehicles(status);
 CREATE INDEX IF NOT EXISTS idx_vehicles_district ON vehicles(current_district);
 
+-- 5c. 空／滿站緊急時計（ADR-318）
+--     與 alert_cases 分開：派工不關案，站況離開空／滿才算排除。
+CREATE TABLE IF NOT EXISTS service_problems (
+    problem_id    TEXT PRIMARY KEY,
+    station_id    TEXT NOT NULL,
+    station_name  TEXT,
+    district      TEXT,
+    kind          TEXT NOT NULL,        -- empty / full
+    opened_at     TEXT NOT NULL,        -- 時計起點，開案後不再變動
+    closed_at     TEXT,
+    close_reason  TEXT                  -- recovered / kind_changed
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_service_problems_open
+    ON service_problems(station_id) WHERE closed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_service_problems_closed
+    ON service_problems(closed_at);
+CREATE INDEX IF NOT EXISTS idx_service_problems_district
+    ON service_problems(district, closed_at);
+
 -- ADR-302：只有確認後才保存收據，草稿本身仍在記憶體。
 CREATE TABLE IF NOT EXISTS dispatch_confirmations (
     draft_id TEXT PRIMARY KEY,

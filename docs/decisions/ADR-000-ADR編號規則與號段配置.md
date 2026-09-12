@@ -96,6 +96,7 @@ superseded-by:
 | ADR-206 | （新增） | 調度面板決策流資訊架構（三入口組單＋執行追蹤） |
 | ADR-207 | （新增） | 前端實際派工服務整合（原編 ADR-206，2026-08-19 撞號讓號至 207） |
 | ADR-208 | （新增） | YouBike 品牌識別與日夜主題 |
+| ADR-209 | （新增） | `/overview` 改為服務水準看板（值班處長盯盤） |
 
 **ADR-3xx（平台／部署／資安／API 契約）**：
 
@@ -117,6 +118,7 @@ superseded-by:
 | ADR-315 | 車源決策階梯（同區不足跨區取一站；origin/main commit 已用號） | accepted |
 | ADR-316 | 全時段允許跨區（同區優先；origin/main commit 已用號） | accepted |
 | ADR-317 | push main 自動部署同源前後端（GitHub Actions → ECR → ECS） | accepted |
+| ADR-318 | 空滿站緊急時計與今日排除時間（獨立 incident；派工不關、恢復才算排除） | accepted |
 | ADR-311 | 戰情室 Bedrock 顧問代理（advisory-only，後端代理） | accepted |
 
 ### 取號流程（新增 ADR 前必做）

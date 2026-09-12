@@ -79,6 +79,12 @@ def get_stations_with_degradation(district=None, status=None):
         else:
             rows = [normalize(r, cfg["mode"], cfg["stale_after_sec"], failed=failed) for r in rows]
         record(rows)
+    # ADR-318：完整快照才同步空／滿時計；篩選前寫入，避免只看到一區就把他區關案。
+    try:
+        from core.service_problems import sync_service_problems
+        sync_service_problems(rows)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[service_problems] 同步失敗（不擋站況）：{exc}")
     if district:
         rows = [r for r in rows if r.get("district") == district]
     if status:
