@@ -176,8 +176,39 @@ def poll_once(now: Optional[_dt.datetime] = None) -> dict:
     }
 
 
+def empty_board(now: Optional[_dt.datetime] = None) -> dict:
+    """時計讀庫失敗時的空看板。窗口仍是現在往回最多 24 小時。"""
+    moment = _aware(now or _now())
+    hours = _keep_hours()
+    window_start = _window_start(moment, hours)
+    return {
+        "as_of": _iso(moment),
+        "today": moment.date().isoformat(),
+        "window_hours": hours,
+        "window_start": _iso(window_start),
+        "city": {
+            "avg_resolved_minutes": None,
+            "resolved_count": 0,
+            "open_count": 0,
+            "longest_open_minutes": None,
+            "longest_empty_minutes": None,
+            "longest_full_minutes": None,
+        },
+        "open": [],
+        "districts": [],
+        "history": {
+            "poll_count": 0,
+            "station_count": 0,
+            "first_observed_at": None,
+            "last_observed_at": None,
+            "latest_status": {},
+            "collected_minutes": None,
+        },
+    }
+
+
 def snapshot(now: Optional[_dt.datetime] = None) -> dict:
-    """進行中時計 + 近 24 小時已排除彙總。"""
+    """進行中時計 + 窗口內已排除彙總。有多少算多少，不必等滿 24 小時。"""
     from db import service_problems_repo
 
     moment = _aware(now or _now())
@@ -245,8 +276,23 @@ def snapshot(now: Optional[_dt.datetime] = None) -> dict:
 def _history_coverage(window_start: _dt.datetime) -> dict:
     from db import station_snapshots_repo
 
-    cover = station_snapshots_repo.coverage(_iso(window_start))
-    cover["latest_status"] = station_snapshots_repo.latest_status_counts()
+    try:
+        cover = station_snapshots_repo.coverage(_iso(window_start))
+        cover["latest_status"] = station_snapshots_repo.latest_status_counts()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[service_problems] 讀站況快照失敗（略過）：{exc}")
+        return {
+            "poll_count": 0,
+            "station_count": 0,
+            "first_observed_at": None,
+            "last_observed_at": None,
+            "latest_status": {},
+            "collected_minutes": None,
+        }
+    first = _parse(cover.get("first_observed_at"))
+    last = _parse(cover.get("last_observed_at"))
+    cover["collected_minutes"] = (
+        _round_minutes(_minutes_between(first, last)) if first and last else None)
     return cover
 
 

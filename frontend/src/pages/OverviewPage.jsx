@@ -30,6 +30,7 @@ import {
   formatDurationMinutes,
   longestOpenOfKind,
   openProblemsByStation,
+  resolveCardCopy,
   rankDistrictPressure,
   ratesFromKpi,
 } from "../utils/serviceBoard.js";
@@ -125,9 +126,9 @@ function ResolutionModal({ problems, nowMs, onClose }) {
   return (
     <Modal title={<CardTitle icon={<FieldTimeOutlined />}>近 24 小時各區平均問題排除時間</CardTitle>} open footer={null} onCancel={onClose} width={760}>
       <Typography.Paragraph type="secondary">
-        後端背景持續抓站況計時，不等人開這頁。站況恢復才算排除，只留近 24 小時結案。
-        全市平均 {formatDurationMinutes(city.avg_resolved_minutes)}（{city.resolved_count ?? 0} 件），
-        進行中 {city.open_count ?? 0} 站。各區最差站含仍在燒的與窗口內已排除最久的。
+        看的是「現在往回最多 24 小時」裡已經有的資料，不必等滿 24 小時。
+        站況恢復才算排除。全市平均 {formatDurationMinutes(city.avg_resolved_minutes)}（{city.resolved_count ?? 0} 件），
+        進行中 {city.open_count ?? 0} 站。
       </Typography.Paragraph>
       <Collapse size="small" items={items} />
     </Modal>
@@ -280,6 +281,14 @@ export default function OverviewPage() {
   const longestEmpty = longestOpenOfKind(view?.problems, "empty", nowMs);
   const longestFull = longestOpenOfKind(view?.problems, "full", nowMs);
   const longestOpen = longestOpenOfKind(view?.problems, null, nowMs);
+  const resolveCard = view
+    ? resolveCardCopy({
+      city: view.city,
+      history: view.problems?.history,
+      longestOpen,
+      liveProblems: (view.rates.empty || 0) + (view.rates.full || 0),
+    })
+    : null;
 
   return (
     <div className="fixed-page slb-page">
@@ -347,13 +356,11 @@ export default function OverviewPage() {
               <Light
                 icon={<FieldTimeOutlined />}
                 label="近 24 小時平均排除時間"
-                value={view.city.avg_resolved_minutes == null ? "—" : formatDurationMinutes(view.city.avg_resolved_minutes)}
+                value={resolveCard.value}
                 suffix=""
                 ok={(view.city.open_count ?? 0) === 0 || (longestOpen ?? 0) < 30}
-                timer={longestOpen == null ? "沒有進行中的空／滿站" : `進行中最長 ${formatDurationMinutes(longestOpen)}`}
-                hint={view.city.resolved_count
-                  ? `近 24 時已排除 ${view.city.resolved_count} 件｜點開看各區`
-                  : "尚無近 24 時結案｜點開看各區最差站"}
+                timer={resolveCard.timer}
+                hint={resolveCard.hint}
                 onClick={() => setMetric("resolve")}
               />
             </div>

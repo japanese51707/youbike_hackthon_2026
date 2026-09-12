@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -80,11 +81,54 @@ def clock_db_path() -> Optional[str]:
     return str(Path(__file__).parent.parent / "data" / "service_clock.db")
 
 
+def _sidecar_paths(path: str) -> list[Path]:
+    return [Path(f"{path}-wal"), Path(f"{path}-shm"), Path(f"{path}-journal")]
+
+
+def _quarantine_clock_file(path: str) -> None:
+    """把壞掉的時計檔挪走，讓下一輪重建。EFS 上曾出現 file is not a database。"""
+    target = Path(path)
+    stamp = int(time.time())
+    if target.is_dir():
+        broken = target.with_name(f"{target.name}.broken-dir-{stamp}")
+        target.rename(broken)
+        print(f"[clock] 時計路徑是目錄，已改名 {broken}", flush=True)
+    elif target.exists():
+        broken = target.with_name(f"{target.name}.broken-{stamp}")
+        try:
+            target.replace(broken)
+        except OSError:
+            target.unlink()
+            broken = None
+        print(f"[clock] 時計檔不是資料庫，已隔離 {broken or path}", flush=True)
+    for extra in _sidecar_paths(path):
+        extra.unlink(missing_ok=True)
+
+
+def _connect_clock_file(path: str) -> sqlite3.Connection:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(
+        path, check_same_thread=False, isolation_level=None, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 8000")
+    conn.execute("SELECT name FROM sqlite_master LIMIT 1")
+    # EFS／NFS 上 WAL 容易弄壞檔；時計是單寫多讀，DELETE journal 較穩。
+    conn.execute("PRAGMA journal_mode = DELETE")
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.executescript(_CLOCK_SCHEMA)
+    return conn
+
+
 def get_clock_connection() -> sqlite3.Connection:
-    """取得時計連線。檔案模式 WAL，可供 API 與獨立 worker 同時讀寫。"""
+    """取得時計連線。檔案壞掉時隔離重建，不讓 API／worker 整支死掉。"""
     global _clock_conn, _clock_dedicated
     if _clock_conn is not None:
-        return _clock_conn
+        try:
+            _clock_conn.execute("SELECT 1")
+            return _clock_conn
+        except sqlite3.Error:
+            print("[clock] 既有連線失效，重建", flush=True)
+            reset_clock_connection()
 
     path = clock_db_path()
     if path is None:
@@ -93,14 +137,15 @@ def get_clock_connection() -> sqlite3.Connection:
         _clock_dedicated = False
         return _clock_conn
 
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(
-        path, check_same_thread=False, isolation_level=None, timeout=30)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 5000")
-    conn.executescript(_CLOCK_SCHEMA)
+    try:
+        conn = _connect_clock_file(path)
+    except sqlite3.DatabaseError as exc:
+        print(f"[clock] 開啟失敗（{exc}），重建", flush=True)
+        try:
+            _quarantine_clock_file(path)
+            conn = _connect_clock_file(path)
+        except sqlite3.DatabaseError:
+            raise
     _clock_conn = conn
     _clock_dedicated = True
     return _clock_conn

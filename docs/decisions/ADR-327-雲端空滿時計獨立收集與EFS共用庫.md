@@ -81,6 +81,10 @@ Owner 要求：雲端有一支跟網站分開的收集行程，自動寫進共�
 - EFS 跨 AZ：目前後端只在 `us-east-1b` 一條 subnet，mount target 同 AZ。
 - 主庫 `youbike.db`（派工）仍在容器碟，本 ADR 只保時計。
 
+### 實作硬化（2026-09-12）
+
+- EFS／NFS 上 SQLite WAL 曾把檔弄成 `file is not a database`。時計連線改 `PRAGMA journal_mode = DELETE`；開啟或連線失效時隔離壞檔並重建。不另開 ADR（仍是本決策的 SQLite＋EFS）。
+
 ## 介面與相容性
 
 - 環境變數：`YOUBIKE_CLOCK_DB_PATH=/data/runtime/service_clock.db`、`SERVICE_CLOCK_EXTERNAL=1`（僅網站）。

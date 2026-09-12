@@ -56,6 +56,9 @@ def main() -> None:
                 )
         except Exception as exc:  # noqa: BLE001
             print(f"[service_clock_worker] 本輪錯誤（略過）：{exc}", flush=True)
+            if "database" in str(exc).lower() or "locking" in str(exc).lower():
+                from db.clock_connection import reset_clock_connection
+                reset_clock_connection()
         time.sleep(interval)
 
 

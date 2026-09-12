@@ -11,6 +11,7 @@ import {
   pct,
   rankDistrictPressure,
   ratesFromKpi,
+  resolveCardCopy,
 } from "./serviceBoard.js";
 
 test("ratesFromKpi uses in-service stations as the denominator", () => {
@@ -116,4 +117,28 @@ test("districtServiceRows reports empty rate against in-service stations", () =>
   assert.equal(banqiao.emptyRate, 50);
   assert.equal(banqiao.offline, 1);
   assert.equal(banqiao.emptyStations[0].station_name, "空1");
+});
+
+test("resolveCardCopy uses whatever is in the window, not a full 24h", () => {
+  const withAvg = resolveCardCopy({
+    city: { avg_resolved_minutes: 12, resolved_count: 3 },
+    history: { collected_minutes: 40 },
+    longestOpen: 8,
+  });
+  assert.equal(withAvg.value, "12 分");
+  assert.match(withAvg.hint, /已收集 40 分/);
+
+  const onlyOpen = resolveCardCopy({
+    city: { resolved_count: 0 },
+    history: { collected_minutes: 15 },
+    longestOpen: 15,
+  });
+  assert.equal(onlyOpen.value, "15 分");
+  assert.match(onlyOpen.timer, /尚無排除/);
+
+  const liveOnly = resolveCardCopy({
+    city: {},
+    liveProblems: 7,
+  });
+  assert.equal(liveOnly.value, "7 站");
 });

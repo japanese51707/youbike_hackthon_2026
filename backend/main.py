@@ -39,6 +39,7 @@ _sec = cfg.get("security", {})
 async def lifespan(app: FastAPI):
     """啟動時初始化 SQLite schema 並種入預設帳號與車隊（A5 / ADR-114）。"""
     from db import init_db
+    from db.clock_connection import init_clock_db
     from db.operators_repo import (
         seed_default_operators, seed_dispatch_operators,
         seed_depot_standby_operators, seed_stationed_operators,
@@ -48,6 +49,7 @@ async def lifespan(app: FastAPI):
         seed_default_vehicles, seed_depot_vehicles, set_reserve_fleet,
     )
     init_db()
+    init_clock_db()
     seed_default_operators()
     # ADR-114/116 調度人力 seed（開發/Demo 起始值，之後由人力 API 覆蓋）。全部預設 off_duty；
     # 司機不常態待命，被派到任務的當下才轉上工（見 dispatch 確認落地）。
