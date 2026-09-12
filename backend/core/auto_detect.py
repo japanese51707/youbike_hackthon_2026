@@ -94,7 +94,14 @@ def scan_once() -> list[dict]:
     """掃描一次：對所有進行中任務的待處理站，達標者自動回報完成。
 
     回傳本輪自動完成的紀錄清單（供測試/日誌）。任何單站錯誤都吞掉，不讓迴圈崩。
+    ADR-319：與自動配單共用一把鎖序列化，避免兩個背景 thread 同時動任務/車/人。
     """
+    from core.auto_dispatch import COORDINATION_LOCK
+    with COORDINATION_LOCK:
+        return _scan_once_locked()
+
+
+def _scan_once_locked() -> list[dict]:
     from core.data.degradation import get_stations_with_degradation
     from core.task_manager import get_task_manager
     from core import task_execution

@@ -25,6 +25,7 @@ import {
   buildFromVehicle as apiBuildFromVehicle,
   confirmRecommendation,
 } from "../api/dispatchApi.js";
+import { getRoadRoute } from "../api/routingApi.js";
 import { isApiMode } from "../api/httpClient.js";
 import { parseStationTime } from "../utils/formatters.js";
 import {
@@ -527,7 +528,7 @@ export default function DashboardPage() {
   // 地圖草稿路線（先載後放）：mock 草稿用 builder.start/stops；後端草稿用 builder.stations
   // （每站含 lat/lng/action，且後端 _order_route 已排「先取後補」順序）組多點路線。
   // 起點用 builder.start（車位置）；後端未給座標時退回第一站。
-  const draftRoute = (() => {
+  const draftBase = useMemo(() => {
     if (!builder) return null;
     if (!builder.draft_id) return { start: builder.start, stops: builder.stops };
     const stops = (builder.stations ?? [])
@@ -544,7 +545,48 @@ export default function DashboardPage() {
         ? { lat: Number(builder.start.lat), lng: Number(builder.start.lng) }
         : { lat: stops[0].lat, lng: stops[0].lng };
     return { start, stops };
-  })();
+  }, [builder]);
+
+  // 第2件：組單草稿的地圖路線也走真實道路（像 Google Maps），不只點對點直線。
+  // 用「起點→各站」座標序列去打後端 /routing/road 拿實走折線 geometry（後端已含直線降級 + 快取）。
+  const draftRoadKey = useMemo(() => {
+    if (!draftBase?.start || !draftBase.stops?.length) return "";
+    return [[draftBase.start.lng, draftBase.start.lat], ...draftBase.stops.map((s) => [s.lng, s.lat])]
+      .map(([lng, lat]) => `${Number(lng).toFixed(5)},${Number(lat).toFixed(5)}`)
+      .join(";");
+  }, [draftBase]);
+
+  const [draftRoad, setDraftRoad] = useState(null);
+
+  useEffect(() => {
+    if (!draftRoadKey || !isApiMode()) {
+      setDraftRoad(null);
+      return undefined;
+    }
+    let cancelled = false;
+    const coordinates = draftRoadKey.split(";").map((pair) => pair.split(",").map(Number));
+    setDraftRoad({ key: draftRoadKey, loading: true });
+    getRoadRoute(coordinates)
+      .then((result) => {
+        if (!cancelled) setDraftRoad({ key: draftRoadKey, ...result });
+      })
+      .catch(() => {
+        // 後端不可用時退回直線（createPlanRouteLayers 沒 geometry 會自動走直線串接）
+        if (!cancelled) setDraftRoad({ key: draftRoadKey, mode: "straight" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [draftRoadKey]);
+
+  // 只在 geometry 對應到目前這條路線、且是實走道路時才採用（避免站序已變仍畫舊線）。
+  const draftGeometry =
+    draftRoad?.key === draftRoadKey && draftRoad?.mode === "road" ? draftRoad.geometry : null;
+
+  const draftRoute = useMemo(
+    () => (draftBase ? { ...draftBase, geometry: draftGeometry } : null),
+    [draftBase, draftGeometry],
+  );
 
   return (
     <AsyncState

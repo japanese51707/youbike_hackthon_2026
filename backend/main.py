@@ -90,6 +90,13 @@ async def lifespan(app: FastAPI):
     if auto_detect.start_background(cfg.get("data_source", {}).get("mode")):
         print("[auto_detect] 自動偵測調度完成：背景輪詢已啟動")
 
+    # ADR-319：自動配單（系統為主）。每輪掃緊急清單，依緊急度逐一配對鄰近人車直接落地，
+    # 配完一張標記該站已配、過濾後再配下一筆；避開人工手動預覽/草稿的站。與 auto_detect
+    # 共用一把鎖序列化。僅真實源 + config 開關開啟時啟動。
+    from core import auto_dispatch
+    if auto_dispatch.start_background(cfg.get("data_source", {}).get("mode")):
+        print("[auto_dispatch] 自動配單：背景輪詢已啟動")
+
     # ADR-313：需調度清單背景預算快取。顯示端點讀快取秒回，避免每次重跑全站預測。
     from core import dispatch_cache
     if dispatch_cache.start_background(cfg.get("data_source", {}).get("mode")):
@@ -98,6 +105,8 @@ async def lifespan(app: FastAPI):
     # 關機時停背景 thread（daemon 本會隨程序結束，這裡明確停止避免測試殘留）
     from core import auto_detect as _ad
     _ad.stop_background()
+    from core import auto_dispatch as _adp
+    _adp.stop_background()
     from core import dispatch_cache as _dc
     _dc.stop_background()
 

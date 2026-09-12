@@ -114,6 +114,9 @@ superseded-by:
 | ADR-312 | 班別人力配置（三班×行政區）與雲端固定位址（NLB+Elastic IP） | accepted |
 | ADR-313 | 需調度清單背景預算快取（顯示端點讀快取秒回，派工端口維持即時） | accepted |
 | ADR-314 | 前端與後端同源上雲（ECS 出 SPA，單一 NLB 網址） | accepted |
+| ADR-317 | 出車載量自動預設（取消人工回報並重算；非總部車=0、總部車=補車需求量，僅未知時套用） | accepted |
+| ADR-318 | 任務地圖真實道路路線（後端 /routing/road 代理 + 直線降級，前端沿道路畫） | accepted |
+| ADR-319 | 系統為主的自動配單（依緊急度逐張配對鄰近人車，過濾已認領/手動草稿站，與自動偵測共用鎖） | accepted |
 | ADR-311 | 戰情室 Bedrock 顧問代理（advisory-only，後端代理） | accepted |
 
 ### 取號流程（新增 ADR 前必做）

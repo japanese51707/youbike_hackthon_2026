@@ -67,6 +67,29 @@ def get(draft_id, version):
         return deepcopy(entry[1])
 
 
+def active_draft_station_ids() -> set[str]:
+    """目前仍有效（未過期）草稿所佔用的站 ID 集合。
+
+    ADR-319：自動配單以系統為主，但要避開「人正在手動預覽/草稿」的站
+    （手動組單改為緊急人工介入專用）。這些站的 ID 由此提供給自動配單過濾。
+    只計入人工建立的草稿（created_by 非系統自動配單身分），避免自動配單自己剛建的
+    草稿把站擋掉自己。
+    """
+    from config_loader import get_config
+    auto_id = str(get_config().get("auto_dispatch", {}).get("operator_id", "OP-002"))
+    ids: set[str] = set()
+    with _lock:
+        _purge()
+        for _deadline, draft in _drafts.values():
+            if str(draft.get("created_by")) == auto_id:
+                continue  # 自動配單自己的草稿不算「人工佔用」
+            for stop in draft.get("stations", []) or []:
+                sid = stop.get("station_id")
+                if sid is not None:
+                    ids.add(str(sid))
+    return ids
+
+
 def reset_drafts():
     with _lock:
         _drafts.clear()

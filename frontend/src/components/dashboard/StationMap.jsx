@@ -134,6 +134,7 @@ export default function StationMap({
         ...createPlanRouteLayers({
           start: draftRoute.start,
           route: draftRoute.stops,
+          geometry: draftRoute.geometry,   // 第2件：實走道路折線（無則自動退直線）
           id: "dispatch-draft",
         }),
       );
