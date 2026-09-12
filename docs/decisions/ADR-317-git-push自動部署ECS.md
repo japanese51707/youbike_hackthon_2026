@@ -80,13 +80,17 @@ ADR-314 明確把「git push 自動部署」留待獨立決策。號段上 ADR-3
 ## 介面與相容性
 
 - 新增 `.github/workflows/deploy-ecs.yml`。
+- 自動觸發僅限會進 image 的路徑（`backend/`、`frontend/`、`Dockerfile`、`config.yaml`、
+  `.dockerignore`、`docs/analysis/workforce_allocation.json`、本 workflow）。純 ADR／README 不部署。
+- 建置用 Buildx + GitHub Actions cache（`type=gha,mode=max`）；第一次仍全量，之後重用 npm／pip layer。
 - 必要 Secrets：`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`；臨時憑證再加 `AWS_SESSION_TOKEN`。
-- 既有 task definition、NLB、EIP 不變。
+- 既有 task definition、NLB、EIP 不變（仍拉 `:latest`）。
+- 手動 `workflow_dispatch` 不受 paths 限制。
 
 ## 資安與隱私
 
 - 金鑰只在 GitHub Secrets 與 ECS task，不進版控。
-- workflow 權限僅 `contents: read`。
+- workflow 權限：`contents: read`、`actions: write`（寫 GHA cache）。
 - 不把 `secrets/aws-credentials` 或 CWA key 寫進 YAML。
 
 ## 回復或取代方式
