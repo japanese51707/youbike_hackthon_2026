@@ -72,6 +72,9 @@
 | [ADR-314](ADR-314-前端同源上雲.md) | 前端與後端同源上雲 | accepted | deployment, frontend, api, security | ECS 同一 image 出 SPA；`http://54.227.205.77:8000/` 畫面、`/api/v1` API；不另開公開 S3／CloudFront |
 | [ADR-317](ADR-317-git-push自動部署ECS.md) | push main 自動部署同源前後端 | accepted | deployment, security | GitHub Actions 建同一 image → ECR → ECS；觸發僅 `main` 與手動按鈕；憑證走 GitHub Secrets |
 | [ADR-318](ADR-318-空滿站緊急時計與今日排除時間.md) | 空滿站緊急時計與今日排除時間 | accepted | database, api, frontend | 空／滿一出現開時計；派工不關、恢復才算排除；看板第五張燈為各區平均排除時間 |
+| [ADR-319](ADR-319-空滿時計背景輪詢與24小時保留.md) | 空滿時計背景輪詢與 24 小時保留 | accepted | backend, database, api | 後端自己輪詢站況寫時計；只留近 24h 已結案；平均改看窗口而非日曆日 |
+| [ADR-320](ADR-320-空滿時計獨立行程與專用庫.md) | 空滿時計獨立行程與專用庫 | accepted | backend, database, deployment | 時計寫 service_clock.db；本機獨立 worker 不受 --reload 殺掉 |
+| [ADR-321](ADR-321-雲端空滿時計獨立收集與EFS共用庫.md) | 雲端空滿時計獨立收集與 EFS 共用庫 | accepted | deployment, database, backend | 雲端第二個 ECS 寫 EFS 上的 service_clock.db；網站只讀同一份 |
 | [ADR-310](ADR-310-自動偵測調度完成.md) | 自動偵測調度完成（免人工回報，達標即結） | accepted | dispatch, data, backend | 背景輪詢即時站況，進行中任務待處理站達派工目標（補車升/取車降逼近 target+最小變化量濾波動）即自動標記完成、推進、結案，複用 report_station(auto=True)；不論車誰移動達目標即需求消化；config 開關+僅真實源啟用；待 owner 核准 |
 
 ## 新決策流程

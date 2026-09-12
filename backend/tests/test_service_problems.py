@@ -93,3 +93,58 @@ def test_worst_stations_prefer_longest_open():
     assert banqiao["worst_stations"][0]["minutes"] == 50.0
     assert any(item["station_name"] == "短滿" and item["open"] is False
                for item in banqiao["worst_stations"])
+
+
+def test_snapshot_uses_rolling_window_not_calendar_midnight():
+    """25 小時前結案的不進平均；窗口內的才算。"""
+    old = T0 - _dt.timedelta(hours=25)
+    sp.sync_service_problems([_station("OLD", "empty")], now=old)
+    sp.sync_service_problems([_station("OLD", "normal")], now=old + _dt.timedelta(minutes=10))
+    sp.sync_service_problems([_station("NEW", "empty")], now=T0)
+    sp.sync_service_problems([_station("NEW", "normal")], now=T1)
+    snap = sp.snapshot(now=T1)
+    assert snap["window_hours"] == 24
+    assert snap["city"]["resolved_count"] == 1
+    assert snap["city"]["avg_resolved_minutes"] == 20.0
+
+
+def test_start_background_skips_when_external_worker(monkeypatch):
+    monkeypatch.setenv("SERVICE_CLOCK_EXTERNAL", "1")
+    assert sp.start_background("youbike_official") is False
+
+
+def test_start_background_skips_when_in_app_false(monkeypatch):
+    from config_loader import get_config
+    cfg = get_config()
+    monkeypatch.setitem(cfg.setdefault("service_problems", {}), "in_app", False)
+    monkeypatch.setitem(cfg["service_problems"], "enabled", True)
+    assert sp.start_background("youbike_official") is False
+
+
+def test_clock_writes_dedicated_file_not_memory_main(tmp_path, monkeypatch):
+    """YOUBIKE_CLOCK_DB_PATH 指向檔案時，時計不進主記憶體庫。"""
+    from db.clock_connection import clock_db_path, reset_clock_connection
+    from db.connection import get_connection
+
+    clock = tmp_path / "service_clock.db"
+    monkeypatch.setenv("YOUBIKE_CLOCK_DB_PATH", str(clock))
+    reset_clock_connection()
+    assert clock_db_path() == str(clock)
+
+    sp.sync_service_problems([_station()], now=T0)
+    assert service_problems_repo.get_open_by_station("S1") is not None
+    assert clock.exists()
+    main_count = get_connection().execute(
+        "SELECT COUNT(*) FROM service_problems").fetchone()[0]
+    assert main_count == 0
+
+
+def test_prune_deletes_closed_outside_window_but_keeps_open():
+    old = T0 - _dt.timedelta(hours=25)
+    sp.sync_service_problems([_station("OLD", "empty")], now=old)
+    sp.sync_service_problems([_station("OLD", "normal")], now=old + _dt.timedelta(minutes=10))
+    sp.sync_service_problems([_station("LIVE", "empty")], now=T0)
+    deleted = sp.prune_older_than(now=T1, hours=24)
+    assert deleted == 1
+    assert service_problems_repo.get_open_by_station("LIVE") is not None
+    assert service_problems_repo.list_closed_since(old.isoformat(timespec="seconds")) == []

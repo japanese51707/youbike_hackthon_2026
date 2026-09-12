@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import os
 import threading
 import uuid
 from typing import Optional
@@ -16,9 +17,12 @@ PROBLEM_KINDS = ("empty", "full")
 CLOSE_RECOVERED = "recovered"
 CLOSE_KIND_CHANGED = "kind_changed"
 WORST_PER_DISTRICT = 3
+DEFAULT_KEEP_HOURS = 24
 TAIPEI = _dt.timezone(_dt.timedelta(hours=8))
 
 _lock = threading.Lock()
+_stop_event: Optional[threading.Event] = None
+_thread: Optional[threading.Thread] = None
 
 
 def _now() -> _dt.datetime:
@@ -61,9 +65,22 @@ def _mean(values: list[float]) -> Optional[float]:
     return _round_minutes(sum(values) / len(values))
 
 
-def _day_start(moment: _dt.datetime) -> _dt.datetime:
-    local = _aware(moment)
-    return local.replace(hour=0, minute=0, second=0, microsecond=0)
+def _cfg() -> dict:
+    from config_loader import get_config
+    return get_config().get("service_problems", {}) or {}
+
+
+def _keep_hours() -> int:
+    raw = _cfg().get("保留小時", _cfg().get("keep_hours", DEFAULT_KEEP_HOURS))
+    try:
+        hours = int(raw)
+    except (TypeError, ValueError):
+        hours = DEFAULT_KEEP_HOURS
+    return hours if hours > 0 else DEFAULT_KEEP_HOURS
+
+
+def _window_start(moment: _dt.datetime, hours: Optional[int] = None) -> _dt.datetime:
+    return _aware(moment) - _dt.timedelta(hours=hours or _keep_hours())
 
 
 def _problem_id(moment: _dt.datetime) -> str:
@@ -115,14 +132,36 @@ def sync_service_problems(stations: list, now: Optional[_dt.datetime] = None) ->
         return service_problems_repo.list_open()
 
 
-def snapshot(now: Optional[_dt.datetime] = None) -> dict:
-    """進行中時計 + 今日已排除彙總（台北日曆日）。"""
+def prune_older_than(now: Optional[_dt.datetime] = None, hours: Optional[int] = None) -> int:
+    """刪掉窗口外的已結案列。進行中不刪。"""
     from db import service_problems_repo
 
     moment = _aware(now or _now())
-    day_start = _day_start(moment)
+    return service_problems_repo.delete_closed_before(_iso(_window_start(moment, hours)))
+
+
+def poll_once(now: Optional[_dt.datetime] = None) -> dict:
+    """拉一次完整站況、同步時計、清掉窗口外結案。不經前端。"""
+    from core.data.degradation import get_stations_with_degradation
+
+    moment = _aware(now or _now())
+    try:
+        get_stations_with_degradation()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc), "pruned": 0}
+    pruned = prune_older_than(moment)
+    return {"ok": True, "pruned": pruned}
+
+
+def snapshot(now: Optional[_dt.datetime] = None) -> dict:
+    """進行中時計 + 近 24 小時已排除彙總。"""
+    from db import service_problems_repo
+
+    moment = _aware(now or _now())
+    hours = _keep_hours()
+    window_start = _window_start(moment, hours)
     open_rows = service_problems_repo.list_open()
-    closed_rows = service_problems_repo.list_closed_since(_iso(day_start))
+    closed_rows = service_problems_repo.list_closed_since(_iso(window_start))
     recovered = [row for row in closed_rows if row.get("close_reason") == CLOSE_RECOVERED]
 
     open_items = []
@@ -163,7 +202,9 @@ def snapshot(now: Optional[_dt.datetime] = None) -> dict:
 
     return {
         "as_of": _iso(moment),
-        "today": day_start.date().isoformat(),
+        "today": moment.date().isoformat(),
+        "window_hours": hours,
+        "window_start": _iso(window_start),
         "city": {
             "avg_resolved_minutes": city_avg,
             "resolved_count": len(recovered_items),
@@ -234,3 +275,51 @@ def _worst_stations(open_here: list, recovered_here: list) -> list:
     } for item in recovered_here)
     candidates.sort(key=lambda item: (-item["minutes"], not item["open"], item["station_name"]))
     return candidates[:WORST_PER_DISTRICT]
+
+
+def _loop(interval_sec: float, stop_event: threading.Event) -> None:
+    while not stop_event.is_set():
+        try:
+            result = poll_once()
+            if not result.get("ok"):
+                print(f"[service_problems] 本輪站況失敗（略過）：{result.get('error')}")
+            elif result.get("pruned"):
+                print(f"[service_problems] 清掉窗口外結案 {result['pruned']} 筆")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[service_problems] 背景輪詢錯誤（略過本輪）：{exc}")
+        stop_event.wait(interval_sec)
+
+
+def _external_worker() -> bool:
+    flag = os.environ.get("SERVICE_CLOCK_EXTERNAL", "").strip().lower()
+    if flag in {"1", "true", "yes"}:
+        return True
+    return not bool(_cfg().get("in_app", True))
+
+
+def start_background(mode: str) -> bool:
+    """啟動空滿時計背景輪詢。僅真實源且開關開啟。獨立 worker 時略過。"""
+    global _stop_event, _thread
+    cfg = _cfg()
+    if not cfg.get("enabled", True):
+        return False
+    if _external_worker():
+        print("[service_problems] 時計由獨立 worker 寫入，略過 in-app thread")
+        return False
+    if mode in (None, "mock"):
+        return False
+    if _thread is not None and _thread.is_alive():
+        return True
+    interval = float(cfg.get("輪詢間隔_秒", cfg.get("interval_sec", 60)))
+    _stop_event = threading.Event()
+    _thread = threading.Thread(
+        target=_loop, args=(interval, _stop_event), daemon=True, name="service-problems")
+    _thread.start()
+    return True
+
+
+def stop_background() -> None:
+    global _stop_event, _thread
+    if _stop_event is not None:
+        _stop_event.set()
+    _thread = None

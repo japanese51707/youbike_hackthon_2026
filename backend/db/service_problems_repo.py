@@ -3,13 +3,14 @@
 ====================================================
 service_problems：以站為單位的空／滿 incident。
 opened_at 開案後不再改；同一站同時間只能有一筆未結案。
+連線走 clock_connection（ADR-320），與主庫分開。
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from db.connection import get_connection
+from db.clock_connection import get_clock_connection
 
 
 def _row(row) -> Optional[dict]:
@@ -17,7 +18,7 @@ def _row(row) -> Optional[dict]:
 
 
 def open_problem(problem: dict) -> Optional[dict]:
-    conn = get_connection()
+    conn = get_clock_connection()
     conn.execute(
         """INSERT INTO service_problems
            (problem_id, station_id, station_name, district, kind, opened_at)
@@ -37,21 +38,21 @@ def open_problem(problem: dict) -> Optional[dict]:
 
 
 def get_open_by_station(station_id: str) -> Optional[dict]:
-    conn = get_connection()
+    conn = get_clock_connection()
     return _row(conn.execute(
         "SELECT * FROM service_problems WHERE station_id = ? AND closed_at IS NULL",
         (station_id,)).fetchone())
 
 
 def list_open() -> list:
-    conn = get_connection()
+    conn = get_clock_connection()
     return [dict(r) for r in conn.execute(
         "SELECT * FROM service_problems WHERE closed_at IS NULL ORDER BY opened_at"
     ).fetchall()]
 
 
 def list_closed_since(started_at: str) -> list:
-    conn = get_connection()
+    conn = get_clock_connection()
     return [dict(r) for r in conn.execute(
         "SELECT * FROM service_problems "
         "WHERE closed_at IS NOT NULL AND closed_at >= ? "
@@ -60,8 +61,20 @@ def list_closed_since(started_at: str) -> list:
     ).fetchall()]
 
 
+def delete_closed_before(cutoff_at: str) -> int:
+    """刪掉已結案且關閉時間早於窗口的列（ADR-319）。進行中不刪。"""
+    conn = get_clock_connection()
+    cur = conn.execute(
+        "DELETE FROM service_problems "
+        "WHERE closed_at IS NOT NULL AND closed_at < ?",
+        (cutoff_at,),
+    )
+    conn.commit()
+    return int(cur.rowcount or 0)
+
+
 def close_problem(problem_id: str, reason: str, closed_at: str) -> None:
-    conn = get_connection()
+    conn = get_clock_connection()
     conn.execute(
         "UPDATE service_problems SET closed_at = ?, close_reason = ? "
         "WHERE problem_id = ? AND closed_at IS NULL",

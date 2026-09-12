@@ -119,6 +119,9 @@ superseded-by:
 | ADR-316 | 全時段允許跨區（同區優先；origin/main commit 已用號） | accepted |
 | ADR-317 | push main 自動部署同源前後端（GitHub Actions → ECR → ECS） | accepted |
 | ADR-318 | 空滿站緊急時計與今日排除時間（獨立 incident；派工不關、恢復才算排除） | accepted |
+| ADR-319 | 空滿時計背景輪詢與 24 小時保留（不依賴前端；逾窗已結案刪除） | accepted |
+| ADR-320 | 空滿時計獨立行程與專用庫（service_clock.db + 非 reload worker） | accepted |
+| ADR-321 | 雲端空滿時計獨立收集與 EFS 共用庫（第二個 ECS + 網站只讀） | accepted |
 | ADR-311 | 戰情室 Bedrock 顧問代理（advisory-only，後端代理） | accepted |
 
 ### 取號流程（新增 ADR 前必做）

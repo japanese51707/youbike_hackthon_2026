@@ -16,9 +16,11 @@ flowchart TB
     end
 
     subgraph AWS["AWS us-east-1（現場帳號 053134152077）"]
-        subgraph ECS["ECS Fargate（前後端同一服務，常駐）"]
+        subgraph ECS["ECS Fargate"]
             BE["FastAPI + SPA（ADR-314）<br/>規則引擎 + LightGBM 即時推論<br/>金鑰以環境變數注入"]
+            CLK["時計收集 youbike-clock-worker<br/>與網站隔離（ADR-321）"]
         end
+        EFS["EFS youbike-clock<br/>service_clock.db"]
         S3["S3 youbike-hackathon-2026-use1<br/>歷史 Parquet 2026-01~06<br/>(Block Public Access)"]
         SM["SageMaker Processing<br/>批次推論示範<br/>(按需啟動·跑完關)"]
         ECR["ECR<br/>youbike-backend image"]
@@ -34,6 +36,9 @@ flowchart TB
 
     User -->|"HTTP :8000／ 畫面與 /api/v1"| BE
     Proxy -->|"本機開發仍可 proxy"| BE
+    CLK -->|每 60 秒拉站況| YB
+    CLK -->|寫時計| EFS
+    BE -->|只讀時計| EFS
     BE -->|"讀歷史(補 lag 代理)<br/>task role 最小權限"| S3
     BE -->|即時站況| YB
     BE -->|即時天氣<br/>金鑰在雲端| CWA
@@ -53,6 +58,7 @@ flowchart TB
 | 模型生命週期 | SageMaker Processing | 批次推論示範；未來每日重訓管線 | 雲端按需 |
 | 資料 | S3（us-east-1） | 歷史 Parquet（訓練/lag 代理來源） | Serverless |
 | 即時來源 | YouBike / CWA | 站況、天氣（金鑰在雲端後端） | 外部 |
+| 空滿時計 | youbike-clock-worker + EFS | 與網站隔離收集；網站只讀同一份 SQLite | 雲端常駐（ADR-321） |
 
 ## 關鍵設計決策（見對應 ADR）
 
@@ -73,12 +79,13 @@ flowchart TB
 |---|---|
 | S3 bucket | youbike-hackathon-2026-use1 |
 | ECR repo | youbike-backend |
-| ECS cluster / service | youbike / youbike-backend |
-| Task definition | youbike-backend |
-| Security Group | sg-09e0635d293224992（只開 8000） |
+| ECS cluster / service | youbike / youbike-backend、youbike-clock-worker |
+| Task definition | youbike-backend、youbike-clock-worker |
+| EFS | youbike-clock（時計 SQLite，ADR-321） |
+| Security Group | sg-09e0635d293224992（只開 8000）；youbike-efs-sg（只對 ECS 開 2049） |
 | IAM roles | youbike-ecs-execution / youbike-ecs-task / youbike-sagemaker-exec |
-| CloudWatch log group | /ecs/youbike-backend |
+| CloudWatch log group | /ecs/youbike-backend、/ecs/youbike-clock-worker |
 | GitHub Actions | `.github/workflows/deploy-ecs.yml`（push `main` 建 image 並滾 ECS，ADR-317） |
 
-> 賽後關閉：`aws ecs update-service --cluster youbike --service youbike-backend --desired-count 0`
-> → 刪 service / cluster / task-def；前端 `YOUBIKE_BACKEND_URL` 改回 `http://127.0.0.1:8000`。
+> 賽後關閉：兩個 service 都 `--desired-count 0`（`youbike-backend`、`youbike-clock-worker`）
+> → 刪 service / cluster / task-def / EFS；前端 `YOUBIKE_BACKEND_URL` 改回 `http://127.0.0.1:8000`。
