@@ -3,6 +3,17 @@ import { palettes } from "../theme/palettes.js";
 
 const TILE_ORIGIN = "https://tiles.openfreemap.org";
 
+// 地名標籤一律以中文為準。
+// OpenMapTiles 的 name:latin 在台灣多半是舊的威妥瑪拼音（Panchiao / Hsinchuang /
+// Chungho），原本的寫法把它疊在中文上方，看起來就像整張圖都是舊地名。
+const PLACE_NAME_ZH = [
+  "coalesce",
+  ["get", "name:zh-Hant"],
+  ["get", "name:zh"],
+  ["get", "name"],
+  ["get", "name:latin"],
+];
+
 
 export function createBasemapStyle(mode = "light") {
   const palette = (palettes[mode] ?? palettes.light).map;
@@ -240,39 +251,37 @@ export function createBasemapStyle(mode = "light") {
         },
       },
       {
-        id: "place-label",
+        // 只顯示「市／鎮」等級的地名。
+        // 刻意不顯示 place=village / hamlet：台灣 OSM 的這兩類幾乎都是舊聚落名
+        // （舊地名），對調度沒有意義，而且在雙北都會區密度極高會把畫面洗版。
+        id: "place-label-major",
         type: "symbol",
         source: "openmaptiles",
         "source-layer": "place",
-        filter: [
-          "match",
-          ["get", "class"],
-          ["city", "town", "village"],
-          true,
-          false,
-        ],
+        filter: ["match", ["get", "class"], ["city", "town"], true, false],
         layout: {
-          "text-field": [
-            "case",
-            ["has", "name:nonlatin"],
-            [
-              "concat",
-              ["get", "name:latin"],
-              "\n",
-              ["get", "name:nonlatin"],
-            ],
-            ["coalesce", ["get", "name_en"], ["get", "name"]],
-          ],
+          "text-field": PLACE_NAME_ZH,
           "text-font": ["Noto Sans Regular"],
-          "text-size": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            6,
-            11,
-            12,
-            15,
-          ],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 6, 11, 12, 15],
+        },
+        paint: {
+          "text-color": palette.label,
+          "text-halo-color": palette.labelHalo,
+          "text-halo-width": 1.2,
+        },
+      },
+      {
+        // 行政區名（板橋區、三重區…）。調度以行政區為單位，這一層才是要看的。
+        id: "place-label-district",
+        type: "symbol",
+        source: "openmaptiles",
+        "source-layer": "place",
+        minzoom: 10,
+        filter: ["match", ["get", "class"], ["suburb"], true, false],
+        layout: {
+          "text-field": PLACE_NAME_ZH,
+          "text-font": ["Noto Sans Regular"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 10, 11, 14, 14],
         },
         paint: {
           "text-color": palette.label,
@@ -287,11 +296,7 @@ export function createBasemapStyle(mode = "light") {
         "source-layer": "water_name",
         minzoom: 10,
         layout: {
-          "text-field": [
-            "coalesce",
-            ["get", "name_en"],
-            ["get", "name"],
-          ],
+          "text-field": PLACE_NAME_ZH,
           "text-font": ["Noto Sans Italic"],
           "text-size": 12,
           "text-max-width": 5,

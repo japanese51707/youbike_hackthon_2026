@@ -42,12 +42,20 @@ export function createVehicleLayer({ start, id = "plan-vehicle" }) {
 
 // 多點路線規劃（類 Google Maps）：起點 → 各停靠點依序連線的折線 + 編號標記
 // （取車橘／補車綠、圓點內顯示停靠順序 1,2,3…）+ 起點標記。route 已是「先載後放」順序。
-export function createPlanRouteLayers({ start, route, id = "plan-route" }) {
+// geometry：後端 /routing/road 回的實走道路折線 [[lng,lat],...]。
+// 有給就用它畫線（沿著路），沒給就退回「起點→各站」的直線串接。
+export function createPlanRouteLayers({ start, route, geometry, id = "plan-route" }) {
   if (!start || !Array.isArray(route) || !route.length) return [];
-  const path = [
-    [start.lng, start.lat],
-    ...route.map((stop) => [stop.lng, stop.lat]),
-  ];
+  const roadPath =
+    Array.isArray(geometry) && geometry.length >= 2
+      ? geometry.filter(
+          (p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]),
+        )
+      : null;
+  const path =
+    roadPath && roadPath.length >= 2
+      ? roadPath
+      : [[start.lng, start.lat], ...route.map((stop) => [stop.lng, stop.lat])];
   // 帶序號的停靠點（1-based）
   const numbered = route.map((stop, i) => ({ ...stop, seq: i + 1 }));
 
@@ -58,7 +66,7 @@ export function createPlanRouteLayers({ start, route, id = "plan-route" }) {
       data: [{ path }],
       getPath: (item) => item.path,
       getColor: hexToRgba(presentationConfig.route.lineColor, 0.9),
-      getWidth: 4,
+      getWidth: roadPath ? 5 : 4,
       widthUnits: "pixels",
       capRounded: true,
       jointRounded: true,

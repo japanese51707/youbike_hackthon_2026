@@ -8,19 +8,15 @@ import {
   Alert,
   Button,
   Empty,
-  InputNumber,
   Select,
-  Space,
   Steps,
   Tag,
   Typography,
 } from "antd";
-import { useState } from "react";
 import {
   blockingReasonsOf,
   canConfirm,
   nextStepFor,
-  onboardBlocking,
 } from "../../../utils/dispatchGating.js";
 
 // 調度面板・組單態（ADR-206/119）：三入口共用「選資源 → 路線預估 → 預覽確認」精靈。
@@ -110,15 +106,12 @@ function BackendBuilder({
   onChangeEscort,
   onConfirm,
   onCancel,
-  onReportOnboard,
 }) {
   const meta = MODE_META[draft.mode_key] ?? MODE_META.station;
   const stops = backendStops(draft);
   const estimate = draft.estimate ?? {};
   const reasons = blockingReasonsOf(draft);
-  const needsOnboard = onboardBlocking(draft);
   const confirmable = canConfirm(draft);
-  const [onboardValue, setOnboardValue] = useState(0);
 
   return (
     <div className="order-builder">
@@ -150,8 +143,8 @@ function BackendBuilder({
             <span>
               缺 <b className="mono">{draft.supply_shortfall ?? "—"}</b> 台車源：
               周邊站點（含跨區）能提供的車不足以補到目標。
-              系統已優先指派<b>總部待命車與待命人員</b>——請確認該車已在總部載滿車，
-              或於下方回報車上台數後再確認派發。
+              系統已優先指派<b>總部待命車與待命人員</b>，並自動預設車上載滿所需車量——
+              請確認該車已在總部載滿後再確認派發。
             </span>
           }
           style={{ margin: "8px 0" }}
@@ -307,28 +300,6 @@ function BackendBuilder({
               </ul>
             }
           />
-          {/* 車上台數未知/過期：就地回報即可解除，不用重挑站 */}
-          {needsOnboard && draft.assigned_vehicle ? (
-            <div className="ob-field" style={{ marginTop: 8 }}>
-              <span className="ob-label">回報 {draft.assigned_vehicle} 車上台數</span>
-              <Space.Compact>
-                <InputNumber
-                  size="small"
-                  min={0}
-                  max={draft.vehicle_capacity ?? 15}
-                  value={onboardValue}
-                  onChange={(v) => setOnboardValue(v ?? 0)}
-                />
-                <Button
-                  size="small"
-                  type="primary"
-                  onClick={() => onReportOnboard?.(draft.assigned_vehicle, onboardValue)}
-                >
-                  回報並重算
-                </Button>
-              </Space.Compact>
-            </div>
-          ) : null}
         </section>
       ) : null}
 

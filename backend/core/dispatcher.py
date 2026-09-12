@@ -541,6 +541,17 @@ def _persist_trip_atomic(trip: dict) -> None:
         raise DispatchConflict("任務 ID 已存在，請使用草稿確認收據重送")
     vehicle, operator, escort = validate_resources(trip)
     validate_stations(trip["stations"], vehicle["max_capacity"])
+    # ADR-317：落地時自動預設出車載量並寫回 DB（取消人工「回報並重算」）。
+    # (甲) 純預設：僅在車上載量「未知」時套用（非總部車=0；總部車=本趟補車需求量，
+    # 不超過容量）；已有回報值則尊重實際值不覆蓋。寫回後 feasibility／執行端／
+    # auto_detect baseline 全用同一口徑。
+    if vehicle.get("onboard_bikes") is None:
+        _demand = sum(int(s.get("quantity", 0) or 0)
+                      for s in trip["stations"] if s.get("action") != "取車")
+        _cap = int(vehicle.get("max_capacity") or _default_capacity(get_config()))
+        _preset = min(_demand, _cap) if vehicle.get("is_depot") else 0
+        vehicle = vehicles_repo.report_onboard(
+            vehicle["vehicle_id"], _preset, "task_completion")
     # ADR-123/304：確認時以當下資源重跑與預覽相同的可行性評估（載量守恆／逐站視野／班別工時／重疊）
     from core.dispatch_feasibility import evaluate_feasibility, first_blocking_message
     feasibility = evaluate_feasibility(

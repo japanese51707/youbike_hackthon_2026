@@ -20,6 +20,7 @@
 """
 
 from __future__ import annotations
+import datetime as _dt
 from typing import Optional
 
 from config_loader import get_config
@@ -72,6 +73,34 @@ def _resolve_escort(op, escort_id, driver):
     return op.get_operator(escort_id)
 
 
+def _preset_onboard_value(vehicle: dict, stations: list[dict], cfg: dict) -> int:
+    """ADR-317 預設出車載量規則：非總部車=0；總部車=本趟補車需求量（不超過容量）。"""
+    demand = sum(int(s.get("quantity", 0) or 0) for s in stations if s.get("action") != "取車")
+    capacity = int(vehicle.get("max_capacity") or _dsp._default_capacity(cfg))
+    return min(demand, capacity) if vehicle.get("is_depot") else 0
+
+
+def _preset_onboard(vehicle: Optional[dict], stations: list[dict], cfg: dict) -> Optional[dict]:
+    """ADR-317：組單時自動預設出車載量，取消人工「回報並重算」。
+
+    規則（(甲) 純預設，不覆蓋已知值）：
+      - 車上載量「未知」（onboard_bikes 為 None）時才套預設：
+          非總部載運車（is_depot=False）→ 0 台（就近取車補足，不預先載車）；
+          總部載運車（is_depot=True）→ 本趟補車需求量（總部載滿出發），不超過容量。
+      - 車上「已有回報值」時尊重實際值，不覆蓋（保留「車上有車就用車上的車」能力）。
+
+    回傳一份 vehicle 副本（不動 DB 原車），供 feasibility 直接用；
+    vehicle 為 None、或已有回報值時原樣回傳（不覆寫）。
+    """
+    if not vehicle or vehicle.get("onboard_bikes") is not None:
+        return vehicle
+    veh = deepcopy(vehicle)
+    veh["onboard_bikes"] = _preset_onboard_value(veh, stations, cfg)
+    veh["onboard_source"] = "task_completion"          # 系統推算（可追溯來源之一）
+    veh["onboard_observed_at"] = _dt.datetime.now().isoformat(timespec="seconds")
+    return veh
+
+
 def _make_draft(stations, vehicle, operator, district, cfg, now,
                 start_lat=None, start_lng=None, note="", escort=None) -> dict:
     """組一張草稿派工單（含路徑順序 + 預估）。不落地。
@@ -81,6 +110,8 @@ def _make_draft(stations, vehicle, operator, district, cfg, now,
     """
     ordered = _dsp._order_route(deepcopy(stations), start_lat, start_lng)
     _fill_station_targets(ordered)
+    # ADR-317：出車載量自動預設（非總部車=0；總部車=本趟補車需求量），取消人工回報並重算。
+    vehicle = _preset_onboard(vehicle, ordered, cfg)
     kpi = _dsp._estimate_trip_kpi(ordered, cfg, start_lat, start_lng)
     default_cap = _dsp._default_capacity(cfg)
     estimate = {

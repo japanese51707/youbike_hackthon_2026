@@ -24,7 +24,6 @@ import {
   buildFromStation as apiBuildFromStation,
   buildFromVehicle as apiBuildFromVehicle,
   confirmRecommendation,
-  reportVehicleOnboard,
 } from "../api/dispatchApi.js";
 import { isApiMode } from "../api/httpClient.js";
 import { parseStationTime } from "../utils/formatters.js";
@@ -488,26 +487,8 @@ export default function DashboardPage() {
     });
   };
 
-  // 回報車上台數後，用同入口重打 build 讓後端重算可行性（解除 onboard 阻擋）。
-  const reportOnboardAndRebuild = async (vehicleId, onboardBikes) => {
-    try {
-      await reportVehicleOnboard(vehicleId, onboardBikes);
-      message.success(`已回報 ${vehicleId} 車上 ${onboardBikes} 台`);
-      const prev = builder;
-      if (!prev?.draft_id) return;
-      const modeKey = prev.mode_key;
-      const seedId = prev.stations?.[0]?.station_id;
-      const draft =
-        modeKey === "vehicle"
-          ? await apiBuildFromVehicle(vehicleId, {})
-          : modeKey === "emergency"
-            ? await apiBuildEmergency(prev.stations.map((s) => s.station_id), { vehicleId })
-            : await apiBuildFromStation(seedId, { vehicleId });
-      setBuilder({ ...draft, mode_key: modeKey });
-    } catch (err) {
-      message.error(err?.message || "回報失敗");
-    }
-  };
+  // ADR-317：出車載量由後端組單時自動預設（非總部車=0；總部車=補車需求量），
+  // 不再需要人工「回報並重算」。
 
   // 確認派發：
   // - API 模式：送後端 confirm-trip（寫入真實派工，需 dispatcher 身分），成功後重載面板。
@@ -635,7 +616,6 @@ export default function DashboardPage() {
                     onChangeOperator={changeBuilderOperator}
                     onChangeDistrict={changeBuilderDistrict}
                     onConfirm={confirmDraft}
-                    onReportOnboard={reportOnboardAndRebuild}
                     onCancel={() => setBuilder(null)}
                   />
                 ) : (

@@ -28,7 +28,7 @@ from middleware import RateLimitMiddleware
 from api import (
     stations, dispatch, operators, alerts,
     optimization, overrides, kpi, events, audit, weather, accounts,
-    assistant, rider,
+    assistant, rider, routing,
 )
 
 cfg = get_config()
@@ -165,7 +165,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # 掛載所有路由
 for module in (stations, dispatch, operators, alerts,
                optimization, overrides, kpi, events, audit, weather, accounts,
-               assistant, rider):
+               assistant, rider, routing):
     app.include_router(module.router)
 
 
