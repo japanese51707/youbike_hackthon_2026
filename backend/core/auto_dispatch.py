@@ -276,8 +276,10 @@ def scan_once(trigger: str = "auto") -> list[dict]:
                     _tally(diag, "無可用車" if not draft.get("assigned_vehicle") else "無可用人員")
                     consumed.add(seed_id)  # 無可用車或人，換下一站
                     continue
+                # ADR-333：自動配單跳過觀測比對（組單快取站況與即時 S3 站況 observed_at 必不同，
+                # 否則幾乎每張自動單都被「站點觀測已更新」擋掉）。資源/載量/認領防線仍保留。
                 result = confirm({"draft_id": draft["draft_id"], "version": draft["version"]},
-                                 operator_id)
+                                 operator_id, skip_observation_recheck=True)
                 # 落地成功：把這張單涵蓋的所有站標記為已配（同輪不再碰）
                 for s in draft["stations"]:
                     consumed.add(str(s.get("station_id")))

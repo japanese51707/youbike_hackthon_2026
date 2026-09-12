@@ -14,9 +14,16 @@ def _result(receipt):
     return {"trip_id": task["task_id"], "confirmed": True, "status": task["task_status"]}
 
 
-def confirm(submitted, operator):
+def confirm(submitted, operator, skip_observation_recheck=False):
     # Network reads stay outside the SQLite write transaction. The atomic section
     # rechecks the proof's age and the draft, plus resource ownership.
+    #
+    # ADR-333：skip_observation_recheck 供「系統自動配單」用。人工組單會開著預覽一段時間才
+    # 按確認，期間站況可能變，故確認時比對「組單當下 vs 即時」站況、不符就擋（防用過期預覽派工）。
+    # 但自動配單是機器用當下清單即時組單+立刻確認，組單清單走 60 秒快取、即時站況來自 S3 中繼，
+    # 兩者 observed_at 幾乎必然不同 → 觀測比對會把幾乎每張自動單都擋掉（實測 193 站 136 站被擋）。
+    # 自動配單本就用最新清單決策，不需要「防人用舊預覽」那層保護；資源驗證/載量守恆/認領檢查
+    # （validate_resources 等）仍全數保留，才是防重複配的真防線。
     require_dispatcher(operator)
     if (not isinstance(submitted, dict) or not isinstance(submitted.get("draft_id"), str)
             or type(submitted.get("version")) is not int or submitted["version"] < 1):
@@ -29,7 +36,7 @@ def confirm(submitted, operator):
         draft = dispatch_drafts.get(submitted.get("draft_id"), submitted.get("version"))
         if draft.get("data_mode", "mock") != mode:
             raise DispatchConflict("資料模式已改變，請重新預覽")
-        if mode != "mock":
+        if mode != "mock" and not skip_observation_recheck:
             from core.data import get_stations_with_degradation
             snapshots = {s["station_id"]: s for s in get_stations_with_degradation()}
     return _confirm(submitted, operator, snapshots)
