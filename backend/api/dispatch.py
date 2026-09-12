@@ -205,7 +205,7 @@ def confirm_trip(
     return _confirm_body(body, operator)
 
 
-# ── ADR-319 自動配單後台開關（dispatcher/maintainer 可開關）──
+# ── ADR-320 自動配單後台開關（dispatcher/maintainer 可開關）──
 
 @router.get("/dispatch/auto-dispatch")
 def get_auto_dispatch_state():

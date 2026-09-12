@@ -1,5 +1,5 @@
 """
-ADR-319 自動配單測試
+ADR-320 自動配單測試
 ====================
 驗證系統為主的自動配單：依緊急度逐一配對鄰近人車直接落地，配完一張標記該站已配、
 過濾後再配下一筆；避開已被任務認領的站與人工手動預覽/草稿佔用的站。
@@ -105,7 +105,7 @@ def test_respects_max_orders_per_round(monkeypatch):
 
 
 def test_stops_round_when_no_available_vehicle(monkeypatch):
-    """ADR-319：沒有閒置車可出勤時，本輪停止自動配單（不繼續掃其他站）。"""
+    """ADR-320：沒有閒置車可出勤時，本輪停止自動配單（不繼續掃其他站）。"""
     # 只 seed 人力，不 seed 任何車（無一般閒置車、無總部待命車）
     orp.seed_dispatch_operators(20)
     orp.seed_depot_standby_operators(5)
@@ -118,7 +118,7 @@ def test_stops_round_when_no_available_vehicle(monkeypatch):
 
 
 def test_runtime_switch_disables_dispatch(monkeypatch):
-    """ADR-319：後台關閉開關後，本輪不配單；重新開啟後恢復。"""
+    """ADR-320：後台關閉開關後，本輪不配單；重新開啟後恢復。"""
     _setup()
     _patch_list(monkeypatch, DL)
     from core import auto_dispatch as ad
@@ -131,7 +131,7 @@ def test_runtime_switch_disables_dispatch(monkeypatch):
 
 
 def test_auto_dispatch_toggle_endpoint(client):
-    """ADR-319：後台開關端點——GET 讀狀態、POST 需 dispatcher 權限、即時生效。"""
+    """ADR-320：後台開關端點——GET 讀狀態、POST 需 dispatcher 權限、即時生效。"""
     from tests.conftest import OP_DISPATCHER, OP_OPERATOR
 
     # GET 讀狀態（免權限，供儀表板顯示）

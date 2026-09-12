@@ -1,5 +1,5 @@
 """
-ADR-319：自動配單（系統為主的自動化派工）
+ADR-320：自動配單（系統為主的自動化派工）
 ==========================================
 系統每輪掃描目前緊急調度清單，依緊急度由高到低，逐一為每個緊急站自動配對「鄰近適合的
 人 + 車」並直接落地成派工單——複用 dispatch_builder.build_from_station 既有的車源決策
@@ -25,11 +25,11 @@ from __future__ import annotations
 import threading
 from typing import Optional
 
-# ADR-319：自動配單與 auto_detect（自動偵測完成）共用這把鎖序列化，避免競態。
+# ADR-320：自動配單與 auto_detect（自動偵測完成）共用這把鎖序列化，避免競態。
 # auto_detect.scan_once 也會取用同一把（見該模組）。
 COORDINATION_LOCK = threading.Lock()
 
-# ADR-319：後台可即時開關自動配單（不必重啟服務）。None＝依 config 預設；
+# ADR-320：後台可即時開關自動配單（不必重啟服務）。None＝依 config 預設；
 # True/False＝管理員 runtime 覆寫。背景 thread 恆在跑，每輪先看這個開關決定要不要配。
 _runtime_enabled: Optional[bool] = None
 
@@ -110,7 +110,7 @@ def scan_once() -> list[dict]:
     from core.providers import get_fleet_provider
     from core.task_execution import station_claim_map
 
-    # ADR-319：後台開關關閉時，本輪不配（背景 thread 仍在跑，開關可即時再開）。
+    # ADR-320：後台開關關閉時，本輪不配（背景 thread 仍在跑，開關可即時再開）。
     if not is_enabled():
         return []
 
@@ -137,7 +137,7 @@ def scan_once() -> list[dict]:
         for rec in queue:
             if len(placed) >= max_orders:
                 break
-            # ADR-319：沒有閒置車可出勤就「停止本輪」自動配單，等下一輪（5 分鐘後）再偵測。
+            # ADR-320：沒有閒置車可出勤就「停止本輪」自動配單，等下一輪（5 分鐘後）再偵測。
             # 車隊已無可派車時，繼續掃其他站也配不出來，直接結束本輪最省。
             if not _has_available_vehicle():
                 break

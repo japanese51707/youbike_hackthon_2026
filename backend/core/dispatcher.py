@@ -541,7 +541,7 @@ def _persist_trip_atomic(trip: dict) -> None:
         raise DispatchConflict("任務 ID 已存在，請使用草稿確認收據重送")
     vehicle, operator, escort = validate_resources(trip)
     validate_stations(trip["stations"], vehicle["max_capacity"])
-    # ADR-317：落地時自動預設出車載量並寫回 DB（取消人工「回報並重算」）。
+    # ADR-318：落地時自動預設出車載量並寫回 DB（取消人工「回報並重算」）。
     # (甲) 純預設：僅在車上載量「未知」時套用（非總部車=0；總部車=本趟補車需求量，
     # 不超過容量）；已有回報值則尊重實際值不覆蓋。寫回後 feasibility／執行端／
     # auto_detect baseline 全用同一口徑。

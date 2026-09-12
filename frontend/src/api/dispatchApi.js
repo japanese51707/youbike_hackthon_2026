@@ -65,7 +65,7 @@ export function reportVehicleOnboard(vehicleId, onboardBikes) {
   });
 }
 
-// ADR-319：自動配單後台開關。GET 讀狀態（供儀表板顯示）；POST 切換（需 dispatcher/maintainer）。
+// ADR-320：自動配單後台開關。GET 讀狀態（供儀表板顯示）；POST 切換（需 dispatcher/maintainer）。
 export function getAutoDispatchState() {
   return request("/dispatch/auto-dispatch");
 }

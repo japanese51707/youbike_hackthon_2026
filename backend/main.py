@@ -90,7 +90,7 @@ async def lifespan(app: FastAPI):
     if auto_detect.start_background(cfg.get("data_source", {}).get("mode")):
         print("[auto_detect] 自動偵測調度完成：背景輪詢已啟動")
 
-    # ADR-319：自動配單（系統為主）。每輪掃緊急清單，依緊急度逐一配對鄰近人車直接落地，
+    # ADR-320：自動配單（系統為主）。每輪掃緊急清單，依緊急度逐一配對鄰近人車直接落地，
     # 配完一張標記該站已配、過濾後再配下一筆；避開人工手動預覽/草稿的站。與 auto_detect
     # 共用一把鎖序列化。僅真實源 + config 開關開啟時啟動。
     from core import auto_dispatch

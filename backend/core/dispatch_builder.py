@@ -74,14 +74,14 @@ def _resolve_escort(op, escort_id, driver):
 
 
 def _preset_onboard_value(vehicle: dict, stations: list[dict], cfg: dict) -> int:
-    """ADR-317 預設出車載量規則：非總部車=0；總部車=本趟補車需求量（不超過容量）。"""
+    """ADR-318 預設出車載量規則：非總部車=0；總部車=本趟補車需求量（不超過容量）。"""
     demand = sum(int(s.get("quantity", 0) or 0) for s in stations if s.get("action") != "取車")
     capacity = int(vehicle.get("max_capacity") or _dsp._default_capacity(cfg))
     return min(demand, capacity) if vehicle.get("is_depot") else 0
 
 
 def _preset_onboard(vehicle: Optional[dict], stations: list[dict], cfg: dict) -> Optional[dict]:
-    """ADR-317：組單時自動預設出車載量，取消人工「回報並重算」。
+    """ADR-318：組單時自動預設出車載量，取消人工「回報並重算」。
 
     規則（(甲) 純預設，不覆蓋已知值）：
       - 車上載量「未知」（onboard_bikes 為 None）時才套預設：
@@ -110,7 +110,7 @@ def _make_draft(stations, vehicle, operator, district, cfg, now,
     """
     ordered = _dsp._order_route(deepcopy(stations), start_lat, start_lng)
     _fill_station_targets(ordered)
-    # ADR-317：出車載量自動預設（非總部車=0；總部車=本趟補車需求量），取消人工回報並重算。
+    # ADR-318：出車載量自動預設（非總部車=0；總部車=本趟補車需求量），取消人工回報並重算。
     vehicle = _preset_onboard(vehicle, ordered, cfg)
     kpi = _dsp._estimate_trip_kpi(ordered, cfg, start_lat, start_lng)
     default_cap = _dsp._default_capacity(cfg)

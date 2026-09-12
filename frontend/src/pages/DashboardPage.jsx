@@ -112,7 +112,7 @@ export default function DashboardPage() {
   const [orders, setOrders] = useState([]); // 送出的調度單（本機追蹤）
   const orderSeq = useRef(0);
 
-  // ADR-319：自動配單後台開關（狀態由後端提供，dispatcher/maintainer 可切換）。
+  // ADR-320：自動配單後台開關（狀態由後端提供，dispatcher/maintainer 可切換）。
   const [autoDispatch, setAutoDispatch] = useState(null); // {enabled, running, interval_sec}
   const [autoDispatchBusy, setAutoDispatchBusy] = useState(false);
   useEffect(() => {
@@ -510,7 +510,7 @@ export default function DashboardPage() {
     });
   };
 
-  // ADR-317：出車載量由後端組單時自動預設（非總部車=0；總部車=補車需求量），
+  // ADR-318：出車載量由後端組單時自動預設（非總部車=0；總部車=補車需求量），
   // 不再需要人工「回報並重算」。
 
   // 確認派發：
@@ -641,7 +641,7 @@ export default function DashboardPage() {
                   </Tag>
                 </Tooltip>
               ) : null}
-              {/* ADR-319：自動配單開關（dispatcher/maintainer 可切換；一般人切換會被後端擋） */}
+              {/* ADR-320：自動配單開關（dispatcher/maintainer 可切換；一般人切換會被後端擋） */}
               {isApiMode && autoDispatch ? (
                 <Tooltip
                   title={
