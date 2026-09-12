@@ -213,13 +213,21 @@ def build_from_station(
     veh = fp.get_vehicle(vehicle_id) if vehicle_id else (candidates[0] if candidates else None)
     cap = int(veh.get("max_capacity") or default_cap) if veh else default_cap
     # ADR-315 載量守恆挑站：補車站需有車源（車上載量 + 趟內取車站），避免「只排補車卻沒車可補」。
-    # 車上初始載量未知（未回報）時當 0，讓規劃主動納入鄰近取車站湊足車源（先取後補）。
+    # 車上初始載量未知（未回報）時當 0，讓規劃主動納入取車站湊足車源（先取後補）。
     onboard = veh.get("onboard_bikes") if veh else None
     onboard = int(onboard) if onboard is not None else 0
+    # 車源決策階梯（ADR-315）：①車上載量 ②同區取車站就近取（在 pool 內）
+    # ③同區湊不足 → 允許跨區取「一站」補足車源（早晚班破例，因「有車補」優先於不跨區）。
+    # 早晚班才需要跨區備援；大夜班 pool 本就全區。
+    cross_collectors = [] if cross_ok else sorted(
+        [r for r in dispatch_list
+         if r.get("action") == "取車" and r.get("district") != district],
+        key=lambda r: -float(r.get("quantity", 0) or 0))
     stations = _dsp._pack_supply_aware_trip(
         pool, cap, max_stops, seed_id=station_id, onboard=onboard,
         start_lat=veh.get("current_lat") if veh else None,
-        start_lng=veh.get("current_lng") if veh else None)
+        start_lng=veh.get("current_lng") if veh else None,
+        extra_collectors=cross_collectors)
 
     # 人員：指定 → 用指定；否則後端排優先序（同區優先），預設帶第一名，候選供後台改選。
     # 司機不常態待命，被派到任務當下才上工（見確認落地）。
@@ -250,6 +258,16 @@ def build_from_station(
     draft["operator_candidates"] = _operator_candidates(assignable, depot_ops, district)
     if not in_district and not nearby:
         draft["note"] += "｜該區與鄰近無閒置車，建議用總站待命車"
+
+    # ADR-315 車源階梯最後一關：若補車需求仍超過（車上載量 + 趟內取車站可取量），
+    # 代表同區＋跨區都湊不到足夠車源 → 需從總部載滿車出發調度（供未來全自動流程升級為警示）。
+    _demand = sum(int(s.get("quantity", 0) or 0) for s in stations if s.get("action") != "取車")
+    _supply = onboard + sum(int(s.get("quantity", 0) or 0) for s in stations if s.get("action") == "取車")
+    if _demand > _supply:
+        gap = _demand - _supply
+        draft["supply_shortfall"] = gap
+        draft["needs_depot_refill"] = True
+        draft["note"] += f"｜⚠ 附近無足夠車源可取（缺 {gap} 台），需由總部載滿車出發調度"
     return draft
 
 

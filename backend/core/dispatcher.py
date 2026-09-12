@@ -141,6 +141,7 @@ def _pack_supply_aware_trip(
     pool: list[dict], capacity: int, max_stops: int,
     seed_id=None, onboard: int = 0,
     start_lat=None, start_lng=None,
+    extra_collectors: Optional[list[dict]] = None,
 ) -> list[dict]:
     """ADR-315：載量守恆感知的挑站——補車站要有車源（車上載量 + 趟內取車站）才排得進來。
 
@@ -186,10 +187,23 @@ def _pack_supply_aware_trip(
             return cands[0]
         return min(cands, key=lambda r: _haversine_km(cur_lat, cur_lng, r.get("lat"), r.get("lng")))
 
+    extra = list(extra_collectors or [])
+    used_extra_ids = {str(s.get("station_id")) for s in trip}
     while remaining and len(trip) < max_stops:
         deficit = demand_in_trip() - supply_in_trip()   # >0 表示補車需求超過現有車源
         collectors = [r for r in remaining if r.get("action") == "取車"]
-        # 若車源不足且還有取車站可補 → 優先拉最近的取車站當車源
+        # ADR-315 車源階梯：車源不足時 → ①先用同區(pool)取車站；②同區沒有 → 用跨區備援取車站(extra)。
+        if deficit > 0 and not collectors and extra:
+            cand = [r for r in extra
+                    if str(r.get("station_id")) not in used_extra_ids
+                    and supply_in_trip() + int(r.get("quantity", 0) or 0) <= capacity]
+            if cand:
+                nxt = nearest(cand)
+                trip.append(nxt)
+                used_extra_ids.add(str(nxt.get("station_id")))
+                cur_lat, cur_lng = nxt.get("lat"), nxt.get("lng")
+                continue
+        # 若車源不足且同區還有取車站可補 → 優先拉最近的取車站當車源
         if deficit > 0 and collectors:
             nxt = nearest(collectors)
         else:
