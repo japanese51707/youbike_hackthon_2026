@@ -30,12 +30,19 @@ def _now() -> str:
 def _to_row(task: dict) -> dict:
     row = {c: task.get(c) for c in _COLUMNS}
     row["route_json"] = json.dumps(task.get("route", []), ensure_ascii=False)
+    # ADR-324：從總部裝車出發的裝車指示（車源不在趟內取車站，而在總部）。
+    # 存 JSON 字串，沒有就存 NULL。
+    depot_load = task.get("depot_load")
+    row["depot_load_json"] = (json.dumps(depot_load, ensure_ascii=False)
+                              if depot_load else None)
     return row
 
 
 def _from_row(row) -> dict:
     d = dict(row)
     d["route"] = json.loads(d.pop("route_json", "[]") or "[]")
+    raw_depot = d.pop("depot_load_json", None)
+    d["depot_load"] = json.loads(raw_depot) if raw_depot else None
     # 移除純 DB 欄位，保留對外一致的鍵
     d.pop("created_at", None)
     d.pop("updated_at", None)

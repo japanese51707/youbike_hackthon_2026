@@ -126,12 +126,44 @@ def claim_map(district: str | None = None):
     return tx.station_claim_map(district=district)
 
 
+def _attach_live_station_status(tasks: list[dict]) -> None:
+    """ADR-324：把每個停靠站的「當下站況」補進任務路線（就地修改）。
+
+    路線裡的 current_available 是**組單當下**的快照，不是現在。調度員盯著進行中任務
+    要看的是「這站現在有幾台車、還有幾個空位、目標補到幾台」，三個數字缺一不可：
+    只有目標看不出離目標多遠，只有現有看不出還塞不塞得下。
+
+    站況來源不可用時靜默略過（維持原本快照），overview 不因此中斷。
+    """
+    if not tasks:
+        return
+    try:
+        from core.donor_stations import get_all_stations
+        live = {str(st.get("station_id")): st for st in get_all_stations()}
+    except Exception:  # noqa: BLE001
+        return
+    if not live:
+        return
+    for task in tasks:
+        for stop in task.get("route") or []:
+            if not isinstance(stop, dict):
+                continue
+            st = live.get(str(stop.get("station_id")))
+            if not st:
+                continue
+            stop["live_available_bikes"] = st.get("available_bikes")
+            stop["live_available_docks"] = st.get("available_docks")
+            stop["live_total_docks"] = st.get("total_docks")
+            stop["live_observed_at"] = st.get("observed_at") or st.get("timestamp")
+
+
 @router.get("/dispatch/overview")
 def overview():
     """3.17 全域調度總覽（後台/長官）"""
     from db import tasks_repo, operators_repo, vehicles_repo
     from api.operators import _apply_shift_duty
     rows = tasks_repo.list_tasks()
+    _attach_live_station_status(rows)
     # ADR-312：operators 依當前班別注入在線狀態（當班未派工＝on_duty）。
     return {"tasks": rows, "operators": _apply_shift_duty(operators_repo.list_operators()),
             "vehicles": vehicles_repo.list_vehicles(),

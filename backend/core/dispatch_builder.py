@@ -42,6 +42,72 @@ def _fill_station_targets(stations: list[dict]) -> None:
         s.setdefault("station_status", "pending")
 
 
+def _ensure_trip_composition(stations, dispatch_list, extra_collectors, cfg,
+                             capacity, start_lat, start_lng, onboard=0):
+    """ADR-324：一趟必須同時有「車源」與「去處」，否則那張單做不完。
+
+    現況會產出兩種做不完的單：
+      - 只有補車站：車上沒車、沿途也沒安排取車 → 到了站沒東西可放。
+      - 只有取車站：收了一車，卻沒有任何要放的站 → 車收滿了不知道去哪。
+
+    營運上一趟的定義就是「先到滿站取車 → 再到空站放車」，兩種行為都要有才算完成
+    （唯一例外：從總部裝車出發，此時總部裝載取代趟內取車，見 depot_load）。
+    這裡在裝箱完成後補齊缺少的那一半，就近挑、且不讓載量超過車容量。
+
+    回傳 (stations, 補了什麼) —— 補不到時原樣回傳，由上層的 needs_depot 接手。
+    """
+    from core.dispatcher import _haversine_km
+
+    used = {str(s.get("station_id")) for s in stations}
+    added: list[str] = []
+
+    def qty_of(row):
+        return int(row.get("quantity", 0) or 0)
+
+    def nearest(cands, lat, lng):
+        if not cands:
+            return None
+        if lat is None:
+            return cands[0]
+        return min(cands, key=lambda r: _haversine_km(lat, lng, r.get("lat"), r.get("lng")))
+
+    def tail_point():
+        if stations:
+            return stations[-1].get("lat"), stations[-1].get("lng")
+        return start_lat, start_lng
+
+    demand = sum(qty_of(s) for s in stations if s.get("action") != "取車")
+    # ★車上已經有的台數也算車源。漏掉它會讓「再取 N 台」看起來還有空間，
+    #   實際上車早就快滿了，逐站載量守恆會在 feasibility 那關爆掉。
+    supply = int(onboard or 0) + sum(qty_of(s) for s in stations if s.get("action") == "取車")
+
+    # 缺「去處」：收了車沒地方放 → 就近補一個補車站
+    if not any(s.get("action") != "取車" for s in stations):
+        lat, lng = tail_point()
+        cands = [r for r in dispatch_list
+                 if r.get("action") != "取車"
+                 and str(r.get("station_id")) not in used
+                 and demand + qty_of(r) <= capacity]
+        pick = nearest(cands, lat, lng)
+        if pick:
+            stations.append(pick)
+            used.add(str(pick.get("station_id")))
+            added.append("補車站")
+
+    # 缺「車源」：車上沒車又沒安排取車 → 就近補一個取車站／供車站
+    if not any(s.get("action") == "取車" for s in stations):
+        cands = [r for r in list(extra_collectors or []) + list(dispatch_list)
+                 if r.get("action") == "取車"
+                 and str(r.get("station_id")) not in used
+                 and supply + qty_of(r) <= capacity]
+        pick = nearest(cands, start_lat, start_lng)
+        if pick:
+            stations.insert(0, pick)   # 取車一定排在最前面（_order_route 也會再保證一次）
+            added.append("取車站")
+
+    return stations, added
+
+
 def _operator_candidates(assignable: list[dict], depot: list[dict],
                          district: Optional[str]) -> dict:
     """司機候選（供前端下拉選），依後端優先序分層：同區 → 鄰近（其他區/未定） → 總站待命。
@@ -301,6 +367,13 @@ def build_from_station(
         start_lng=tentative_veh.get("current_lng") if tentative_veh else None,
         extra_collectors=cross_collectors)
 
+    # ADR-324：補齊「只有取車」或「只有補車」的殘缺趟次（一趟要有車源也要有去處）
+    stations, _composition_added = _ensure_trip_composition(
+        stations, dispatch_list, cross_collectors, cfg, cap,
+        tentative_veh.get("current_lat") if tentative_veh else seed.get("lat"),
+        tentative_veh.get("current_lng") if tentative_veh else seed.get("lng"),
+        onboard=onboard)
+
     # ADR-315：判斷這趟是否「純靠總部載車」——補車需求超過（車上載量 + 趟內取車站可取量）。
     _demand0 = sum(int(s.get("quantity", 0) or 0) for s in stations if s.get("action") != "取車")
     _supply0 = onboard + sum(int(s.get("quantity", 0) or 0) for s in stations if s.get("action") == "取車")
@@ -345,6 +418,9 @@ def build_from_station(
     draft["operator_candidates"] = _operator_candidates(assignable, depot_ops, district)
     if not in_district and not nearby:
         draft["note"] += "｜該區與鄰近無閒置車，建議用總站待命車"
+    if _composition_added:
+        draft["composition_added"] = _composition_added
+        draft["note"] += f"｜為湊成完整一趟自動加入：{'、'.join(_composition_added)}"
     # ADR-321：載量若為系統推定（閒置車未回報→視為 0），草稿要講明，不要讓人以為是實測值。
     if draft.get("onboard_assumed"):
         draft["note"] += "｜車上載量為系統推定，出車前請司機確認"
