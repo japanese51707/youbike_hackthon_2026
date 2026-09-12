@@ -137,6 +137,85 @@ def _pack_trips(region_recs: list[dict], capacity: int, max_stops: int) -> list[
     return trips
 
 
+def _pack_supply_aware_trip(
+    pool: list[dict], capacity: int, max_stops: int,
+    seed_id=None, onboard: int = 0,
+    start_lat=None, start_lng=None,
+) -> list[dict]:
+    """ADR-315：載量守恆感知的挑站——補車站要有車源（車上載量 + 趟內取車站）才排得進來。
+
+    問題：純緊急度裝箱（_pack_trips）會把一趟全塞高緊急度的補車站（空站），但車上沒車、
+    又沒安排去滿站取車，補車就是空談。這裡在挑站時維持「可用車量 ≥ 已排補車量」：
+      可用車量 = 車上初始載量 onboard + 趟內已排取車站的可取量。
+    當補車需求超過可用車量時，先從 pool 就近拉一個「取車站（滿站，有多餘車）」補足車源，再繼續補車。
+
+    貪婪策略（近似，非最佳 VRP）：
+      1. seed 站先入趟（使用者點的站，最急）。
+      2. 之後每步：若尚有補車需求未被車源覆蓋 → 優先納入「能提供車源的最近取車站」；
+         否則納入「最近的下一個需調度站」（補或取皆可，就近）。
+      3. 受 capacity（車上任一刻載量不超過容量）與 max_stops 約束。
+    """
+    if not pool:
+        return []
+    remaining = list(pool)
+    # seed 先入
+    seed = None
+    if seed_id is not None:
+        seed = next((r for r in remaining if str(r.get("station_id")) == str(seed_id)), None)
+    if seed is None:
+        seed = remaining[0]
+    trip = [seed]
+    remaining.remove(seed)
+
+    def qty(r):
+        return int(r.get("quantity", 0) or 0)
+
+    def supply_in_trip():
+        # 車源 = 車上初始 + 趟內取車站可取量
+        return onboard + sum(qty(r) for r in trip if r.get("action") == "取車")
+
+    def demand_in_trip():
+        return sum(qty(r) for r in trip if r.get("action") != "取車")
+
+    # 當前「路徑末端」座標（就近挑下一站用）；起點優先用車位置
+    cur_lat = start_lat if start_lat is not None else seed.get("lat")
+    cur_lng = start_lng if start_lng is not None else seed.get("lng")
+
+    def nearest(cands):
+        if cur_lat is None:
+            return cands[0]
+        return min(cands, key=lambda r: _haversine_km(cur_lat, cur_lng, r.get("lat"), r.get("lng")))
+
+    while remaining and len(trip) < max_stops:
+        deficit = demand_in_trip() - supply_in_trip()   # >0 表示補車需求超過現有車源
+        collectors = [r for r in remaining if r.get("action") == "取車"]
+        # 若車源不足且還有取車站可補 → 優先拉最近的取車站當車源
+        if deficit > 0 and collectors:
+            nxt = nearest(collectors)
+        else:
+            # 否則就近拉下一站；但避免加入會超過容量的取車（車上會爆）
+            feasible = [r for r in remaining
+                        if not (r.get("action") == "取車" and supply_in_trip() + qty(r) > capacity)]
+            if not feasible:
+                break
+            nxt = nearest(feasible)
+        # 容量守恆：補車不可讓需求超過「車源上限（容量）」；取車不可讓車上超過容量
+        if nxt.get("action") == "取車":
+            if supply_in_trip() + qty(nxt) > capacity:
+                remaining.remove(nxt)
+                continue
+        else:
+            # 補車：加入後需求不可超過「可達到的最大車源（容量）」，且盡量在現有車源內
+            if demand_in_trip() + qty(nxt) > capacity:
+                remaining.remove(nxt)
+                continue
+        trip.append(nxt)
+        remaining.remove(nxt)
+        cur_lat, cur_lng = nxt.get("lat"), nxt.get("lng")
+
+    return trip
+
+
 def _haversine_km(lat1, lng1, lat2, lng2) -> float:
     """兩點球面距離（公里）。座標缺失回 0。"""
     import math

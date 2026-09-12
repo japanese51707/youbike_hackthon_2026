@@ -212,8 +212,14 @@ def build_from_station(
 
     veh = fp.get_vehicle(vehicle_id) if vehicle_id else (candidates[0] if candidates else None)
     cap = int(veh.get("max_capacity") or default_cap) if veh else default_cap
-    trips = _dsp._pack_trips(pool, cap, max_stops)
-    stations = trips[0] if trips else []
+    # ADR-315 載量守恆挑站：補車站需有車源（車上載量 + 趟內取車站），避免「只排補車卻沒車可補」。
+    # 車上初始載量未知（未回報）時當 0，讓規劃主動納入鄰近取車站湊足車源（先取後補）。
+    onboard = veh.get("onboard_bikes") if veh else None
+    onboard = int(onboard) if onboard is not None else 0
+    stations = _dsp._pack_supply_aware_trip(
+        pool, cap, max_stops, seed_id=station_id, onboard=onboard,
+        start_lat=veh.get("current_lat") if veh else None,
+        start_lng=veh.get("current_lng") if veh else None)
 
     # 人員：指定 → 用指定；否則後端排優先序（同區優先），預設帶第一名，候選供後台改選。
     # 司機不常態待命，被派到任務當下才上工（見確認落地）。
