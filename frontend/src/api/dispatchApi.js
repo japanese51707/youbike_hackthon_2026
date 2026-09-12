@@ -14,29 +14,32 @@ function ensureDraft(draft) {
 }
 
 // 入口 b：以站為起點（可選指定車 / 指定司機）。
-export async function buildFromStation(stationId, { vehicleId, operatorId } = {}) {
+export async function buildFromStation(stationId, { vehicleId, operatorId, escortId } = {}) {
   const body = { station_id: stationId };
   if (vehicleId) body.vehicle_id = vehicleId;
   if (operatorId) body.operator_id = operatorId;
+  if (escortId) body.escort_id = escortId;   // ADR-308 隨車（可選）
   return ensureDraft(
     await request("/dispatch/build/from-station", { method: "POST", body }),
   );
 }
 
 // 入口 a：以車為起點（operator_id 預設帶當前操作身分，可被指定司機覆寫）。
-export async function buildFromVehicle(vehicleId, { district, operatorId } = {}) {
+export async function buildFromVehicle(vehicleId, { district, operatorId, escortId } = {}) {
   const body = { vehicle_id: vehicleId, operator_id: operatorId || getActorId() };
   if (district) body.district = district;
+  if (escortId) body.escort_id = escortId;   // ADR-308 隨車（可選）
   return ensureDraft(
     await request("/dispatch/build/from-vehicle", { method: "POST", body }),
   );
 }
 
 // 入口 c：緊急出車（一或多個種子站；可選指定車 / 指定司機）。
-export async function buildEmergency(stationIds, { vehicleId, operatorId } = {}) {
+export async function buildEmergency(stationIds, { vehicleId, operatorId, escortId } = {}) {
   const body = { station_ids: Array.isArray(stationIds) ? stationIds : [stationIds] };
   if (vehicleId) body.vehicle_id = vehicleId;
   if (operatorId) body.operator_id = operatorId;
+  if (escortId) body.escort_id = escortId;   // ADR-308 隨車（可選）
   return ensureDraft(
     await request("/dispatch/build/emergency", { method: "POST", body }),
   );

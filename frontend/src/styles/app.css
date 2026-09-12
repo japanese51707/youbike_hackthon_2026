@@ -4,6 +4,8 @@
   --ct-text: #343830;
   --ct-mono: ui-monospace, sfmono-regular, "JetBrains Mono", menlo, consolas,
     monospace;
+  /* 調度面板左右兩欄的表頭高度（分頁列／統計條），對齊用 */
+  --deck-head-h: 46px;
 
   color: var(--ct-text);
   background: var(--ct-bg);
@@ -156,21 +158,200 @@ body {
   flex: none;
 }
 
+/* 調度任務是主角：行政區目錄 | 任務欄（>1/3）| 右欄（統計條＋地圖）
+   ★兩欄的表頭（左：分頁列／右：統計條）共用 --deck-head-h，並且兩欄都是同樣內距的
+     面板，才能讓兩邊的標題列與內容列對齊在同一條水平線上。 */
 .dashboard-main {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(340px, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(460px, 1.25fr) 10px minmax(0, 1.4fr);
+  gap: 8px;
+}
+
+/* 左右寬度分隔線：使用者可拖曳（也可用方向鍵微調、雙擊還原） */
+.dashboard-split {
+  position: relative;
+  align-self: stretch;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.dashboard-split::before {
+  content: "";
+  position: absolute;
+  inset: 8px 4px;
+  border-radius: 3px;
+  background: var(--ct-border);
+  transition: background 0.15s ease, inset 0.15s ease;
+}
+
+.dashboard-split:hover::before,
+.dashboard-split:focus-visible::before {
+  inset: 8px 3px;
+  background: var(--ct-primary);
+}
+
+.dashboard-split:focus-visible {
+  outline: none;
 }
 
 .dashboard-map,
-.dashboard-side {
+.dashboard-side,
+.dashboard-right {
   min-height: 0;
 }
 
+.dashboard-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--ct-panel);
+}
+
 .dashboard-map {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+/* ── 調度卡片內：左側行政區目錄 + 右側任務卡列表 ── */
+/* ★分頁列與頁尾固定，行政區目錄與任務清單各自捲動、互不影響
+   （.dispatch-deck 的 overflow 在 brand.css 改成 hidden，否則整塊一起捲） */
+.deck-dispatch-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.deck-dispatch-list {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.district-nav {
+  flex: none;
+  width: 132px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 12px;
+  border-right: 1px solid var(--ct-border);
+  overflow-y: auto;
+}
+
+.district-nav-title {
+  padding: 0 8px 6px;
+  color: var(--ct-text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.district-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.district-nav-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ct-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.district-nav-item:hover {
+  background: var(--ct-bg-soft);
+}
+
+.district-nav-item.is-active {
+  background: var(--ct-primary-soft);
+  font-weight: 600;
+}
+
+.district-nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.district-nav-count {
+  flex: none;
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--ct-bg-soft);
+  color: var(--ct-text-dim);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.district-nav-item.is-active .district-nav-count {
+  background: var(--ct-panel);
+  color: var(--ct-primary);
+}
+
+.district-nav-count.is-zero {
+  opacity: 0.5;
+}
+
+.district-nav-empty {
+  padding-inline: 10px;
+  font-size: 12px;
+}
+
+/* ── 右欄：統計條（表頭，與左欄分頁列同高，正本在下方 KPI 區）＋ 地圖 ── */
+.map-scope-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.map-scope-count {
+  color: var(--ct-text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 分頁下方的一行說明 */
+.deck-section-hint {
+  margin-bottom: 10px;
+  color: var(--ct-text-dim);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .dashboard-map .map-card,
@@ -1642,7 +1823,7 @@ body {
 
 .deck-urgency-score {
   flex: none;
-  width: 34px;
+  min-width: 38px;
   font-size: 18px;
   font-weight: 800;
   text-align: center;
@@ -1903,20 +2084,23 @@ body {
 
 /* ── KPI 列：待調度突出 + 其餘縮小（20260912 改進 #5）── */
 .kpi-row {
+  flex: none;
   display: flex;
   align-items: stretch;
-  gap: 12px;
-  margin: 6px 0 10px;
-  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  height: var(--deck-head-h);
+  flex-wrap: nowrap;
 }
 .kpi-primary {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 0 14px;
   border-radius: 10px;
   background: var(--ct-danger-soft);
   border: 1px solid var(--ct-danger-soft);
+  white-space: nowrap;
 }
 .kpi-primary-label {
   color: var(--ct-danger);
@@ -1934,18 +2118,35 @@ body {
   font-size: 12px;
 }
 .kpi-mini-group {
-  display: flex;
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 8px 14px;
+  gap: 8px;
+  padding: 0 14px;
   border-radius: 10px;
   background: var(--ct-bg-soft);
 }
 .kpi-mini {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
   color: var(--ct-text-dim);
   font-size: 12px;
+  text-align: center;
+  /* 右欄被拖窄時整齊截斷，不要互相疊字 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.kpi-mini-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .kpi-mini b {
   color: var(--ct-text);
   font-size: 15px;
@@ -2076,6 +2277,22 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+/* 站名／警語／原因都可能很長（YouBike2.0_四維公園地下停車場），一律框內斷行 */
+.deck-urgency-card,
+.deck-urgency-name,
+.deck-urgency-alert,
+.deck-urgency-sub,
+.deck-urgency-reason {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.deck-urgency-name {
+  flex: 1;
 }
 .deck-urgency-card .deck-urgency-score {
   font-size: 20px;

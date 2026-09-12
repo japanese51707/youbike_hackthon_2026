@@ -63,6 +63,7 @@
 | [ADR-305](ADR-305-開發模式資料源降級與逐筆新鮮度標記.md) | 開發模式資料源降級與逐筆新鮮度標記 | accepted | data, api, reliability | 正式模式維持 ADR-303（失敗→同源 stale→503，不碰 mock）；新增開發專用開關 dev_fallback_to_mock（預設 false，正式模式不生效）；降級 mock 標記 data_freshness=mock、dispatch_eligible=false，不進調度；逐筆新鮮度標記明文化 |
 | [ADR-306](ADR-306-即時預測以同時段歷史代理lag特徵.md) | 即時預測以同時段歷史代理 lag 特徵 | accepted | prediction, data | 比賽階段只有 1–6 月歷史、即時是 9 月，lag 絕對往前推取不到值；改用同站同星期同時段歷史中位數代理，讓即時預測不再 degraded；lag_source=historical_proxy 前端誠實標示；只餵預測特徵不進派工；取得真序列後可切回 |
 | [ADR-307](ADR-307-競賽現場雲端部署與S3遷移.md) | 競賽現場雲端部署與 S3 遷移 | accepted | platform, deployment, data, security | us-east-1 建專屬 bucket 遷歷史資料；後端 ECS Fargate（App Runner 被 SCP 擋）；金鑰環境變數注入雲端、讀 S3 走最小權限 task role；前端走 Vite proxy 免改 CORS；SageMaker 批次推論示範+未來每日重訓管線；public IP 臨時、賽後關閉 |
+| [ADR-308](ADR-308-人力依歷史分派與雙人派工.md) | 人力依歷史分派與雙人派工（司機＋隨車） | proposed | dispatch, data, database, frontend | 離線分析 S3 1–6 月（周轉量主導+空/滿站絕對次數，最大餘數法）算各行政區人力配額，啟動時 seed 預設分派；派工單保留單一司機、新增可選隨車 assigned_escort（不動既有單人全鏈路）；待 owner 核准 |
 
 ## 新決策流程
 

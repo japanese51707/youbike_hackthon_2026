@@ -5,8 +5,17 @@ import {
   ThunderboltOutlined,
 } from "@ant-design/icons";
 import { Badge, Button, Empty, Tabs, Tag, Typography } from "antd";
+import DistrictNav from "./DistrictNav.jsx";
+import { isSameMessage, stripStationName } from "../../../utils/dispatchMessage.js";
+import {
+  SCHEDULED,
+  TRIAGE_HINTS,
+  TRIAGE_LABELS,
+  URGENT,
+} from "../../../utils/dispatchTriage.js";
 
-// 調度面板・待命態（ADR-206）：警報區 / 需調度清單（緊急站排行，缺口榜併入）/ 執行追蹤。
+// 調度面板・待命態（ADR-206）：緊急調度 / 次安排調度（警報與缺口榜併入）/ 執行追蹤。
+// 兩桶的分法在 utils/dispatchTriage.js，依後端 urgency_tier 與 priority_level 判定。
 // 純呈現元件，資料與動作由 DashboardPage 提供；不進後端 payload。
 
 const ALERT_LEVEL = {
@@ -33,9 +42,12 @@ export const TRACK_STATUS = {
 
 // critical（含截斷 censored）＝最高緊急，緊急度直接呈現 100；warning 顯示其分數（若有）。
 // 合併卡片：一張卡同時呈現「站況警語（警報）」＋「該調度什麼（建議）」，最緊急排前。
-function UrgencySection({ items, onPickStation, onFocus, onAcknowledge, onEmergency }) {
+function UrgencySection({ bucket, items, hint, nav, onPickStation, onFocus, onAcknowledge, onEmergency }) {
   return (
-    <section className="deck-section">
+    <section className="deck-section deck-dispatch-body">
+      {nav}
+      <div className="deck-dispatch-list">
+      {hint ? <div className="deck-section-hint">{hint}</div> : null}
       {items.length ? (
         <div className="deck-urgency-list">
           {items.map((item) => {
@@ -46,6 +58,10 @@ function UrgencySection({ items, onPickStation, onFocus, onAcknowledge, onEmerge
               item.alertLevel ||
               (item.urgencyTier === "censored" ? "critical" : score >= 60 ? "warning" : null);
             const levelMeta = level ? ALERT_LEVEL[level] : null;
+            // 站名只在標題出現一次；警報與原因講同一件事時只留警報（它含「該做什麼」）。
+            const alertText = stripStationName(item.alertMessage, item.station.station_name);
+            const reasonText = stripStationName(item.reason, item.station.station_name);
+            const sameThing = isSameMessage(alertText, reasonText);
             return (
               <div
                 key={item.station.station_id}
@@ -84,9 +100,9 @@ function UrgencySection({ items, onPickStation, onFocus, onAcknowledge, onEmerge
                 </div>
 
                 {/* 站況警語（來自警報，若有）：已空站/已滿站/即將… */}
-                {item.alertMessage ? (
+                {alertText ? (
                   <div className="deck-urgency-alert" style={{ color: levelMeta?.color }}>
-                    <AlertOutlined /> {item.alertMessage}
+                    <AlertOutlined /> {alertText}
                   </div>
                 ) : null}
 
@@ -99,8 +115,10 @@ function UrgencySection({ items, onPickStation, onFocus, onAcknowledge, onEmerge
                     : ""}
                 </div>
 
-                {/* 建議原因（可解釋）*/}
-                {item.reason ? <div className="deck-urgency-reason">{item.reason}</div> : null}
+                {/* 建議原因（可解釋）；與警報重複時不再講第二次 */}
+                {reasonText && !sameThing ? (
+                  <div className="deck-urgency-reason">{reasonText}</div>
+                ) : null}
 
                 {/* 動作：緊急出車（critical）/ 標記已讀（有未讀警報）*/}
                 {level === "critical" || item.alertId ? (
@@ -137,8 +155,14 @@ function UrgencySection({ items, onPickStation, onFocus, onAcknowledge, onEmerge
           })}
         </div>
       ) : (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="目前無待調度站點" />
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={
+            bucket === URGENT ? "目前沒有需要立刻出車的站" : "目前沒有可以慢慢安排的站"
+          }
+        />
       )}
+      </div>
     </section>
   );
 }
@@ -209,36 +233,50 @@ export default function DispatchSidePanel({
   alerts,
   onAcknowledge,
   onEmergency,
-  urgencyItems,
+  urgent = [],
+  scheduled = [],
+  visibleItems = [],
+  activeTab = URGENT,
+  onTabChange,
+  districtCounts = [],
+  district = "all",
+  bucketTotal = 0,
+  onDistrictChange,
   onPickStation,
   onFocus,
   orders,
   apiMode = false,
 }) {
-  // 需調度清單已合併警報：critical（含空/滿站截斷）數量做為紅點提示。
-  const criticalCount = (urgencyItems ?? []).filter(
-    (it) => it.alertLevel === "critical" || it.urgencyTier === "censored",
-  ).length;
+  const section = (bucket) => (
+    <UrgencySection
+      bucket={bucket}
+      items={visibleItems}
+      hint={TRIAGE_HINTS[bucket]}
+      nav={
+        <DistrictNav
+          counts={districtCounts}
+          value={district}
+          total={bucketTotal}
+          onChange={onDistrictChange}
+        />
+      }
+      onPickStation={onPickStation}
+      onFocus={onFocus}
+      onAcknowledge={onAcknowledge}
+      onEmergency={onEmergency}
+    />
+  );
 
   const tabItems = [
     {
-      key: "urgency",
-      label: (
-        <TabLabel
-          text="需調度清單"
-          count={urgencyItems?.length ?? 0}
-          dot={criticalCount > 0 ? "danger" : undefined}
-        />
-      ),
-      children: (
-        <UrgencySection
-          items={urgencyItems}
-          onPickStation={onPickStation}
-          onFocus={onFocus}
-          onAcknowledge={onAcknowledge}
-          onEmergency={onEmergency}
-        />
-      ),
+      key: URGENT,
+      label: <TabLabel text={TRIAGE_LABELS[URGENT]} count={urgent.length} dot="danger" />,
+      children: section(URGENT),
+    },
+    {
+      key: SCHEDULED,
+      label: <TabLabel text={TRIAGE_LABELS[SCHEDULED]} count={scheduled.length} />,
+      children: section(SCHEDULED),
     },
     {
       key: "track",
@@ -251,7 +289,8 @@ export default function DispatchSidePanel({
     <div className="dispatch-deck">
       <Tabs
         className="deck-tabs"
-        defaultActiveKey="urgency"
+        activeKey={activeTab}
+        onChange={onTabChange}
         size="small"
         items={tabItems}
       />

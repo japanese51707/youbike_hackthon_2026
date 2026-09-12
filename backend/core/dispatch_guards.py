@@ -45,7 +45,20 @@ def ensure_unclaimed(station_ids, exclude=None):
                 raise DispatchConflict(f"站點 {sid} 已被任務 {task['task_id']} 認領")
 
 
+def _validate_person(operator, exclude, role):
+    """驗一名調度人員可否被指派（司機/隨車共用）。role 僅用於錯誤訊息。"""
+    # 司機不常態待命：派到任務當下才上工，故確認時允許 off_duty（落地會轉 busy + 帶行政區）。
+    # 仍排除已在忙碌/休息中占用（busy/resting）與非執行角色。
+    if (not operator or not operator["is_active"]
+            or operator.get("status") not in {"off_duty", "on_duty"}
+            or operator.get("role_type") not in {"driver", "depot_standby"}):
+        raise DispatchConflict(f"{role}不存在、停用、狀態不可指派或不具調度車執行角色")
+    if operator.get("current_task_id") not in (None, exclude):
+        raise DispatchConflict(f"{role}已有任務")
+
+
 def validate_resources(trip, exclude=None):
+    """驗證車 + 司機（+ 可選隨車 ADR-308）。回傳 (vehicle, operator, escort)；無隨車時 escort=None。"""
     vehicle = vehicles_repo.get_vehicle(trip.get("assigned_vehicle"))
     operator = operators_repo.get_operator(trip.get("assigned_operator"))
     allowed_vehicle = {"available", "standby"} if trip.get("mode") == "emergency" else {"available"}
@@ -53,19 +66,26 @@ def validate_resources(trip, exclude=None):
         raise DispatchConflict("車輛不存在、停用或目前不可派遣")
     if vehicle.get("current_task_id") not in (None, exclude):
         raise DispatchConflict("車輛已有任務")
-    # 司機不常態待命：派到任務當下才上工，故確認時允許 off_duty（落地會轉 busy + 帶行政區）。
-    # 仍排除已在忙碌/休息中占用（busy/resting）與非執行角色。
-    if (not operator or not operator["is_active"]
-            or operator.get("status") not in {"off_duty", "on_duty"}
-            or operator.get("role_type") not in {"driver", "depot_standby"}):
-        raise DispatchConflict("人員不存在、停用、狀態不可指派或不具調度車執行角色")
-    if operator.get("current_task_id") not in (None, exclude):
-        raise DispatchConflict("人員已有任務")
+    _validate_person(operator, exclude, "司機")
+
+    # ADR-308 隨車（可選第二名）：同樣可派、且不可與司機同一人。
+    escort = None
+    escort_id = trip.get("assigned_escort")
+    if escort_id:
+        if str(escort_id) == str(operator["operator_id"]):
+            raise DispatchConflict("司機與隨車不可為同一人")
+        escort = operators_repo.get_operator(escort_id)
+        _validate_person(escort, exclude, "隨車人員")
+
+    occupied_people = {operator["operator_id"]}
+    if escort:
+        occupied_people.add(escort["operator_id"])
     for task in occupied_tasks(exclude):
-        if (task.get("assigned_vehicle") == vehicle["vehicle_id"]
-                or task.get("assigned_operator") == operator["operator_id"]):
-            raise DispatchConflict("人車已被其他未結束任務占用")
-    return vehicle, operator
+        if task.get("assigned_vehicle") == vehicle["vehicle_id"]:
+            raise DispatchConflict("車輛已被其他未結束任務占用")
+        if task.get("assigned_operator") in occupied_people or task.get("assigned_escort") in occupied_people:
+            raise DispatchConflict("人員已被其他未結束任務占用")
+    return vehicle, operator, escort
 
 
 def validate_stations(stations, capacity, exclude=None):

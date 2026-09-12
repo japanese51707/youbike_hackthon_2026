@@ -98,6 +98,7 @@ function BackendBuilder({
   draft,
   onChangeVehicle,
   onChangeOperator,
+  onChangeEscort,
   onConfirm,
   onCancel,
   onReportOnboard,
@@ -162,6 +163,26 @@ function BackendBuilder({
             options={operatorOptions(draft.operator_candidates)}
             notFoundContent="無可派司機"
             placeholder="選擇執行司機"
+          />
+        </div>
+        <div className="ob-field">
+          <span className="ob-label">
+            隨車人員：{draft.assigned_escort ?? "未指派（可選）"}（第二名，選填）
+          </span>
+          <Select
+            size="small"
+            showSearch
+            allowClear
+            optionFilterProp="label"
+            value={draft.assigned_escort ?? undefined}
+            style={{ minWidth: 200 }}
+            onChange={(v) => onChangeEscort?.(v ?? null)}
+            // 隨車候選沿用同一份人員池，但排除已選為司機的人（一人不可兼兩角）。
+            options={operatorOptions(draft.operator_candidates).filter(
+              (o) => o.value !== draft.assigned_operator,
+            )}
+            notFoundContent="無可派人員"
+            placeholder="選擇隨車人員（可不選）"
           />
         </div>
         <div className="ob-field">

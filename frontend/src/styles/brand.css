@@ -40,15 +40,34 @@ body { background: var(--ct-bg); font-family: "PingFang TC", "Hiragino Sans", "N
 .summary-primary, .service-stat-value { font-size: 28px; font-weight: 600; line-height: 1.35; }
 .summary-more, .summary-icon { color: var(--ct-primary); }
 .summary-card::before { top: 16px; bottom: 16px; }
-.kpi-row { flex: none; gap: 12px; margin: 0; }
-.kpi-primary { background: var(--ct-primary-soft); border-color: var(--ct-border); padding: 12px 18px; border-radius: 12px; }
+.kpi-row { flex: none; gap: 12px; margin: 0; height: var(--deck-head-h); align-items: stretch; flex-wrap: nowrap; }
+.kpi-primary { display: flex; align-items: center; gap: 8px; background: var(--ct-primary-soft); border-color: var(--ct-border); padding: 0 16px; border-radius: 12px; white-space: nowrap; }
 .kpi-primary-label { color: var(--ct-text); }
 .kpi-primary-value { color: var(--ct-primary); font-size: 32px; font-weight: 600; }
-.kpi-mini-group { flex: 1; justify-content: space-around; gap: 10px; background: var(--ct-panel); border: 1px solid var(--ct-border); }
-.kpi-mini { padding: 2px 8px; }
+.kpi-mini-group { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(4, minmax(0, auto)); justify-content: space-between; align-items: center; gap: 12px; padding: 0 14px; overflow: hidden; container-type: inline-size; background: var(--ct-panel); border: 1px solid var(--ct-border); }
+/* 右欄被拖窄時只留數字 */
+@container (max-width: 380px) { .kpi-mini-label { display: none; } }
+.kpi-mini { padding: 0; }
 .kpi-mini b { font-size: 17px; font-weight: 600; }
-.dashboard-main { grid-template-columns: minmax(0, 1.8fr) minmax(350px, 1fr); gap: 18px; }
-.dispatch-deck, .order-builder { padding: 18px; gap: 20px; }
+.dashboard-main { grid-template-columns: minmax(460px, 1.25fr) 10px minmax(0, 1.4fr); gap: 8px; }
+.dashboard-right { padding: 16px; box-shadow: 0 3px 16px var(--ct-shadow); }
+/* 左欄：分頁列貼齊卡片頂端，才能與右欄統計條對齊在同一條線上 */
+.deck-tabs > .ant-tabs-nav { height: var(--deck-head-h); min-height: var(--deck-head-h); margin: 0; }
+/* ★捲動邊界：分頁列與頁尾固定不動，捲動只發生在行政區目錄與任務清單各自的框內。
+   antd v6 的結構是 body-holder > body > content，整條都要 min-height:0 才收得住。 */
+.deck-tabs > .ant-tabs-body-holder { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.deck-tabs .ant-tabs-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.deck-tabs .ant-tabs-content-active { flex: 1; min-height: 0; height: 100%; display: flex; flex-direction: column; }
+/* 已載入但非當前的分頁必須保持隱藏，否則三個分頁的內容會疊在一起 */
+.deck-tabs .ant-tabs-content-hidden { display: none; }
+.deck-tabs .deck-section { flex: 1; min-height: 0; }
+.deck-tabs .deck-section:not(.deck-dispatch-body) { overflow-y: auto; }
+.deck-tabs > .ant-tabs-nav .ant-tabs-tab { padding-block: 0; font-size: 14px; }
+.kpi-primary-value { font-size: 26px; }
+.kpi-mini b { font-size: 15px; }
+.order-builder { padding: 18px; gap: 20px; }
+/* 分頁列要貼齊卡片頂端，才能與右欄統計條對齊在同一條線 */
+.dispatch-deck { padding: 15px 16px 16px; gap: 14px; overflow: hidden; }
 .deck-section + .deck-section { border-top: 1px solid var(--ct-border); padding-top: 17px; }
 .deck-section-title { margin-bottom: 12px; letter-spacing: .04em; }
 .deck-count { border-radius: 5px; background: var(--ct-bg-soft); padding: 2px 7px; }
@@ -94,10 +113,12 @@ body { background: var(--ct-bg); font-family: "PingFang TC", "Hiragino Sans", "N
  .header-tools { grid-row: 1; grid-column: 2; flex-direction: row; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 }
 @media (max-width: 900px) {
- .dashboard-main { grid-template-columns: minmax(0, 1.15fr) minmax(300px, 1fr); gap: 12px; }
+ .dashboard-main { grid-template-columns: minmax(380px, 1.15fr) 10px minmax(0, 1.25fr); gap: 6px; }
+ .district-nav { width: 108px; }
  .page-content { padding: 14px; }
  .kpi-mini-group { justify-content: flex-start; }
- .dispatch-deck, .order-builder { padding: 12px; }
+ .order-builder { padding: 12px; }
+ .dispatch-deck { padding: 8px 12px 12px; overflow: hidden; }
 }
 @media (max-width: 760px) {
  .topbar { display: grid; grid-template-columns: 1fr auto; padding: 8px 12px 0; gap: 4px 8px; }
@@ -117,7 +138,8 @@ body { background: var(--ct-bg); font-family: "PingFang TC", "Hiragino Sans", "N
  .page-content { padding: 12px; }
  .fixed-page { gap: 12px; }
  .dashboard-toolbar h2.ant-typography { font-size: 19px; }
- .dashboard-main { grid-template-columns: 1fr; grid-template-rows: minmax(240px, 45%) minmax(260px, 1fr); overflow-y: auto; }
+ .dashboard-main { grid-template-columns: 1fr !important; grid-template-rows: minmax(300px, 1fr) minmax(280px, 1fr); gap: 12px; overflow-y: auto; }
+ .dashboard-split { display: none; }
  .dashboard-toolbar { max-height: 145px; overflow-y: auto; }
  .dashboard-main .dashboard-map { min-height: 240px; }
  .dashboard-side { min-height: 260px; }

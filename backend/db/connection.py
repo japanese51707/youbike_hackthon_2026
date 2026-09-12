@@ -151,6 +151,7 @@ _MIGRATIONS = [
     ("vehicles", "onboard_observed_at", "TEXT"),     # ADR-123 載量觀測時間
     ("tasks", "onboard_start", "INTEGER"),           # ADR-123 出車載量
     ("tasks", "onboard_planned_end", "INTEGER"),     # ADR-123 計畫收車載量
+    ("tasks", "assigned_escort", "TEXT"),            # ADR-308 隨車人員（第二名，可選）
 ]
 
 

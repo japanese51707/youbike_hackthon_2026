@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     task_id                     TEXT PRIMARY KEY,
     task_type                   TEXT NOT NULL,       -- normal / emergency
     task_status                 TEXT NOT NULL DEFAULT 'pending',
-    assigned_operator           TEXT,
+    assigned_operator           TEXT,                -- 司機（主責，維持既有單人全鏈路）
+    assigned_escort             TEXT,                -- ADR-308 隨車人員（可選，第二名）；NULL=只派一名
     route_json                  TEXT DEFAULT '[]',
     estimated_travel_minutes    INTEGER,
     estimated_work_minutes      INTEGER,

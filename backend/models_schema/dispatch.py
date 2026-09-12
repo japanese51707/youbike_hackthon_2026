@@ -75,7 +75,8 @@ class RouteStop(BaseModel):
 class DispatchTask(BaseModel):
     task_id: str
     task_type: TaskType
-    assigned_operator: Optional[str] = None
+    assigned_operator: Optional[str] = None   # 司機（主責）
+    assigned_escort: Optional[str] = None     # ADR-308 隨車人員（可選第二名）
     task_status: TaskStatus = TaskStatus.pending
     route: list[RouteStop] = Field(default_factory=list)
     estimated_travel_minutes: Optional[int] = None

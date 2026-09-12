@@ -63,9 +63,22 @@ def _operator_candidates(assignable: list[dict], depot: list[dict],
     }
 
 
+def _resolve_escort(op, escort_id, driver):
+    """解析隨車人員（ADR-308）。未指定回 None；與司機同一人時忽略（不可一人兼兩角）。"""
+    if not escort_id:
+        return None
+    if driver and str(escort_id) == str(driver.get("operator_id")):
+        return None
+    return op.get_operator(escort_id)
+
+
 def _make_draft(stations, vehicle, operator, district, cfg, now,
-                start_lat=None, start_lng=None, note="") -> dict:
-    """組一張草稿派工單（含路徑順序 + 預估）。不落地。"""
+                start_lat=None, start_lng=None, note="", escort=None) -> dict:
+    """組一張草稿派工單（含路徑順序 + 預估）。不落地。
+
+    escort（可選）：隨車人員（第二名）。可行性/路徑只依司機 operator 算，
+    隨車不影響載量與工時視野，僅作為第二名資源在確認時一併占用/釋放。
+    """
     ordered = _dsp._order_route(deepcopy(stations), start_lat, start_lng)
     _fill_station_targets(ordered)
     kpi = _dsp._estimate_trip_kpi(ordered, cfg, start_lat, start_lng)
@@ -96,7 +109,10 @@ def _make_draft(stations, vehicle, operator, district, cfg, now,
         "stations": ordered,
         "assigned_vehicle": vehicle.get("vehicle_id") if vehicle else None,
         "assigned_operator": operator.get("operator_id") if operator else None,
+        "assigned_escort": escort.get("operator_id") if escort else None,   # ADR-308 隨車（可選）
         "vehicle_capacity": int(vehicle.get("max_capacity") or default_cap) if vehicle else None,
+        # ADR-308 地圖路線起點（車輛位置；無座標時前端退回用第一站）
+        "start": {"lat": start_lat, "lng": start_lng} if start_lat is not None else None,
         "estimate": estimate,                   # 預估：距離/時間/載運量/緊急度加總（ADR-119）
         # ADR-304 §1：空陣列＝可確認；非空＝確認會被擋，且原因在預覽就看得到
         "blocking_reasons": feasibility["blocking_reasons"],
@@ -112,6 +128,7 @@ def _make_draft(stations, vehicle, operator, district, cfg, now,
 def build_from_vehicle(
     vehicle_id: str, operator_id: str, dispatch_list: list[dict],
     district: Optional[str] = None, config=None, fleet_provider=None, now=None,
+    escort_id: Optional[str] = None,
 ) -> dict:
     """ADR-119 入口 a：選車 → 用車位置算最適出車站點順序。
 
@@ -143,9 +160,11 @@ def build_from_vehicle(
         oper = op.get_operator(operator_id)
     else:
         oper = assignable[0] if assignable else (depot_ops[0] if depot_ops else None)
+    escort = _resolve_escort(op, escort_id, oper)
     draft = _make_draft(stations, veh, oper, target_district, cfg, now,
                         start_lat=veh.get("current_lat"), start_lng=veh.get("current_lng"),
-                        note=f"以車為起點（{'指定區' if district else '車所在區'}：{target_district}）")
+                        note=f"以車為起點（{'指定區' if district else '車所在區'}：{target_district}）",
+                        escort=escort)
     draft["operator_candidates"] = _operator_candidates(assignable, depot_ops, target_district)
     return draft
 
@@ -155,7 +174,7 @@ def build_from_vehicle(
 def build_from_station(
     station_id: str, dispatch_list: list[dict], operator_id: Optional[str] = None,
     vehicle_id: Optional[str] = None, config=None, fleet_provider=None,
-    operator_provider=None, now=None,
+    operator_provider=None, now=None, escort_id: Optional[str] = None,
 ) -> dict:
     """ADR-119 入口 b：選站 → 依該站所屬行政區最適化，找車 + 人，算站點順序。
 
@@ -199,11 +218,13 @@ def build_from_station(
         oper = op.get_operator(operator_id)
     else:
         oper = assignable[0] if assignable else (depot_ops[0] if depot_ops else None)
+    escort = _resolve_escort(op, escort_id, oper)
 
     draft = _make_draft(stations, veh, oper, district, cfg, now,
                         start_lat=veh.get("current_lat") if veh else None,
                         start_lng=veh.get("current_lng") if veh else None,
-                        note=f"以站為起點（{station_id} / {district}）")
+                        note=f"以站為起點（{station_id} / {district}）",
+                        escort=escort)
     # 附車輛候選（分類供後台選；無指定車時特別有用）
     draft["vehicle_candidates"] = {
         "in_district": [v["vehicle_id"] for v in in_district],
@@ -272,6 +293,7 @@ def build_emergency(
     station_ids: list[str], dispatch_list: list[dict],
     vehicle_id: Optional[str] = None, operator_id: Optional[str] = None,
     config=None, fleet_provider=None, operator_provider=None, now=None,
+    escort_id: Optional[str] = None,
 ) -> dict:
     """ADR-119 入口 c：後台自選站（+可選車/人），緊急出車。
 
@@ -329,11 +351,15 @@ def build_emergency(
         oper = op.get_operator(operator_id)
     else:
         oper = assignable[0] if assignable else (depot_ops[0] if depot_ops else None)
+    escort = _resolve_escort(op, escort_id, oper)
 
+    # 起點：優先用車的當前座標；車無座標（seed 車或未回報定位）時退回種子站附近，
+    # 確保地圖仍畫得出路線（ADR-308）。
     draft = _make_draft(stations, veh, oper, district, cfg, now,
-                        start_lat=veh.get("current_lat") if veh else ref_lat,
-                        start_lng=veh.get("current_lng") if veh else ref_lng,
-                        note="緊急出車（就近閒置車優先，預備車殿後；可跨區）")
+                        start_lat=(veh.get("current_lat") if veh else None) or ref_lat,
+                        start_lng=(veh.get("current_lng") if veh else None) or ref_lng,
+                        note="緊急出車（就近閒置車優先，預備車殿後；可跨區）",
+                        escort=escort)
     draft["mode"] = "emergency"
     draft["resource_suggestion"] = resource_suggestion   # 供後台覆寫選擇
     draft["operator_candidates"] = _operator_candidates(assignable, depot_ops, seed_district)

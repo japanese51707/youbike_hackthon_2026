@@ -449,7 +449,7 @@ def _persist_trip_atomic(trip: dict) -> None:
     task_id = trip["trip_id"]
     if tasks_repo.exists(task_id):
         raise DispatchConflict("任務 ID 已存在，請使用草稿確認收據重送")
-    vehicle, operator = validate_resources(trip)
+    vehicle, operator, escort = validate_resources(trip)
     validate_stations(trip["stations"], vehicle["max_capacity"])
     # ADR-123/304：確認時以當下資源重跑與預覽相同的可行性評估（載量守恆／逐站視野／班別工時／重疊）
     from core.dispatch_feasibility import evaluate_feasibility, first_blocking_message
@@ -492,6 +492,7 @@ def _persist_trip_atomic(trip: dict) -> None:
         "resources_released": 0,
         "task_status": "assigned",
         "assigned_operator": trip["assigned_operator"],
+        "assigned_escort": trip.get("assigned_escort"),   # ADR-308 隨車（可選）
         "district": trip["district"],
         "assigned_vehicle": trip["assigned_vehicle"],
         "route": route,
@@ -504,6 +505,9 @@ def _persist_trip_atomic(trip: dict) -> None:
     # 回寫車/人的 current_district（動態，ADR-114）
     vehicles_repo.assign_district(trip["assigned_vehicle"], trip["district"], task_id)
     operators_repo.assign_district(trip["assigned_operator"], trip["district"], task_id)
+    # ADR-308 隨車人員：一併轉 busy + 綁同一任務/行政區（釋放時對稱下工）
+    if trip.get("assigned_escort"):
+        operators_repo.assign_district(trip["assigned_escort"], trip["district"], task_id)
 
 
 def suggest_next_trip(

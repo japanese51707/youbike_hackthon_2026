@@ -167,6 +167,20 @@ def update_status(operator_id: str, status: str) -> bool:
     return cur.rowcount > 0
 
 
+def set_home_district(operator_id: str, district: Optional[str]) -> bool:
+    """設定人員「預設責任區」（seed 依歷史分派用）。只寫 current_district，不動 status。
+
+    與 assign_district 區別：assign_district 是「任務指派」（轉 busy + 佔 task），
+    這裡是「開班前的靜態預設分派」（人仍 off_duty，被派到任務才轉上工）。回傳是否有更新到。
+    """
+    conn = get_connection()
+    cur = conn.execute(
+        "UPDATE operators SET current_district = ?, updated_at = ? WHERE operator_id = ?",
+        (district, _now(), operator_id))
+    commit(conn)
+    return cur.rowcount > 0
+
+
 def set_stationed_at(operator_id: str, station_id: Optional[str]) -> bool:
     """設定駐點人員駐守站（ADR-116；station_id=None 表示解除駐守）。回傳是否有更新到。"""
     conn = get_connection()
@@ -251,3 +265,100 @@ def seed_stationed_operators(total: int = 30) -> None:
             "SELECT 1 FROM operators WHERE operator_id = ?", (oid,)).fetchone()
         if not exists:
             create_operator(oid, name=oid, role="operator", password=None, role_type="stationed")
+
+
+# ── 依歷史分析預設分派（analysis_workforce_allocation.py 產出）──
+import json as _json
+from pathlib import Path as _Path
+
+# 分析結果（各行政區調度員/駐點員配額 + 駐點候選站）；由 analysis_workforce_allocation.py
+# 讀 S3 全 6 個月官方資料算出（周轉量主導 + 空/滿站絕對次數，最大餘數法整數分配）。
+_ALLOC_PATH = _Path(__file__).resolve().parents[2] / "docs" / "analysis" / "workforce_allocation.json"
+# 站名 → 真實 station_id（駐點員 stationed_at 存 sno）；與 historical.py 同一份對照表。
+_STATION_LOOKUP_PATH = (_Path(__file__).resolve().parent.parent
+                        / "core" / "data" / "station_id_lookup.json")
+
+
+def _load_allocation() -> Optional[dict]:
+    """載入人力分派分析結果；檔案不存在回 None（seed 時視為「不預設分派」，不中斷）。"""
+    if not _ALLOC_PATH.exists():
+        return None
+    try:
+        return _json.loads(_ALLOC_PATH.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _station_name_to_id(name: str) -> str:
+    """駐點站名 → station_id（查不到退回站名本身，不中斷）。"""
+    try:
+        lookup = _json.loads(_STATION_LOOKUP_PATH.read_text(encoding="utf-8")).get("stations", {})
+        entry = lookup.get(str(name).strip())
+        return entry["station_id"] if entry else str(name)
+    except Exception:  # noqa: BLE001
+        return str(name)
+
+
+def seed_workforce_allocation() -> dict:
+    """ADR-308：依歷史數據分析（各行政區調度需求）把已 seed 的人力預設分派到行政區。
+
+    調度員（driver, OP-004~）：按各區配額依序設 current_district（開班前靜態預設，仍 off_duty）。
+    駐點員（stationed, ST-）：按各區配額設 current_district + stationed_at（駐點候選站）。
+    OP-001~003（具名登入帳號）不動。已分派過（current_district 非空）的人跳過，避免覆蓋任務中狀態。
+
+    回傳分派統計；找不到分析檔則回 {"applied": False}（不預設分派，維持原行為）。
+    """
+    alloc = _load_allocation()
+    if not alloc:
+        return {"applied": False, "reason": "找不到 workforce_allocation.json"}
+
+    conn = get_connection()
+
+    # ── 調度員：把 OP-004 起、尚未分派的 driver 依各區配額鋪進去 ──
+    driver_alloc: dict = alloc.get("driver_allocation", {})
+    # 待分派的 driver（排除 OP-001~003 具名帳號、已有 current_district 的）
+    free_drivers = [r["operator_id"] for r in conn.execute(
+        """SELECT operator_id FROM operators
+           WHERE role_type = 'driver' AND is_active = 1
+             AND (current_district IS NULL OR current_district = '')
+             AND operator_id NOT IN ('OP-001','OP-002','OP-003')
+           ORDER BY operator_id""").fetchall()]
+    di = 0
+    driver_assigned = 0
+    for district, quota in sorted(driver_alloc.items(), key=lambda kv: -kv[1]):
+        for _ in range(int(quota)):
+            if di >= len(free_drivers):
+                break
+            set_home_district(free_drivers[di], district)
+            di += 1
+            driver_assigned += 1
+
+    # ── 駐點員：按各區配額設 current_district + stationed_at（駐點候選站）──
+    stationed_alloc: dict = alloc.get("stationed_allocation", {})
+    candidates: dict = alloc.get("stationed_candidates", {})
+    free_stationed = [r["operator_id"] for r in conn.execute(
+        """SELECT operator_id FROM operators
+           WHERE role_type = 'stationed' AND is_active = 1
+             AND (current_district IS NULL OR current_district = '')
+           ORDER BY operator_id""").fetchall()]
+    si = 0
+    stationed_assigned = 0
+    for district, quota in sorted(stationed_alloc.items(), key=lambda kv: -kv[1]):
+        cand_stations = candidates.get(district, [])
+        for j in range(int(quota)):
+            if si >= len(free_stationed):
+                break
+            oid = free_stationed[si]
+            set_home_district(oid, district)
+            # 有候選站就對到一站（依序），沒有就只設區
+            if j < len(cand_stations):
+                set_stationed_at(oid, _station_name_to_id(cand_stations[j]))
+            si += 1
+            stationed_assigned += 1
+
+    return {
+        "applied": True,
+        "drivers_assigned": driver_assigned,
+        "stationed_assigned": stationed_assigned,
+        "districts": len(driver_alloc),
+    }

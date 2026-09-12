@@ -36,6 +36,7 @@ async def lifespan(app: FastAPI):
     from db.operators_repo import (
         seed_default_operators, seed_dispatch_operators,
         seed_depot_standby_operators, seed_stationed_operators,
+        seed_workforce_allocation,
     )
     from db.vehicles_repo import seed_default_vehicles, set_reserve_fleet
     init_db()
@@ -45,6 +46,12 @@ async def lifespan(app: FastAPI):
     seed_dispatch_operators(total=350)      # OP-001~350，role_type=driver
     seed_depot_standby_operators(total=10)  # DEP-001~010，總站待命人力（可跨區支援）
     seed_stationed_operators(total=30)      # ST-001~030，駐點人員
+    # ADR-308：依歷史數據分析（analysis_workforce_allocation.py 產出）把調度員/駐點員
+    # 預設分派到各行政區（周轉量主導的工作量配額）。找不到分析檔則不預設分派。
+    _alloc = seed_workforce_allocation()
+    if _alloc.get("applied"):
+        print(f"[seed] 人力預設分派：調度員 {_alloc['drivers_assigned']} 名、"
+              f"駐點員 {_alloc['stationed_assigned']} 名依歷史工作量分配至各行政區")
     # ADR-114 車隊主檔 seed（組單三入口與緊急救火需要車輛清單，缺 seed 會回空陣列）。
     seed_default_vehicles(n=45)
     # ADR-118 靜態保留率：把車隊末端一定比例標為 standby（緊急救火用）。

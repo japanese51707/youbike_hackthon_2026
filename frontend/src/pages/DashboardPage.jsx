@@ -3,7 +3,7 @@ import {
   CloudOutlined,
   EnvironmentOutlined,
 } from "@ant-design/icons";
-import { Card, Checkbox, Select, Space, Tag, Tooltip, Typography, message } from "antd";
+import { Card, Checkbox, Segmented, Select, Space, Tag, Tooltip, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AsyncState from "../components/common/AsyncState.jsx";
 import StationDrawer from "../components/dashboard/StationDrawer.jsx";
@@ -27,6 +27,14 @@ import {
 } from "../api/dispatchApi.js";
 import { isApiMode } from "../api/httpClient.js";
 import { parseStationTime } from "../utils/formatters.js";
+import {
+  TRIAGE_LABELS,
+  URGENT,
+  countByDistrict,
+  filterByDistrict,
+  splitByTriage,
+  stationIdsOf,
+} from "../utils/dispatchTriage.js";
 
 // 狀態勾選項（多選）：不含「全部」，未勾＝全部顯示。
 const statusOptions = [
@@ -38,6 +46,20 @@ const statusOptions = [
 ];
 
 const ACTION_STATUS = new Set(["empty", "low", "high", "full"]);
+
+// 左右分隔線：任務欄與地圖欄的寬度由使用者拖曳決定，記在瀏覽器本機。
+const SPLIT_KEY = "dashboard-split-px";
+const SPLIT_MIN_LEFT = 380;   // 任務欄最小寬
+const SPLIT_MIN_RIGHT = 360;  // 地圖欄最小寬
+
+function readStoredSplit() {
+  try {
+    const raw = Number(window.localStorage.getItem(SPLIT_KEY));
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  } catch {
+    return null;
+  }
+}
 
 function formatClock(date) {
   if (!date) return "—";
@@ -70,7 +92,13 @@ export default function DashboardPage() {
   // 狀態篩選改多選（勾選）：空陣列＝全部顯示。
   const [statusFilter, setStatusFilter] = useState([]);
   const [districtFilter, setDistrictFilter] = useState("all");
+  // 調度任務分頁（緊急／次安排／任務追蹤）與地圖範圍。
+  // mapScope="tab"：地圖只顯示目前分頁的站（預設）；"all"：手動切回全部站點。
+  const [dispatchTab, setDispatchTab] = useState(URGENT);
+  const [mapScope, setMapScope] = useState("tab");
   const [mapDimension, setMapDimension] = useState("status");
+  const [splitPx, setSplitPx] = useState(readStoredSplit);
+  const mainRef = useRef(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [mapFocus, setMapFocus] = useState(null);
   const [builder, setBuilder] = useState(null); // null=待命態；物件=組單態
@@ -170,6 +198,99 @@ export default function DashboardPage() {
       }))
       .sort((a, b) => b.urgency - a.urgency);
   }, [recommendations, stations]);
+
+  // 分成「緊急調度」與「次安排調度」兩桶（判定在 utils/dispatchTriage.js，只讀後端欄位）。
+  const buckets = useMemo(() => splitByTriage(urgencyItems), [urgencyItems]);
+  const activeBucket = dispatchTab === "track" ? [] : buckets[dispatchTab] ?? [];
+  const districtCounts = useMemo(() => countByDistrict(activeBucket), [activeBucket]);
+
+  // 切分頁後若原本選的行政區在新分頁沒有任務，自動回到全部，避免看到空白清單。
+  useEffect(() => {
+    if (dispatchTab === "track") return;
+    if (districtFilter !== "all" && !districtCounts.some((d) => d.district === districtFilter)) {
+      setDistrictFilter("all");
+    }
+  }, [dispatchTab, districtCounts, districtFilter]);
+
+  const visibleItems = useMemo(
+    () => filterByDistrict(activeBucket, districtFilter),
+    [activeBucket, districtFilter],
+  );
+
+  // 地圖預設跟著分頁走：點緊急調度就只亮緊急的站，手動可切回全部站點。
+  const mappedStations = useMemo(() => {
+    if (mapScope === "all" || dispatchTab === "track") return filteredStations;
+    const ids = stationIdsOf(visibleItems);
+    return filteredStations.filter((s) => ids.has(s.station_id));
+  }, [dispatchTab, filteredStations, mapScope, visibleItems]);
+
+  const selectDispatchTab = (key) => {
+    setDispatchTab(key);
+    setMapScope("tab"); // 點分頁 → 地圖回到「只顯示這個分頁的站」
+  };
+
+  // 分隔線：夾在最小寬度之間，避免任一側被拖到看不見。
+  const clampSplit = useCallback((x) => {
+    const width = mainRef.current?.getBoundingClientRect().width ?? 0;
+    if (!width) return x;
+    return Math.max(SPLIT_MIN_LEFT, Math.min(width - SPLIT_MIN_RIGHT, x));
+  }, []);
+
+  const applySplit = useCallback(
+    (x) => {
+      const next = clampSplit(x);
+      setSplitPx(next);
+      try {
+        window.localStorage.setItem(SPLIT_KEY, String(Math.round(next)));
+      } catch {
+        /* 本機儲存不可用時仍然可以拖，只是重整後回到預設 */
+      }
+    },
+    [clampSplit],
+  );
+
+  const startSplitDrag = (event) => {
+    event.preventDefault();
+    const rect = mainRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const move = (e) => applySplit(e.clientX - rect.left);
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  // 鍵盤微調（左右各 24px）與雙擊還原預設比例。
+  const nudgeSplit = (event) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const current =
+      splitPx ?? document.querySelector(".dashboard-side")?.getBoundingClientRect().width ?? 0;
+    applySplit(current + (event.key === "ArrowLeft" ? -24 : 24));
+  };
+
+  const resetSplit = () => {
+    setSplitPx(null);
+    try {
+      window.localStorage.removeItem(SPLIT_KEY);
+    } catch {
+      /* 忽略 */
+    }
+  };
+
+  // 視窗縮小時把已存的寬度夾回合理範圍，避免地圖被擠不見。
+  useEffect(() => {
+    if (splitPx === null) return undefined;
+    const onResize = () => setSplitPx((prev) => (prev === null ? prev : clampSplit(prev)));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [clampSplit, splitPx]);
 
   // 狀態示意推進計時器：只在 mock 模式運作（API 模式的任務進度來自後端真實 tasks）。
   useEffect(() => {
@@ -287,12 +408,14 @@ export default function DashboardPage() {
         if (!prev?.draft_id) return prev;
         const modeKey = prev.mode_key;
         const seedId = prev.stations?.[0]?.station_id;
+        // 換車重打時要一併帶回司機/隨車，否則後端會重新自動帶第一名、把選擇清掉。
+        const keep = { operatorId: prev.assigned_operator, escortId: prev.assigned_escort };
         const rebuild =
           modeKey === "vehicle"
-            ? apiBuildFromVehicle(vehicleId, {})
+            ? apiBuildFromVehicle(vehicleId, keep)
             : modeKey === "emergency"
-              ? apiBuildEmergency(prev.stations.map((s) => s.station_id), { vehicleId })
-              : apiBuildFromStation(seedId, { vehicleId });
+              ? apiBuildEmergency(prev.stations.map((s) => s.station_id), { vehicleId, ...keep })
+              : apiBuildFromStation(seedId, { vehicleId, ...keep });
         rebuild
           .then((draft) => setBuilder({ ...draft, mode_key: modeKey }))
           .catch(showBuildError);
@@ -330,26 +453,32 @@ export default function DashboardPage() {
     });
   };
 
-  // 換司機（僅 API 後端草稿）：帶 operator_id 重打同入口 build，後端重算可行性。
-  const changeBuilderOperator = (operatorId) => {
+  // 換人（司機或隨車，僅 API 後端草稿）：帶 vehicle + 司機 + 隨車重打同入口 build，
+  // 後端重算可行性。which="operator" 換司機、"escort" 換隨車；未改的那位沿用現有值。
+  const changeBuilderPerson = (which, personId) => {
     if (!isApiMode) return;
     setBuilder((prev) => {
       if (!prev?.draft_id) return prev;
       const modeKey = prev.mode_key;
       const seedId = prev.stations?.[0]?.station_id;
       const vehicleId = prev.assigned_vehicle;
+      const operatorId = which === "operator" ? personId : prev.assigned_operator;
+      const escortId = which === "escort" ? personId : prev.assigned_escort;
+      const opts = { vehicleId, operatorId, escortId };
       const rebuild =
         modeKey === "vehicle"
-          ? apiBuildFromVehicle(vehicleId, { operatorId })
+          ? apiBuildFromVehicle(vehicleId, opts)
           : modeKey === "emergency"
-            ? apiBuildEmergency(prev.stations.map((s) => s.station_id), { vehicleId, operatorId })
-            : apiBuildFromStation(seedId, { vehicleId, operatorId });
+            ? apiBuildEmergency(prev.stations.map((s) => s.station_id), opts)
+            : apiBuildFromStation(seedId, opts);
       rebuild
         .then((draft) => setBuilder({ ...draft, mode_key: modeKey }))
         .catch(showBuildError);
       return prev;
     });
   };
+  const changeBuilderOperator = (operatorId) => changeBuilderPerson("operator", operatorId);
+  const changeBuilderEscort = (escortId) => changeBuilderPerson("escort", escortId);
 
   // 回報車上台數後，用同入口重打 build 讓後端重算可行性（解除 onboard 阻擋）。
   const reportOnboardAndRebuild = async (vehicleId, onboardBikes) => {
@@ -360,12 +489,14 @@ export default function DashboardPage() {
       if (!prev?.draft_id) return;
       const modeKey = prev.mode_key;
       const seedId = prev.stations?.[0]?.station_id;
+      // 回報載量後重打也要帶回司機/隨車，避免清掉已選人員。
+      const keep = { operatorId: prev.assigned_operator, escortId: prev.assigned_escort };
       const draft =
         modeKey === "vehicle"
-          ? await apiBuildFromVehicle(vehicleId, {})
+          ? await apiBuildFromVehicle(vehicleId, keep)
           : modeKey === "emergency"
-            ? await apiBuildEmergency(prev.stations.map((s) => s.station_id), { vehicleId })
-            : await apiBuildFromStation(seedId, { vehicleId });
+            ? await apiBuildEmergency(prev.stations.map((s) => s.station_id), { vehicleId, ...keep })
+            : await apiBuildFromStation(seedId, { vehicleId, ...keep });
       setBuilder({ ...draft, mode_key: modeKey });
     } catch (err) {
       message.error(err?.message || "回報失敗");
@@ -407,10 +538,28 @@ export default function DashboardPage() {
   };
 
   // 地圖草稿路線：mock 草稿有 start/stops；後端草稿的路線改由清單呈現（座標未來接即時定位）。
-  const draftRoute =
-    builder && !builder.draft_id
-      ? { start: builder.start, stops: builder.stops }
-      : null;
+  // 地圖路線（先載後放）：mock 草稿用 builder.start/stops；後端草稿用 builder.stations
+  // （含 lat/lng、後端已排「先取後補」順序）組 stops，起點用 builder.start（車位置），
+  // 後端未回座標時退回用第一站當起點，仍能連出路線給管理員/調度員看。
+  const buildDraftRoute = (b) => {
+    if (!b) return null;
+    if (!b.draft_id) return { start: b.start, stops: b.stops };
+    const stops = (b.stations ?? [])
+      .filter((s) => Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lng)))
+      .map((s) => ({
+        lat: Number(s.lat),
+        lng: Number(s.lng),
+        action: s.action,
+        station_name: s.station_name,
+      }));
+    if (!stops.length) return null;
+    const start =
+      b.start && Number.isFinite(Number(b.start.lat)) && Number.isFinite(Number(b.start.lng))
+        ? { lat: Number(b.start.lat), lng: Number(b.start.lng) }
+        : { lat: stops[0].lat, lng: stops[0].lng };
+    return { start, stops };
+  };
+  const draftRoute = buildDraftRoute(builder);
 
   return (
     <AsyncState
@@ -455,16 +604,6 @@ export default function DashboardPage() {
               />
               <Select
                 size="small"
-                value={districtFilter}
-                onChange={setDistrictFilter}
-                style={{ minWidth: 130 }}
-                options={[
-                  { value: "all", label: "全部行政區" },
-                  ...districts.map((d) => ({ value: d, label: d })),
-                ]}
-              />
-              <Select
-                size="small"
                 value={mapDimension}
                 onChange={setMapDimension}
                 style={{ minWidth: 150 }}
@@ -473,51 +612,15 @@ export default function DashboardPage() {
                   { value: "usage", label: "顏色：使用率" },
                 ]}
               />
-              <Tag>{filteredStations.length} 站</Tag>
             </Space>
           </div>
 
-          {/* KPI 列：待調度突出（大），其餘四項縮成一小排指標 */}
-          <div className="kpi-row">
-            <div className="kpi-primary">
-              <span className="kpi-primary-label">待調度站點</span>
-              <span className="kpi-primary-value mono">
-                {dashboard.data.kpi.stations_need_dispatch}
-              </span>
-              <span className="kpi-primary-unit">站需立即處理</span>
-            </div>
-            <div className="kpi-mini-group">
-              <span className="kpi-mini">
-                空站率 <b className="mono">{dashboard.data.kpi.empty_rate}%</b>
-              </span>
-              <span className="kpi-mini">
-                滿站率 <b className="mono">{dashboard.data.kpi.full_rate}%</b>
-              </span>
-              <span className="kpi-mini">
-                平均使用率 <b className="mono">{dashboard.data.kpi.avg_usage_rate}%</b>
-              </span>
-              <span className="kpi-mini">
-                全系統 <b className="mono">{dashboard.data.kpi.total_stations}</b> 站
-                <span className="kpi-mini-note">（地圖 {stations.length} 筆）</span>
-              </span>
-            </div>
-          </div>
-
-          {/* 主區：左地圖（舞台）/ 右欄狀態機（待命態 / 組單態） */}
-          <div className="dashboard-main">
-            <div className="dashboard-map">
-              <StationMap
-                stations={filteredStations}
-                dimension={mapDimension}
-                onSelectStation={openStation}
-                focus={mapFocus}
-                highlightStationId={dashboard.selectedStationId}
-                vehicles={vehicles}
-                onSelectVehicle={startFromVehicle}
-                draftRoute={draftRoute}
-              />
-            </div>
-
+          {/* 主區：調度任務（主角，行政區目錄在卡片內左側）/ 右欄統計條＋地圖 */}
+          <div
+            className="dashboard-main"
+            ref={mainRef}
+            style={splitPx ? { gridTemplateColumns: `${splitPx}px 10px minmax(0, 1fr)` } : undefined}
+          >
             <div className="dashboard-side">
               <Card size="small" className="dispatch-side-card" styles={{ body: { padding: 0, height: "100%" } }}>
                 {builder ? (
@@ -526,6 +629,7 @@ export default function DashboardPage() {
                     districts={districts}
                     onChangeVehicle={changeBuilderVehicle}
                     onChangeOperator={changeBuilderOperator}
+                    onChangeEscort={changeBuilderEscort}
                     onChangeDistrict={changeBuilderDistrict}
                     onConfirm={confirmDraft}
                     onReportOnboard={reportOnboardAndRebuild}
@@ -535,7 +639,15 @@ export default function DashboardPage() {
                   <DispatchSidePanel
                     onAcknowledge={dashboard.acknowledgeAlert}
                     onEmergency={startEmergency}
-                    urgencyItems={urgencyItems}
+                    urgent={buckets.urgent}
+                    scheduled={buckets.scheduled}
+                    visibleItems={visibleItems}
+                    activeTab={dispatchTab}
+                    onTabChange={selectDispatchTab}
+                    districtCounts={districtCounts}
+                    district={districtFilter}
+                    bucketTotal={activeBucket.length}
+                    onDistrictChange={setDistrictFilter}
                     onPickStation={startFromStation}
                     onFocus={focusStation}
                     orders={trackOrders}
@@ -543,6 +655,81 @@ export default function DashboardPage() {
                   />
                 )}
               </Card>
+            </div>
+
+            <div
+              className="dashboard-split"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="調整調度任務與地圖的左右寬度"
+              tabIndex={0}
+              title="拖曳調整左右寬度（雙擊還原）"
+              onPointerDown={startSplitDrag}
+              onDoubleClick={resetSplit}
+              onKeyDown={nudgeSplit}
+            />
+
+            <div className="dashboard-right">
+              {/* 統計條：待調度突出，其餘四項縮成一小排，壓在地圖上方 */}
+              <div className="kpi-row">
+                <div className="kpi-primary">
+                  <span className="kpi-primary-label">待調度站點</span>
+                  <span className="kpi-primary-value mono">
+                    {dashboard.data.kpi.stations_need_dispatch}
+                  </span>
+                  <span className="kpi-primary-unit">站需立即處理</span>
+                </div>
+                <div className="kpi-mini-group">
+                  {/* 欄位被拖窄時只留數字（標籤用 title 補），不讓文字互相疊在一起 */}
+                  <span className="kpi-mini" title={`空站率 ${dashboard.data.kpi.empty_rate}%`}>
+                    <span className="kpi-mini-label">空站率</span>
+                    <b className="mono">{dashboard.data.kpi.empty_rate}%</b>
+                  </span>
+                  <span className="kpi-mini" title={`滿站率 ${dashboard.data.kpi.full_rate}%`}>
+                    <span className="kpi-mini-label">滿站率</span>
+                    <b className="mono">{dashboard.data.kpi.full_rate}%</b>
+                  </span>
+                  <span className="kpi-mini" title={`平均使用率 ${dashboard.data.kpi.avg_usage_rate}%`}>
+                    <span className="kpi-mini-label">平均使用率</span>
+                    <b className="mono">{dashboard.data.kpi.avg_usage_rate}%</b>
+                  </span>
+                  <span className="kpi-mini" title={`全系統 ${dashboard.data.kpi.total_stations} 站`}>
+                    <span className="kpi-mini-label">全系統</span>
+                    <b className="mono">{dashboard.data.kpi.total_stations}</b>
+                    <span className="kpi-mini-label">站</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="map-scope-bar">
+                <Segmented
+                  size="small"
+                  value={mapScope}
+                  onChange={setMapScope}
+                  options={[
+                    {
+                      value: "tab",
+                      label: dispatchTab === "track" ? "任務相關" : TRIAGE_LABELS[dispatchTab],
+                    },
+                    { value: "all", label: "全部站點" },
+                  ]}
+                  disabled={dispatchTab === "track"}
+                />
+                <span className="map-scope-count mono">地圖顯示 {mappedStations.length} 站</span>
+              </div>
+
+              <div className="dashboard-map">
+                <StationMap
+                  stations={mappedStations}
+                  dimension={mapDimension}
+                  onSelectStation={openStation}
+                  focus={mapFocus}
+                  highlightStationId={dashboard.selectedStationId}
+                  vehicles={vehicles}
+                  onSelectVehicle={startFromVehicle}
+                  draftRoute={draftRoute}
+                />
+              </div>
             </div>
           </div>
 
