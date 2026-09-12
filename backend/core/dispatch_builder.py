@@ -39,7 +39,62 @@ def _fill_station_targets(stations: list[dict]) -> None:
             qty = float(s.get("quantity", 0))
             s["target_available"] = round(avail + qty if s.get("action") != "取車"
                                           else avail - qty, 0)
+        else:
+            # ADR-333：規則引擎可能給浮點 target（如 21.8）；台數語意為整數，統一整數化，
+            # 讓 route 存整數、執行端達標比對與 validate 一致（自動配單直接帶 recs 的浮點會出錯）。
+            try:
+                s["target_available"] = round(float(s["target_available"]))
+            except (TypeError, ValueError):
+                pass
         s.setdefault("station_status", "pending")
+
+
+def _fit_trip_to_capacity(stations, capacity, onboard):
+    """ADR-334：把這趟修剪成車真的載得動的樣子。回 (保留的站, 被移出的站)。
+
+    為什麼需要：_pack_supply_aware_trip 是「seed 站無條件先入趟」，之後才逐站檢查容量。
+    早尖峰的大站在動態目標水位下，單站補車量常常就超過一台車的載運量（預設 15 台），
+    於是 seed 一進來整趟總量就爆，evaluate_feasibility 丟
+    total_quantity_exceeds_capacity，整張單被丟掉——**每一站都這樣，就是一張都配不出來**。
+
+    正確行為與 owner 定的規則一致（補到多少算多少）：
+      - 補車站：能放多少放多少（夾到當下車上實際有的量），目標水位跟著下修。
+      - 取車站：能收多少收多少（夾到車還剩的空間）。
+      - 真的一台都動不了的站：移出這趟，留在佇列等下一輪，而不是拖垮整張單。
+
+    夾完之後總量必然 ≤ 容量，硬性的容量守門（dispatch_guards / feasibility）依然留著當最後防線。
+    """
+    running = max(0, int(onboard or 0))
+    kept, dropped = [], []
+    for st in stations:
+        want = int(st.get("quantity") or 0)
+        if st.get("action") == "取車":
+            room = capacity - running
+            take = max(0, min(want, room))
+            if take <= 0:
+                dropped.append(st)
+                continue
+            if take != want:
+                st["requested_quantity"] = want
+                st["quantity"] = take
+                cur = st.get("current_available")
+                if cur is not None:
+                    st["target_available"] = float(int(cur) - take)
+            running += take
+        else:
+            give = max(0, min(want, running))
+            if give <= 0:
+                dropped.append(st)
+                continue
+            if give != want:
+                st["requested_quantity"] = want
+                st["quantity"] = give
+                cur = st.get("current_available")
+                if cur is not None:
+                    st["target_available"] = float(int(cur) + give)
+            running -= give
+        kept.append(st)
+    return kept, dropped
 
 
 def _ensure_trip_composition(stations, dispatch_list, extra_collectors, cfg,
@@ -157,9 +212,15 @@ def _preset_onboard(vehicle: Optional[dict], stations: list[dict], cfg: dict) ->
       - 車上「已有回報值」時尊重實際值，不覆蓋（保留「車上有車就用車上的車」能力）。
 
     回傳一份 vehicle 副本（不動 DB 原車），供 feasibility 直接用；
-    vehicle 為 None、或已有回報值時原樣回傳（不覆寫）。
+    vehicle 為 None、或已有「有效（未過期）」回報值時原樣回傳（不覆寫）。
+
+    ADR-333：onboard「過期」（onboard_observed_at 缺失或超過有效期）等同失效，比照未知處理——
+    套系統預設值並蓋上現在的觀測時間。否則閒置車的舊 onboard 觀測過期會讓 feasibility 以
+    vehicle_onboard_stale 擋掉自動配單（實測 25/30 站因此配不出）。有效期內的回報值仍尊重。
     """
-    if not vehicle or vehicle.get("onboard_bikes") is not None:
+    if not vehicle:
+        return vehicle
+    if vehicle.get("onboard_bikes") is not None and not _onboard_expired(vehicle, cfg):
         return vehicle
     veh = deepcopy(vehicle)
     veh["onboard_bikes"] = _preset_onboard_value(veh, stations, cfg)
@@ -168,8 +229,25 @@ def _preset_onboard(vehicle: Optional[dict], stations: list[dict], cfg: dict) ->
     return veh
 
 
+def _onboard_expired(vehicle: dict, cfg: dict) -> bool:
+    """車上載量觀測是否過期（缺觀測時間或超過 fleet.車上載量有效期_分鐘）。"""
+    max_age = int((cfg.get("fleet", {}) or {}).get("車上載量有效期_分鐘", 240))
+    observed = vehicle.get("onboard_observed_at")
+    if not observed:
+        return True
+    try:
+        ts = _dt.datetime.fromisoformat(str(observed))
+        if ts.tzinfo is not None:
+            ts = ts.replace(tzinfo=None)
+        age_min = (_dt.datetime.now() - ts).total_seconds() / 60.0
+        return age_min > max_age
+    except (ValueError, TypeError):
+        return True
+
+
 def _make_draft(stations, vehicle, operator, district, cfg, now,
-                start_lat=None, start_lng=None, note="", escort=None) -> dict:
+                start_lat=None, start_lng=None, note="", escort=None,
+                onboard_override=None) -> dict:
     """組一張草稿派工單（含路徑順序 + 預估）。不落地。
 
     escort（可選）：隨車人員（第二名）。可行性/路徑只依司機 operator 算，
@@ -197,7 +275,8 @@ def _make_draft(stations, vehicle, operator, district, cfg, now,
         ordered, vehicle, operator, mode=mode, now=now, config=cfg,
         start_lat=start_lat, start_lng=start_lng,
         est_total_min=kpi.get("est_total_min"),
-        check_resources=bool(vehicle and operator))
+        check_resources=bool(vehicle and operator),
+        onboard_override=onboard_override)
     for stop, entry in zip(ordered, feasibility["load_plan"]):
         stop["arrival_offset_min"] = entry["arrival_offset_min"]
         stop["horizon_used_min"] = entry["horizon_used_min"]
@@ -399,6 +478,28 @@ def build_from_station(
         oper = assignable[0] if assignable else (depot_ops[0] if depot_ops else None)
     escort = _resolve_escort(op, escort_id, oper)
 
+    # ADR-334：用「這台車實際會帶出去的載量」把趟次夾到載得動的規模。
+    # 總部車的出車載量由 _preset_onboard_value 決定（ADR-318），不是 0，
+    # 否則總部趟會被誤判成一台都放不出來而整趟清空。
+    _cap_now = int((veh or {}).get("max_capacity") or default_cap)
+    _eff_onboard = (veh or {}).get("onboard_bikes") if veh else None
+    _depot_topup = None
+    if veh is not None:
+        if veh.get("is_depot"):
+            # 總部車的意義就是「在總部裝到這趟需要的量」再出發（ADR-318），
+            # 不能拿它此刻車上剩幾台來夾——那會讓總部趟只送得出零頭。
+            _need = sum(int(st.get("quantity") or 0)
+                        for st in stations if st.get("action") != "取車")
+            _depot_topup = min(max(_need, 0), _cap_now)
+            _eff_onboard = max(int(_eff_onboard or 0), _depot_topup)
+        elif _eff_onboard is None:
+            _eff_onboard = _preset_onboard_value(veh, stations, cfg)
+    _cap_now = int((veh or {}).get("max_capacity") or default_cap)
+    stations, _trimmed = _fit_trip_to_capacity(stations, _cap_now, _eff_onboard)
+    if not stations:
+        return {"error": "車輛載運量不足以處理此站，已留待下一輪",
+                "is_draft": True, "stations": []}
+
     # 大夜跨區時本趟可能含多區站點，district 標示改為涵蓋範圍（否則落地/顯示會誤標單一區）。
     trip_districts = {s.get("district") for s in stations if s.get("district")}
     draft_district = district if len(trip_districts) <= 1 else "跨區"
@@ -407,7 +508,8 @@ def build_from_station(
                         start_lat=veh.get("current_lat") if veh else None,
                         start_lng=veh.get("current_lng") if veh else None,
                         note=f"以站為起點（{station_id} / {note_area}）",
-                        escort=escort)
+                        escort=escort,
+                        onboard_override=_eff_onboard if _depot_topup is not None else None)
     # 附車輛候選（分類供後台選；無指定車時特別有用）
     draft["vehicle_candidates"] = {
         "in_district": [v["vehicle_id"] for v in in_district],
@@ -418,6 +520,15 @@ def build_from_station(
     draft["operator_candidates"] = _operator_candidates(assignable, depot_ops, district)
     if not in_district and not nearby:
         draft["note"] += "｜該區與鄰近無閒置車，建議用總站待命車"
+    if _trimmed:
+        draft["trimmed_stations"] = [
+            {"station_id": t.get("station_id"), "station_name": t.get("station_name"),
+             "quantity": t.get("quantity")} for t in _trimmed]
+        draft["note"] += f"｜{len(_trimmed)} 站超出本趟載運量，留待下一輪"
+    _clamped = [s for s in stations if s.get("requested_quantity")]
+    if _clamped:
+        draft["note"] += (f"｜{len(_clamped)} 站受車輛載運量限制，"
+                          f"本趟先補到做得到的水位")
     if _composition_added:
         draft["composition_added"] = _composition_added
         draft["note"] += f"｜為湊成完整一趟自動加入：{'、'.join(_composition_added)}"
