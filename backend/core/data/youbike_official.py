@@ -105,9 +105,12 @@ class YouBikeOfficialDataSource(DataSource):
                 rows = [s for r in raw if (s := self._to_standard(r)) is not None]
                 # A partial/invalid response must not silently erase stations from the map.
                 if not rows or len(rows) != len(raw) or len({r["station_id"] for r in rows}) != len(rows):
-                    raise DataUnavailable("官方站點資料驗證失敗")
+                    raise DataUnavailable(
+                        f"官方站點資料驗證失敗（raw={len(raw)} parsed={len(rows)}）")
                 self._cache, self._cache_at = rows, now
-            except Exception:
+            except Exception as exc:
+                # 診斷：印原始網路/解析錯誤（雲端 503 追因）——這是退避前的真正原因。
+                print(f"[youbike_official] 抓取失敗 type={type(exc).__name__} msg={exc!r}")
                 self._retry_at = monotonic() + self._backoff
                 raise
             return deepcopy(self._cache)
