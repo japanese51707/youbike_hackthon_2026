@@ -209,7 +209,8 @@ def build_load_plan(
 
 def _shift_reasons(stations: list[dict], mode: Optional[str],
                    now: Optional[_dt.datetime]) -> list[dict]:
-    """ADR-116/119：早晚班不跨區；緊急模式可跨區（救火優先於分區約束）。"""
+    """ADR-316：跨區已全面允許（allow_cross_district 恆真），此函式實務上不再擋跨區；
+    保留結構以相容 config 明確設 allow_cross_district=false 的特例。"""
     from .shift import allow_cross_district, current_shift
     if mode == "emergency":
         return []

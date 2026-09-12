@@ -198,13 +198,9 @@ def build_from_station(
         dispatch_list = list(dispatch_list) + extra
     district = seed.get("district")
 
-    # ADR-116/315：選站範圍依班別——早/晚班只在同行政區配對；大夜班可跨區（全區大宗復原）。
-    # 被點的站永遠置頂，其餘依緊急度排序，供 _pack_trips 裝到「最高載運量」的一趟。
-    from core.shift import allow_cross_district
-    cross_ok = allow_cross_district(now)
-    candidates_pool = list(dispatch_list) if cross_ok else \
-        [r for r in dispatch_list if r.get("district") == district]
-    pool = sorted(candidates_pool,
+    # ADR-316：所有時段皆可跨區，但「同區優先、跨區次之」。
+    # 主挑站池 = 同區站（被點站置頂、其餘依緊急度）；跨區站只在同區湊不足時當備援拉入。
+    pool = sorted([r for r in dispatch_list if r.get("district") == district],
                   key=lambda r: (str(r.get("station_id")) != str(station_id),
                                  -float(r.get("priority_score", 0))))
     default_cap = _dsp._default_capacity(cfg)
@@ -222,9 +218,9 @@ def build_from_station(
     cap = int(tentative_veh.get("max_capacity") or default_cap) if tentative_veh else default_cap
     onboard = tentative_veh.get("onboard_bikes") if tentative_veh else None
     onboard = int(onboard) if onboard is not None else 0
-    # 車源決策階梯（ADR-315）：①車上載量 ②同區取車站就近取（在 pool 內）
-    # ③同區湊不足 → 允許跨區取「一站」補足車源（早晚班破例，因「有車補」優先於不跨區）。
-    cross_collectors = [] if cross_ok else sorted(
+    # 車源決策階梯（ADR-315/316）：①車上載量 ②同區取車站就近取（在 pool 內）
+    # ③同區湊不足 → 跨區取車站補足車源（同區優先、跨區次之，所有時段適用）。
+    cross_collectors = sorted(
         [r for r in dispatch_list
          if r.get("action") == "取車" and r.get("district") != district],
         key=lambda r: -float(r.get("quantity", 0) or 0))
@@ -261,8 +257,8 @@ def build_from_station(
 
     # 大夜跨區時本趟可能含多區站點，district 標示改為涵蓋範圍（否則落地/顯示會誤標單一區）。
     trip_districts = {s.get("district") for s in stations if s.get("district")}
-    draft_district = district if len(trip_districts) <= 1 else "全區跨區"
-    note_area = district if not cross_ok else f"{district}／大夜可跨區"
+    draft_district = district if len(trip_districts) <= 1 else "跨區"
+    note_area = district if len(trip_districts) <= 1 else f"{district}＋跨區支援"
     draft = _make_draft(stations, veh, oper, draft_district, cfg, now,
                         start_lat=veh.get("current_lat") if veh else None,
                         start_lng=veh.get("current_lng") if veh else None,

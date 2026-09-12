@@ -147,21 +147,22 @@ dispatch_resource:
 
 # ── 班別（ADR-116，shift 用）──
 # 三班連續覆蓋（無空窗）；時間為 HH:MM，跨午夜的大夜班 end < start 代表跨日。
-# allow_cross_district：早/晚班綁區(false)、大夜班可跨區(true，大宗跨區復原)。
+# allow_cross_district：ADR-316 全時段允許跨區(true)；同區優先由排序達成，非班別硬禁。
 # peak_start/peak_end：該班尖峰時段（折返模式），無尖峰留空。
 shifts:
+  # ADR-316：所有時段皆允許跨區（同區優先、跨區次之，靠排序達成，非班別硬禁）。
   morning:                 # 早班
     start: "06:30"
     end: "15:30"
     peak_start: "07:30"
     peak_end: "09:30"
-    allow_cross_district: false
+    allow_cross_district: true
   evening:                 # 晚班
     start: "15:30"
     end: "22:00"
     peak_start: "17:00"
     peak_end: "19:00"
-    allow_cross_district: false
+    allow_cross_district: true
   night:                   # 大夜班（跨午夜）
     start: "22:00"
     end: "06:30"
@@ -267,6 +268,15 @@ cost:
 travel:
   平均車速_公里每小時: 20    # 市區調度車平均速度，用於距離→時間換算
   每站搬運_分鐘: 5           # 每站取/送車的平均作業時間
+
+# ── 道路實走路線（呈現層；只影響地圖怎麼畫線，不影響任何調度決策）──
+routing:
+  providers: ["osrm", "valhalla"]   # 依序嘗試；全失敗就降級成直線並標明
+  osrm_base_url: "https://router.project-osrm.org"
+  valhalla_base_url: "https://valhalla1.openstreetmap.de"
+  逾時秒數: 6
+  快取秒數: 1800          # 同一組站點順序的幾何快取多久（派工確認後不會變）
+  單次最多座標數: 25      # 含起點；超過就不打外部服務，直接回直線
 
 # ── 資料庫（A5 SQLite 持久層）──
 database:

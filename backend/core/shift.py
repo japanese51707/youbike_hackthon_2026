@@ -94,9 +94,13 @@ def current_mode(now: Optional[_dt.datetime] = None) -> str:
 
 
 def allow_cross_district(now: Optional[_dt.datetime] = None) -> bool:
-    """當前班別是否允許跨區（早/晚班 False、大夜班 True；ADR-116 config 開關）。"""
+    """是否允許跨區調度。ADR-316：所有時段（早/晚/大夜）皆允許跨區——調度以「同區優先、
+    跨區次之」的排序達成，不再用班別硬性禁止跨區（原早晚班 False 已移除）。
+
+    仍保留 config 開關：shifts[班].allow_cross_district 明確設 false 時才禁（預設允許）。
+    """
     s = shift_of(now)
-    return bool(s.get("allow_cross_district", False))
+    return bool(s.get("allow_cross_district", True))
 
 
 def check_labor(work_minutes: float) -> dict:

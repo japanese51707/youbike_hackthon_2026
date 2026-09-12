@@ -27,7 +27,9 @@ def _setup():
 
 
 # ── 大夜跨區排程 ──
-def test_night_shift_allows_cross_district():
+def test_night_shift_assign_by_district_stays_same_district():
+    """ADR-316：批次指派一律按行政區分組（同區優先），大夜也不做全市跨區大鍋炒。
+    跨區支援改由組單層（build_from_station 車源備援）與緊急出車處理。"""
     _setup()
     dl = [
         _rec("板橋滿", "板橋區", "取車", 8, 80, 40, 25.010, 121.460),
@@ -36,9 +38,9 @@ def test_night_shift_allows_cross_district():
     night = dt.datetime(2026, 6, 15, 23, 30)
     trips = dispatcher.assign_by_district(dl, now=night)
     assert trips[0]["mode"] == "night"
-    # 兩站量 15 = 車容量 → 一趟裝下 → 應跨區同趟
-    cross = [t for t in trips if len({s["district"] for s in t["stations"]}) > 1]
-    assert len(cross) >= 1
+    # 每趟同一行政區（不跨區大鍋炒）
+    for t in trips:
+        assert len({s["district"] for s in t["stations"]}) == 1
 
 
 def test_day_shift_no_cross_district():

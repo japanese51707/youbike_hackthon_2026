@@ -122,15 +122,15 @@ def test_stop_beyond_longest_horizon_is_blocked_not_extrapolated():
 
 # ── 4. 班別、工時與任務重疊 ──
 
-def test_cross_district_blocked_on_day_shift_but_allowed_for_emergency():
+def test_cross_district_allowed_in_all_modes():
+    """ADR-316：所有時段/模式皆允許跨區（同區優先由排序達成，非硬性禁止）。
+    原「早晚班擋跨區」規則已移除，任何模式都不再回 cross_district_not_allowed。"""
     stops = [_stop("D1", "取車", 2, 30, district="板橋區"),
              _stop("D2", "補車", 2, 1, district="新莊區")]
-    normal = evaluate_feasibility(stops, _vehicle(), _operator(), mode="offpeak",
-                                  now=NOW, check_resources=False)
-    assert "cross_district_not_allowed" in _codes(normal)
-    urgent = evaluate_feasibility(stops, _vehicle(), _operator(), mode="emergency",
-                                  now=NOW, check_resources=False)
-    assert "cross_district_not_allowed" not in _codes(urgent)
+    for mode in ("offpeak", "peak_shuttle", "night", "emergency"):
+        result = evaluate_feasibility(stops, _vehicle(), _operator(), mode=mode,
+                                      now=NOW, check_resources=False)
+        assert "cross_district_not_allowed" not in _codes(result)
 
 
 def test_labor_hours_block_dispatch():

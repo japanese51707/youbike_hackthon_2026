@@ -328,16 +328,13 @@ def assign_by_district(
     max_stops = int(cfg.get("fleet", {}).get("每趟最大站數", 3))
     default_cap = _default_capacity(cfg)
 
-    # 1. 分組：早/晚班按行政區（一趟不跨區，ADR-114）；大夜班可跨區則全市一組（ADR-116/117）。
-    cross_ok = allow_cross_district(now)
+    # 1. 分組：ADR-316 同區優先——批次指派一律按行政區分組（一趟同區、不超載）。
+    #    跨區支援由組單層（build_from_station 車源備援）與緊急出車處理，此處不做全市跨區大鍋炒，
+    #    以維持「同區優先」與每趟路徑聚攏（避免一趟橫跨全市）。
     by_district: dict[str, list[dict]] = {}
-    if cross_ok:
-        # 大夜跨區大宗復原：全市不分區，讓 _pack_trips 跨區配對缺車↔滿車、裝滿再跑
-        by_district["全市跨區"] = list(dispatch_list)
-    else:
-        for r in dispatch_list:
-            d = r.get("district") or "未知區"
-            by_district.setdefault(d, []).append(r)
+    for r in dispatch_list:
+        d = r.get("district") or "未知區"
+        by_district.setdefault(d, []).append(r)
 
     # 可用資源池（車依載運量由大到小，讓大單先有大車；人力平均分配）
     vehicles = sorted(fp.available_vehicles(),

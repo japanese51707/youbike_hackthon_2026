@@ -296,17 +296,21 @@ class RealUrgencyCalculator:
         # 當下已空滿加成（權重已提高，見下方 rank 計算）
         at_limit = 1.0 if at_capacity_now else 0.0
 
+        # 穿透幅度分（缺口深淺 / 總柱，封頂 1.0）——空/滿站保底與 censored 層共用。
+        if raw_lo is not None and raw_lo < 0:
+            depth = min(1.0, abs(raw_lo) / max(1.0, total * 0.3))
+        elif raw_hi is not None and raw_hi > total:
+            depth = min(1.0, (raw_hi - total) / max(1.0, total * 0.3))
+        else:
+            depth = 0.0
+
         # ★已空/滿站保底：直接給 censored 層高分（85 起跳），確保排進「緊急調度」而非次安排。
-        #   已經觸底是既成事實，比「預測會穿透」更確定該立即處理。之上再依人流/時機微幅加分。
+        #   已經觸底是既成事實，比「預測會穿透」更確定該立即處理。
+        #   之上再依「穿透幅度(缺口深淺，主) + 人流 + 時機」加分——缺口越深越急（同層可區分）。
         if at_capacity_now:
-            return round(min(100.0, 85.0 + 15.0 * (0.6 * flow + 0.4 * timing)), 1)
+            return round(min(100.0, 85.0 + 15.0 * (0.5 * depth + 0.3 * flow + 0.2 * timing)), 1)
 
         if breached:
-            # 穿透幅度分：缺口深淺 / 總柱，封頂 1.0
-            if raw_lo is not None and raw_lo < 0:
-                depth = min(1.0, abs(raw_lo) / max(1.0, total * 0.3))
-            else:
-                depth = min(1.0, (raw_hi - total) / max(1.0, total * 0.3))
             rank = 0.35 * timing + 0.20 * flow + 0.25 * at_limit + 0.20 * depth
             score = 70.0 + 30.0 * rank   # censored 打底 70
         else:
