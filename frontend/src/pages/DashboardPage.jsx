@@ -5,6 +5,7 @@ import {
 } from "@ant-design/icons";
 import { Card, Checkbox, Segmented, Select, Space, Tag, Tooltip, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import AsyncState from "../components/common/AsyncState.jsx";
 import StationDrawer from "../components/dashboard/StationDrawer.jsx";
 import StationMap from "../components/dashboard/StationMap.jsx";
@@ -99,6 +100,10 @@ export default function DashboardPage() {
   const [mapDimension, setMapDimension] = useState("status");
   const [splitPx, setSplitPx] = useState(readStoredSplit);
   const mainRef = useRef(null);
+  // ADR-309：升級橫幅／彈窗按「立即派工」會帶 ?station=，這裡直接開組單。
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedStation = searchParams.get("station");
+  const handledStation = useRef(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [mapFocus, setMapFocus] = useState(null);
   const [builder, setBuilder] = useState(null); // null=待命態；物件=組單態
@@ -401,6 +406,17 @@ export default function DashboardPage() {
     [stations, vehicles],
   );
 
+  // 從警示追蹤／升級提示過來時，站點載入後自動開該站的組單，並把網址參數清掉
+  // （不清的話重整或返回會重複開單）。
+  useEffect(() => {
+    if (!requestedStation || !stations.length) return;
+    if (handledStation.current === requestedStation) return;
+    const station = stations.find((s) => s.station_id === requestedStation);
+    handledStation.current = requestedStation;
+    setSearchParams({}, { replace: true });
+    if (station) startFromStation(station);
+  }, [requestedStation, setSearchParams, startFromStation, stations]);
+
   // 換車：API 模式帶 vehicle_id 重打後端 build；mock 模式用候選車重算示意。
   const changeBuilderVehicle = async (vehicleId) => {
     if (isApiMode) {
@@ -408,14 +424,12 @@ export default function DashboardPage() {
         if (!prev?.draft_id) return prev;
         const modeKey = prev.mode_key;
         const seedId = prev.stations?.[0]?.station_id;
-        // 換車重打時要一併帶回司機/隨車，否則後端會重新自動帶第一名、把選擇清掉。
-        const keep = { operatorId: prev.assigned_operator, escortId: prev.assigned_escort };
         const rebuild =
           modeKey === "vehicle"
-            ? apiBuildFromVehicle(vehicleId, keep)
+            ? apiBuildFromVehicle(vehicleId, {})
             : modeKey === "emergency"
-              ? apiBuildEmergency(prev.stations.map((s) => s.station_id), { vehicleId, ...keep })
-              : apiBuildFromStation(seedId, { vehicleId, ...keep });
+              ? apiBuildEmergency(prev.stations.map((s) => s.station_id), { vehicleId })
+              : apiBuildFromStation(seedId, { vehicleId });
         rebuild
           .then((draft) => setBuilder({ ...draft, mode_key: modeKey }))
           .catch(showBuildError);
@@ -453,32 +467,26 @@ export default function DashboardPage() {
     });
   };
 
-  // 換人（司機或隨車，僅 API 後端草稿）：帶 vehicle + 司機 + 隨車重打同入口 build，
-  // 後端重算可行性。which="operator" 換司機、"escort" 換隨車；未改的那位沿用現有值。
-  const changeBuilderPerson = (which, personId) => {
+  // 換司機（僅 API 後端草稿）：帶 operator_id 重打同入口 build，後端重算可行性。
+  const changeBuilderOperator = (operatorId) => {
     if (!isApiMode) return;
     setBuilder((prev) => {
       if (!prev?.draft_id) return prev;
       const modeKey = prev.mode_key;
       const seedId = prev.stations?.[0]?.station_id;
       const vehicleId = prev.assigned_vehicle;
-      const operatorId = which === "operator" ? personId : prev.assigned_operator;
-      const escortId = which === "escort" ? personId : prev.assigned_escort;
-      const opts = { vehicleId, operatorId, escortId };
       const rebuild =
         modeKey === "vehicle"
-          ? apiBuildFromVehicle(vehicleId, opts)
+          ? apiBuildFromVehicle(vehicleId, { operatorId })
           : modeKey === "emergency"
-            ? apiBuildEmergency(prev.stations.map((s) => s.station_id), opts)
-            : apiBuildFromStation(seedId, opts);
+            ? apiBuildEmergency(prev.stations.map((s) => s.station_id), { vehicleId, operatorId })
+            : apiBuildFromStation(seedId, { vehicleId, operatorId });
       rebuild
         .then((draft) => setBuilder({ ...draft, mode_key: modeKey }))
         .catch(showBuildError);
       return prev;
     });
   };
-  const changeBuilderOperator = (operatorId) => changeBuilderPerson("operator", operatorId);
-  const changeBuilderEscort = (escortId) => changeBuilderPerson("escort", escortId);
 
   // 回報車上台數後，用同入口重打 build 讓後端重算可行性（解除 onboard 阻擋）。
   const reportOnboardAndRebuild = async (vehicleId, onboardBikes) => {
@@ -489,14 +497,12 @@ export default function DashboardPage() {
       if (!prev?.draft_id) return;
       const modeKey = prev.mode_key;
       const seedId = prev.stations?.[0]?.station_id;
-      // 回報載量後重打也要帶回司機/隨車，避免清掉已選人員。
-      const keep = { operatorId: prev.assigned_operator, escortId: prev.assigned_escort };
       const draft =
         modeKey === "vehicle"
-          ? await apiBuildFromVehicle(vehicleId, keep)
+          ? await apiBuildFromVehicle(vehicleId, {})
           : modeKey === "emergency"
-            ? await apiBuildEmergency(prev.stations.map((s) => s.station_id), { vehicleId, ...keep })
-            : await apiBuildFromStation(seedId, { vehicleId, ...keep });
+            ? await apiBuildEmergency(prev.stations.map((s) => s.station_id), { vehicleId })
+            : await apiBuildFromStation(seedId, { vehicleId });
       setBuilder({ ...draft, mode_key: modeKey });
     } catch (err) {
       message.error(err?.message || "回報失敗");
@@ -538,28 +544,10 @@ export default function DashboardPage() {
   };
 
   // 地圖草稿路線：mock 草稿有 start/stops；後端草稿的路線改由清單呈現（座標未來接即時定位）。
-  // 地圖路線（先載後放）：mock 草稿用 builder.start/stops；後端草稿用 builder.stations
-  // （含 lat/lng、後端已排「先取後補」順序）組 stops，起點用 builder.start（車位置），
-  // 後端未回座標時退回用第一站當起點，仍能連出路線給管理員/調度員看。
-  const buildDraftRoute = (b) => {
-    if (!b) return null;
-    if (!b.draft_id) return { start: b.start, stops: b.stops };
-    const stops = (b.stations ?? [])
-      .filter((s) => Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lng)))
-      .map((s) => ({
-        lat: Number(s.lat),
-        lng: Number(s.lng),
-        action: s.action,
-        station_name: s.station_name,
-      }));
-    if (!stops.length) return null;
-    const start =
-      b.start && Number.isFinite(Number(b.start.lat)) && Number.isFinite(Number(b.start.lng))
-        ? { lat: Number(b.start.lat), lng: Number(b.start.lng) }
-        : { lat: stops[0].lat, lng: stops[0].lng };
-    return { start, stops };
-  };
-  const draftRoute = buildDraftRoute(builder);
+  const draftRoute =
+    builder && !builder.draft_id
+      ? { start: builder.start, stops: builder.stops }
+      : null;
 
   return (
     <AsyncState
@@ -629,7 +617,6 @@ export default function DashboardPage() {
                     districts={districts}
                     onChangeVehicle={changeBuilderVehicle}
                     onChangeOperator={changeBuilderOperator}
-                    onChangeEscort={changeBuilderEscort}
                     onChangeDistrict={changeBuilderDistrict}
                     onConfirm={confirmDraft}
                     onReportOnboard={reportOnboardAndRebuild}

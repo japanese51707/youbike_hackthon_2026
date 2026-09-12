@@ -91,6 +91,39 @@ CREATE TABLE IF NOT EXISTS alerts (
     acknowledged      INTEGER DEFAULT 0
 );
 
+-- 5b. 緊急調度案件與稽核軌跡（ADR-309）
+--     案件的 opened_at 不隨警示重建而改變，這是「已經沒人管幾分鐘」的唯一依據。
+CREATE TABLE IF NOT EXISTS alert_cases (
+    case_id           TEXT PRIMARY KEY,
+    station_id        TEXT NOT NULL,
+    station_name      TEXT,
+    district          TEXT,
+    opened_at         TEXT NOT NULL,        -- 升級時鐘的起點，開案後不再變動
+    trigger_reason    TEXT,
+    suggested_action  TEXT,
+    highest_stage     INTEGER DEFAULT 0,    -- 曾達到的最高階段（稽核用）
+    muted_until       TEXT,                 -- 已讀/已聯絡的靜音到期；不關案、不重置時鐘
+    closed_at         TEXT,
+    close_reason      TEXT                  -- dispatched（已派工）/ recovered（站況恢復）
+);
+
+-- 同一站同時間只能有一個未結案案件（兩個分頁同時開案是真的會發生）
+CREATE UNIQUE INDEX IF NOT EXISTS idx_alert_cases_open
+    ON alert_cases(station_id) WHERE closed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_alert_cases_opened ON alert_cases(opened_at);
+
+CREATE TABLE IF NOT EXISTS alert_case_actions (
+    action_id   TEXT PRIMARY KEY,
+    case_id     TEXT NOT NULL,
+    action      TEXT NOT NULL,              -- acknowledged / called / deferred / dispatch
+    actor       TEXT NOT NULL,
+    stage       INTEGER DEFAULT 0,
+    note        TEXT,
+    contact     TEXT,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_case_actions_case ON alert_case_actions(case_id);
+
 -- 6. 機關 webhook 訂閱（出向資安：callback 須通過 SSRF 檢查才存入）
 CREATE TABLE IF NOT EXISTS alert_subscriptions (
     subscription_id  TEXT PRIMARY KEY,

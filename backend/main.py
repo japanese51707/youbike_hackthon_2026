@@ -69,7 +69,16 @@ async def lifespan(app: FastAPI):
                 pass  # 預熱失敗不影響啟動；真正請求時會再建一次
 
         threading.Thread(target=_warm_slot_table, daemon=True).start()
+
+    # ADR-310：自動偵測調度完成。背景輪詢即時站況，進行中任務的待處理站達派工目標即
+    # 自動標記完成、推進任務（免人工回報）。僅真實源 + config 開關開啟時啟動。
+    from core import auto_detect
+    if auto_detect.start_background(cfg.get("data_source", {}).get("mode")):
+        print("[auto_detect] 自動偵測調度完成：背景輪詢已啟動")
     yield
+    # 關機時停背景輪詢（daemon thread 本會隨程序結束，這裡明確停止避免測試殘留）
+    from core import auto_detect as _ad
+    _ad.stop_background()
 
 
 app = FastAPI(

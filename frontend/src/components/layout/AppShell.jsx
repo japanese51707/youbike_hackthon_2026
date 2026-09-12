@@ -1,4 +1,5 @@
 import {
+  AlertOutlined,
   BarChartOutlined,
   DashboardOutlined,
   DeploymentUnitOutlined,
@@ -6,18 +7,24 @@ import {
   ReloadOutlined,
   SlidersOutlined,
 } from "@ant-design/icons";
-import { Button, Layout, Menu, Select, Space, Tag, Typography, message } from "antd";
+import { Badge, Button, Layout, Menu, Select, Space, Tag, Typography, message } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import { resetDemoData } from "../../api/operationsApi.js";
 
 import { useEffect, useState } from "react";
 import { isApiMode, request, getActorId, setActorId } from "../../api/httpClient.js";
 
+import EscalationBanner from "../alerts/EscalationBanner.jsx";
+import EscalationModal from "../alerts/EscalationModal.jsx";
+import useEscalations from "../../hooks/useEscalations.js";
+
 import AppearanceControl from "./AppearanceControl.jsx";
 import brandLogo from "../../assets/brand/youbike-logo.png";
 
-const navigation = [
+// 警示追蹤放在調度面板旁邊：它是調度員與管理後台共用的那份真相（ADR-309）。
+const baseNavigation = [
   { key: "/dashboard", icon: <DashboardOutlined />, label: "調度面板" },
+  { key: "/alerts", icon: <AlertOutlined />, label: "警示追蹤" },
   { key: "/driver", icon: <MobileOutlined />, label: "司機手機端" },
   { key: "/optimization", icon: <SlidersOutlined />, label: "最適化審核" },
   { key: "/overview", icon: <BarChartOutlined />, label: "長官導覽面板" },
@@ -33,6 +40,29 @@ export default function AppShell({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [messageApi, contextHolder] = message.useMessage();
+  // ADR-309：升級提示跨頁常駐——調度員切到別頁也不會漏掉該打電話的案件。
+  const escalation = useEscalations();
+  const [dismissedCaseId, setDismissedCaseId] = useState(null);
+  const promptCase = escalation.promptCase;
+  // ★彈窗會蓋住整頁（含頁首的身分選單），所以只在「這個人真的能處理」時才強制跳出：
+  //   沒選身分 → 選不了身分，變成跳出來但什麼都不能做；
+  //   身分是司機 → 送出會被後端擋（需要 dispatcher/maintainer），跳了也只是卡住他。
+  //   這兩種情況都只出橫幅，橫幅會說明原因。
+  const actorId = isApiMode ? getActorId() : "";
+  const actorRole = operators.find((o) => o.operator_id === actorId)?.role;
+  const canAct = !isApiMode || (Boolean(actorId) && ["dispatcher", "maintainer"].includes(actorRole));
+  const showPrompt = Boolean(promptCase) && promptCase.case_id !== dismissedCaseId && canAct;
+
+  const navigation = baseNavigation.map((item) =>
+    item.key === "/alerts" && escalation.counts.open
+      ? { ...item, label: <Badge count={escalation.counts.open} size="small" offset={[10, -2]}>
+            <span>警示追蹤</span></Badge> }
+      : item);
+
+  const goHandle = (item) => {
+    setDismissedCaseId(null);
+    navigate(`/dashboard?station=${encodeURIComponent(item.station_id)}`);
+  };
 
   const handleReset = async () => {
     await resetDemoData();
@@ -43,6 +73,16 @@ export default function AppShell({ children }) {
   return (
     <Layout className="app-shell">
       {contextHolder}
+      {escalation.bannerCases.length ? (
+        <EscalationBanner cases={escalation.bannerCases} onOpen={goHandle}
+          hint={canAct ? "" : (actorId ? "此身分無派工權限，請切換為調度或維運人員" : "請先於右上角選擇操作身分")} />
+      ) : null}
+      <EscalationModal
+        open={showPrompt}
+        item={promptCase}
+        onDispatch={goHandle}
+        onDone={() => { setDismissedCaseId(promptCase?.case_id ?? null); escalation.reload(); }}
+      />
       <header className="topbar">
         <Space className="brand" size={10}>
           <span className="brand-logo"><img src={brandLogo} alt="YouBike" width="92" height="54" /></span>

@@ -106,29 +106,39 @@ def start_task(task_id, operator):
 
 
 @atomic
-def report_station(task_id, station_id, actual_available, operator="system"):
+def report_station(task_id, station_id, actual_available, operator="system", auto=False):
+    """逐站回報，把該站標記完成並推進任務。
+
+    auto=True（ADR-310 自動偵測）：由背景輪詢即時站況偵測到該站已達派工目標時代呼叫，
+    非執行者操作，故跳過 require_executor；reported_by 標為 system-auto、稽核註明自動偵測，
+    與人工回報區分。其餘（結案、載量結算、資源釋放）完全複用同一鏈路。
+    """
     task = _get_task(task_id)
-    require_executor(task, operator)
+    if not auto:
+        require_executor(task, operator)
     require_active(task)
     route = _route(task)
     found = _stop(route, station_id)
     actual = inventory(actual_available, found.get("total_docks"))
+    reporter = "system-auto" if auto else operator
     # 首次回報相容既有客戶端；在同一交易內完成 assigned → in_progress。
     if task["task_status"] == "assigned":
         task = get_task_manager().start(task_id)
-        _audit(f"首次回報開始任務 {task_id}", operator=operator)
+        _audit(f"首次回報開始任務 {task_id}", operator=reporter)
     found.update(station_status="completed", actual_available=actual, claimed_by=None,
-                 reported_at=datetime.now(timezone.utc).isoformat(), reported_by=operator)
+                 reported_at=datetime.now(timezone.utc).isoformat(), reported_by=reporter,
+                 auto_detected=bool(auto))
     target = found.get("target_available")
     gap = round(target - actual, 1) if target is not None else None
     if gap is not None:
         found["target_gap"] = gap
     task["route"] = route
     remaining = _finish_if_done(task)
-    _audit(f"逐站回報 {station_id} 實際存量={actual}，剩餘 {remaining} 站",
-           station_id=station_id, operator=operator)
+    how = "自動偵測達標" if auto else "逐站回報"
+    _audit(f"{how} {station_id} 實際存量={actual}，剩餘 {remaining} 站",
+           station_id=station_id, operator=reporter)
     if not remaining:
-        _audit(f"全部站點完成，任務 {task_id} 結案並釋放資源", operator=operator)
+        _audit(f"全部站點完成，任務 {task_id} 結案並釋放資源", operator=reporter)
     return {"station": found, "gap": gap, "all_done": remaining == 0, "remaining": remaining,
             "status": "completed" if remaining == 0 else "in_progress"}
 

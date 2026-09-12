@@ -476,6 +476,8 @@ def _persist_trip_atomic(trip: dict) -> None:
                 "quantity", s.get("quantity")),
             "station_status": "pending",
             "total_docks": s.get("total_docks"),
+            # ADR-310 自動偵測基準：組單當下該站可借車數（判斷變化方向/量的 baseline）
+            "current_available": s.get("current_available"),
             "claimed_by": trip["assigned_operator"],   # 認領標註（ADR-117）
             "lat": s.get("lat"), "lng": s.get("lng"),
             # ADR-123：逐站到達偏移／所用預測視野／到站後車上載量（確認時算定，供執行端對照）

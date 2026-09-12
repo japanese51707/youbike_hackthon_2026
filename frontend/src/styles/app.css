@@ -2334,3 +2334,85 @@ body {
   gap: 8px;
   margin-top: 8px;
 }
+
+/* ── ADR-309 緊急調度升級提示 ── */
+.escalation-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 24px;
+  border-bottom: 1px solid var(--ct-border);
+  background: var(--ct-primary-soft);
+}
+
+.escalation-banner.is-critical {
+  background: var(--ct-danger-soft);
+}
+
+.escalation-banner-icon {
+  flex: none;
+  font-size: 17px;
+  color: var(--ct-danger);
+}
+
+.escalation-banner-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.escalation-banner-text strong {
+  white-space: nowrap;
+}
+
+.escalation-banner-sub {
+  min-width: 0;
+  color: var(--ct-text-dim);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.escalation-banner-tag,
+.escalation-banner-more {
+  flex: none;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.escalation-banner-more {
+  color: var(--ct-text-dim);
+  font-size: 12px;
+}
+
+.escalation-modal-title {
+  color: var(--ct-danger);
+  font-weight: 700;
+}
+
+.escalation-modal-note {
+  margin-bottom: 14px !important;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.escalation-rule-note {
+  margin-bottom: 12px !important;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* 可捲動的一般頁面（警示追蹤不套無捲動版面） */
+.page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+}

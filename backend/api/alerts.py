@@ -79,3 +79,67 @@ def emergency_check(body: EmergencyCheckRequest = Body(default_factory=Emergency
     stations = get_stations_with_degradation()
     return emergency.check_and_dispatch_reserve(
         stations, in_transit_eta_min=body.in_transit_eta_min)
+
+
+# ── ADR-309 緊急調度案件升級追蹤 ──
+
+class CaseActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    note: str = Field(default="", max_length=500)
+    contact: str = Field(default="", max_length=120)
+
+
+def _sync_escalations():
+    from core import escalation
+    from core.task_manager import get_task_manager
+    stations = get_stations_with_degradation()
+    recs = build_dispatch_list(stations)
+    tasks = get_task_manager().list_tasks()
+    return escalation.sync_cases(stations, recs, tasks)
+
+
+@router.get("/alerts/escalations")
+def escalations():
+    """ADR-309：未結案的緊急調度案件（含階段、已等待分鐘、下一階段時間）。
+
+    查詢時順帶同步開案／關案，與現行警示同樣沒有常駐排程。
+    時間一律後端換算，前端不自己累加（重整、換機器、多人同時看要一致）。
+    """
+    cases = _sync_escalations()
+    return {
+        "cases": cases,
+        "counts": {
+            "open": len(cases),
+            "banner": sum(1 for c in cases if c["should_banner"]),
+            "prompt": sum(1 for c in cases if c["should_prompt"]),
+        },
+    }
+
+
+@router.get("/alerts/escalations/history")
+def escalation_history(limit: int = 100):
+    """管理後台稽核用：含已關閉案件與所有人為動作。"""
+    from db import escalation_repo
+    cases = escalation_repo.list_cases(limit=limit)
+    by_case = {}
+    for action in escalation_repo.list_actions(limit=limit * 4):
+        by_case.setdefault(action["case_id"], []).append(action)
+    for case in cases:
+        case["actions"] = by_case.get(case["case_id"], [])
+    return cases
+
+
+@router.post("/alerts/escalations/{case_id}/{action}")
+def escalation_action(case_id: str, action: str,
+                      body: CaseActionRequest = Body(default_factory=CaseActionRequest),
+                      operator: dict = Depends(require_role("dispatcher", "maintainer"))):
+    """記錄人為動作。★不關案——關案只認派工或站況恢復（ADR-309 §2）。"""
+    from core import escalation
+    try:
+        return escalation.record_action(
+            case_id, action, operator["operator_id"],
+            note=body.note, contact=body.contact)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))

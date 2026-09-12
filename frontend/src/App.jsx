@@ -1,6 +1,7 @@
 import ThemeProvider from "./theme/ThemeProvider.jsx";
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppShell from "./components/layout/AppShell.jsx";
+import AlertTrackingPage from "./pages/AlertTrackingPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
 import DriverPage from "./pages/DriverPage.jsx";
 import OptimizationReviewPage from "./pages/OptimizationReviewPage.jsx";
@@ -14,6 +15,7 @@ export default function App() {
       <AppShell>
         <Routes>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/alerts" element={<AlertTrackingPage />} />
           <Route path="/driver" element={<DriverPage />} />
           <Route path="/optimization" element={<OptimizationReviewPage />} />
           <Route path="/overview" element={<OverviewPage />} />
