@@ -36,6 +36,13 @@ data_source:
   s3_prefix: "youbike_data"           # 分區：youbike_data/year_month=YYYY-MM/data.parquet
   historical_default_month: "2026-06" # 未指定月份時的預設分區
 
+# ── 需調度清單快取（ADR-313）──
+# 顯示用端點(recommendations/alerts/escalations)讀背景預算快取,避免每次 request 重跑全站
+# 規則引擎/預測。背景每 ttl_sec 秒刷新一次全量;派工端口(組單/確認)維持即時不讀快取。
+dispatch_cache:
+  enabled: true
+  ttl_sec: 60              # 背景刷新間隔(秒);即時站況約5分更新,60秒足夠反映
+
 # ── 自動偵測調度完成（ADR-310）──
 # 調度員執行任務不必人工回報搬運量：背景輪詢官方即時站況，偵測進行中任務的待處理站
 # 是否已達派工目標（補車→可借數上升逼近 target；取車→下降逼近 target），達標即自動

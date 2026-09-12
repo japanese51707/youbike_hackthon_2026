@@ -112,6 +112,7 @@ superseded-by:
 | ADR-310 | 自動偵測調度完成（免人工回報，達目標水位即自動標記完成/結案；config 開關+僅真實源） | accepted |
 | ADR-311 | 戰情室 Bedrock 顧問代理（advisory-only，後端代理；原 307 讓號） | accepted |
 | ADR-312 | 班別人力配置（三班×行政區）與雲端固定位址（NLB+Elastic IP） | accepted |
+| ADR-313 | 需調度清單背景預算快取（顯示端點讀快取秒回，派工端口維持即時） | accepted |
 | ADR-311 | 戰情室 Bedrock 顧問代理（advisory-only，後端代理） | accepted |
 
 ### 取號流程（新增 ADR 前必做）

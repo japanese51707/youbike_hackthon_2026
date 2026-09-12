@@ -48,14 +48,10 @@ def recommendations(limit: int = 15, priority: str | None = None):
     dispatcher 排序（覆寫最前綴）+ 緊急度分級 + 資源限制。
     預測目前用 mock predictor（A6 換 B 的 LightGBM）。
     """
-    stations = get_stations_with_degradation()
-    overrides = get_override_service().active_station_ids()
-    # 顯示用清單：不套用派工量能上限，回全部需調度站的完整排序（前端用 limit 控制顯示筆數），
-    # 避免空/滿站因車隊時段量能被截掉而看不到。
-    recs = build_dispatch_list(stations, override_station_ids=overrides, apply_capacity=False)
-    if priority:
-        recs = [r for r in recs if r["priority_level"] == priority]
-    return recs[:limit]
+    # ADR-313：顯示用清單讀背景預算快取（每 60 秒刷新一次全量），避免每次 request 重跑
+    # 全站規則引擎/預測。切 limit / 篩 priority 在讀取端做。派工端口仍即時（_current_dispatch_list）。
+    from core import dispatch_cache
+    return dispatch_cache.get_recommendations(limit=limit, priority=priority)
 
 
 @router.post("/dispatch/confirm")

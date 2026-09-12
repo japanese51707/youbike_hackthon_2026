@@ -24,10 +24,11 @@ def list_alerts(level: str | None = None, acknowledged: bool | None = None):
 
     即時掃描站點 + 調度建議產生警示（分級 info/warning/critical），再依條件篩選。
     """
+    # ADR-313：讀背景預算快取的站況 + 需調度清單（避免每次重跑全站規則引擎/預測）。
+    from core import dispatch_cache
+    snap = dispatch_cache.get_snapshot()
     svc = get_alert_service()
-    stations = get_stations_with_degradation()
-    recs = build_dispatch_list(stations)
-    svc.generate_from_stations(stations, recs)
+    svc.generate_from_stations(snap["stations"], snap["recs"])
     return svc.list_alerts(level=level, acknowledged=acknowledged)
 
 
@@ -90,12 +91,12 @@ class CaseActionRequest(BaseModel):
 
 
 def _sync_escalations():
-    from core import escalation
+    # ADR-313：讀背景預算快取的站況 + 需調度清單。
+    from core import escalation, dispatch_cache
     from core.task_manager import get_task_manager
-    stations = get_stations_with_degradation()
-    recs = build_dispatch_list(stations)
+    snap = dispatch_cache.get_snapshot()
     tasks = get_task_manager().list_tasks()
-    return escalation.sync_cases(stations, recs, tasks)
+    return escalation.sync_cases(snap["stations"], snap["recs"], tasks)
 
 
 @router.get("/alerts/escalations")

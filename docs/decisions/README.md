@@ -66,6 +66,7 @@
 | [ADR-307](ADR-307-競賽現場雲端部署與S3遷移.md) | 競賽現場雲端部署與 S3 遷移 | accepted | platform, deployment, data, security | us-east-1 建專屬 bucket 遷歷史資料；後端 ECS Fargate（App Runner 被 SCP 擋）；金鑰環境變數注入雲端、讀 S3 走最小權限 task role；前端走 Vite proxy 免改 CORS；SageMaker 批次推論示範+未來每日重訓管線；public IP 臨時、賽後關閉 |
 | [ADR-308](ADR-308-人力依歷史分派與雙人派工.md) | 人力依歷史分派與雙人派工（司機＋隨車） | proposed | dispatch, data, database, frontend | 離線分析 S3 1–6 月（周轉量主導+空/滿站絕對次數，最大餘數法）算各行政區人力配額，啟動時 seed 預設分派；派工單保留單一司機、新增可選隨車 assigned_escort（不動既有單人全鏈路）；待 owner 核准 |
 | [ADR-309](ADR-309-緊急調度案件的升級追蹤與關案條件.md) | 緊急調度案件的升級追蹤與關案條件 | accepted | dispatch, database, api, frontend | 升級時鐘掛在案件不掛警示（警示會重建、按已讀會重算 triggered_at）；關案只認「未結案任務涵蓋該站」或「站況恢復」，已讀只靜音不關案、不重置；階段 30/45 分可設定；L1 常駐橫幅、L2 強制彈窗且三個出口皆留稽核；不接外部推播 |
+| [ADR-313](ADR-313-需調度清單背景預算快取.md) | 需調度清單背景預算快取（顯示讀快取，派工維持即時） | accepted | dispatch, api, performance | 背景每60秒預算全量build_dispatch_list進TTL快取,recommendations/alerts/escalations讀快取(14-32s→1s),派工端口維持即時;config開關+僅真實源 |
 | [ADR-312](ADR-312-班別人力配置與雲端固定位址.md) | 班別人力配置（三班×行政區）與雲端固定位址 | accepted | dispatch, data, database, deployment | 人力分早40/晚35/夜25三班,班內依行政區工作量配額;operators加shift欄;seed依行政區×班別分派;雲端 NLB+Elastic IP 固定位址(task重啟不變),workforce json 進 image 讓雲端分派生效 |
 | [ADR-310](ADR-310-自動偵測調度完成.md) | 自動偵測調度完成（免人工回報，達標即結） | accepted | dispatch, data, backend | 背景輪詢即時站況，進行中任務待處理站達派工目標（補車升/取車降逼近 target+最小變化量濾波動）即自動標記完成、推進、結案，複用 report_station(auto=True)；不論車誰移動達目標即需求消化；config 開關+僅真實源啟用；待 owner 核准 |
 

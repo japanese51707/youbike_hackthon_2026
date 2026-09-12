@@ -88,10 +88,17 @@ async def lifespan(app: FastAPI):
     from core import auto_detect
     if auto_detect.start_background(cfg.get("data_source", {}).get("mode")):
         print("[auto_detect] 自動偵測調度完成：背景輪詢已啟動")
+
+    # ADR-313：需調度清單背景預算快取。顯示端點讀快取秒回，避免每次重跑全站預測。
+    from core import dispatch_cache
+    if dispatch_cache.start_background(cfg.get("data_source", {}).get("mode")):
+        print("[dispatch_cache] 需調度清單背景預算已啟動")
     yield
-    # 關機時停背景輪詢（daemon thread 本會隨程序結束，這裡明確停止避免測試殘留）
+    # 關機時停背景 thread（daemon 本會隨程序結束，這裡明確停止避免測試殘留）
     from core import auto_detect as _ad
     _ad.stop_background()
+    from core import dispatch_cache as _dc
+    _dc.stop_background()
 
 
 app = FastAPI(
