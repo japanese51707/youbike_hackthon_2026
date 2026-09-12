@@ -28,6 +28,7 @@ from copy import deepcopy
 from core.dispatch_drafts import remember_draft
 from . import dispatcher as _dsp
 from .providers import get_fleet_provider, get_operator_provider
+from core import dispatch_guards as _guards
 
 
 def _fill_station_targets(stations: list[dict]) -> None:
@@ -166,6 +167,12 @@ def _make_draft(stations, vehicle, operator, district, cfg, now,
         # ADR-304 §1：空陣列＝可確認；非空＝確認會被擋，且原因在預覽就看得到
         "blocking_reasons": feasibility["blocking_reasons"],
         "load_plan": feasibility["load_plan"],  # ADR-123：逐站到達時間／視野／車上載量
+        # ADR-323：預覽當下的人車狀態快照，確認時比對，改過就擋（見 dispatch_guards）
+        "resource_snapshot": {
+            "vehicle": _guards.snapshot_of(vehicle, _guards.SNAPSHOT_VEHICLE_FIELDS),
+            "operator": _guards.snapshot_of(operator, _guards.SNAPSHOT_OPERATOR_FIELDS),
+            "escort": _guards.snapshot_of(escort, _guards.SNAPSHOT_OPERATOR_FIELDS),
+        },
         "onboard_start": feasibility["onboard_start"],
         "onboard_end": feasibility["onboard_end"],
         # ADR-321：True＝載量是系統推定（閒置車未回報視為 0），不是司機回報的實測值
