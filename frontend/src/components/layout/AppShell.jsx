@@ -27,7 +27,7 @@ const baseNavigation = [
   { key: "/dashboard", icon: <DashboardOutlined />, label: "調度面板" },
   { key: "/alerts", icon: <ProfileOutlined />, label: "分派任務狀況" },
   { key: "/driver", icon: <MobileOutlined />, label: "司機手機端" },
-  { key: "/overview", icon: <BarChartOutlined />, label: "長官導覽面板" },
+  { key: "/overview", icon: <BarChartOutlined />, label: "服務水準看板" },
   { key: "/rider", icon: <EnvironmentOutlined />, label: "找車（使用者）" },
   { key: "/twin", icon: <DeploymentUnitOutlined />, label: "數位孿生戰情室" },
 ];

@@ -68,6 +68,15 @@ auto_dispatch:
   # ADR-322：原本只配 high（=censored 穿透層，分數≥70）。但 warning 層
   # （30~69 分，快空/快滿但尚未穿透）才是多數，只配 high 會讓大多數輪次配不出任何單。
 
+# ── 空／滿緊急時計（ADR-324／325／326／327）──
+# 背景自己拉站況開／關時計，不等人開前端。已結案只留過去 24 小時。
+# 本機可用獨立 worker 寫 service_clock.db，不受 uvicorn --reload 殺掉。
+service_problems:
+  enabled: true
+  輪詢間隔_秒: 60
+  保留小時: 24
+  in_app: true              # 雲端單容器用 lifespan thread；本機獨立 worker 時設 SERVICE_CLOCK_EXTERNAL=1
+
 # ── 資料保留（FR-12 熱溫冷）──
 retention:
   hot_days: 14              # 熱資料（即時推論）

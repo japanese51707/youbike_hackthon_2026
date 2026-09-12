@@ -48,6 +48,7 @@
 | [ADR-205](ADR-205-四頁角色導向資訊架構與無捲動版面.md) | 四頁角色導向資訊架構＋無捲動固定視窗版面 | superseded（由 ADR-208 承接） | frontend, information-architecture, ux | 調度/司機手機端/長官/戰情室；預設落地調度面板、炫技集中戰情室；2026-09-05 修訂：移除桌機司機頁（與調度面板重疊），司機僅手機端；調度面板資訊架構由 ADR-206 細化 |
 | [ADR-206](ADR-206-調度面板決策流資訊架構.md) | 調度面板決策流資訊架構（三入口組單＋執行追蹤） | accepted | frontend, information-architecture, ux | 地圖舞台＋右欄狀態機（待命態/組單態）；對齊 ADR-119 三入口與預覽確認；缺口榜併入緊急站排行；執行追蹤含狀態生命週期；站數動態；owner 2026-09-11 核准，實作中 |
 | [ADR-208](ADR-208-YouBike品牌識別與日夜主題.md) | YouBike 品牌識別＋日式柔和日夜主題 | accepted | frontend, design-language, map-presentation | owner 核准；承接 ADR-205 頁面架構，電輔車數未接入時不顯示站點閃電 |
+| [ADR-209](ADR-209-服務水準看板盯盤.md) | `/overview` 改為服務水準看板 | accepted | frontend, information-architecture, ux | 名稱不用長官導覽；值班處長盯盤；只留頭條＋行政區壓力＋今日調度結果；不派工、不造 Before/After |
 | [ADR-301](ADR-301-AI營運助理定位與LLM接入決策.md) | AI 營運助理定位與 LLM 接入決策（advisory-only） | proposed | platform, ai-advisory, security, api-contract | 助理僅輔助理解與建議、不自行決策（守 ADR-004）；長官頁是否接 LLM 仍待定。戰情室接法由 ADR-311 定案 |
 | [ADR-311](ADR-311-戰情室Bedrock顧問代理.md) | 戰情室 Bedrock 顧問代理 | accepted | platform, ai-advisory, security, api-contract, frontend | owner 2026-09-12 核准；後端代理 Converse、失敗降級規則型、不派工；原編 ADR-307，2026-09-11 與競賽現場雲端部署撞號讓號至 311 |
 | [ADR-302](ADR-302-派工確認與任務結案一致性.md) | 後端草稿、原子派工、授權回報與結案釋放 | accepted | api, security, database, dispatch | 第一批派工安全修正；沿用 SQLite／Demo 身分限制 |
@@ -75,6 +76,10 @@
 | [ADR-318](ADR-318-出車載量自動預設.md) | 出車載量自動預設（取消人工回報並重算） | accepted | dispatch, backend, frontend | 非總部車=0、總部車=補車需求量，僅車上載量未知時套用（尊重已回報值）；預覽與落地同口徑；前端移除回報並重算 |
 | [ADR-319](ADR-319-任務地圖真實道路路線.md) | 任務地圖真實道路路線（非點對點直線） | accepted | frontend, backend | 後端 /routing/road 代理外部路由服務 + 直線降級 + 快取；前端沿道路畫，無 geometry 退直線；前端不直打外部服務 |
 | [ADR-320](ADR-320-系統為主的自動配單.md) | 系統為主的自動配單（依緊急度逐張配對鄰近人車） | accepted | dispatch, backend | 每輪掃緊急清單依緊急度逐張配對鄰近人車，複用 build_from_station 車源/人力階梯；過濾已認領+手動草稿站；無車停止本輪；與 auto_detect 共用鎖；後台開關；config 開關+僅真實源 |
+| [ADR-324](ADR-324-空滿站緊急時計與今日排除時間.md) | 空滿站緊急時計與今日排除時間 | accepted | database, api, frontend | 空／滿一出現開時計；派工不關、恢復才算排除；看板第五張燈為各區平均排除時間 |
+| [ADR-325](ADR-325-空滿時計背景輪詢與24小時保留.md) | 空滿時計背景輪詢與 24 小時保留 | accepted | backend, database, api | 後端自己輪詢站況寫時計；只留近 24h 已結案；平均改看窗口而非日曆日 |
+| [ADR-326](ADR-326-空滿時計獨立行程與專用庫.md) | 空滿時計獨立行程與專用庫 | accepted | backend, database, deployment | 時計寫 service_clock.db；本機獨立 worker 不受 --reload 殺掉 |
+| [ADR-327](ADR-327-雲端空滿時計獨立收集與EFS共用庫.md) | 雲端空滿時計獨立收集與 EFS 共用庫 | accepted | deployment, database, backend | 雲端第二個 ECS 寫 EFS 上的 service_clock.db；網站只讀同一份 |
 | [ADR-310](ADR-310-自動偵測調度完成.md) | 自動偵測調度完成（免人工回報，達標即結） | accepted | dispatch, data, backend | 背景輪詢即時站況，進行中任務待處理站達派工目標（補車升/取車降逼近 target+最小變化量濾波動）即自動標記完成、推進、結案，複用 report_station(auto=True)；不論車誰移動達目標即需求消化；config 開關+僅真實源啟用；待 owner 核准 |
 
 ## 新決策流程
