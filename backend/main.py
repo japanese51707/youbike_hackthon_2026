@@ -44,7 +44,9 @@ async def lifespan(app: FastAPI):
         seed_depot_standby_operators, seed_stationed_operators,
         seed_workforce_allocation,
     )
-    from db.vehicles_repo import seed_default_vehicles, set_reserve_fleet
+    from db.vehicles_repo import (
+        seed_default_vehicles, seed_depot_vehicles, set_reserve_fleet,
+    )
     init_db()
     seed_default_operators()
     # ADR-114/116 調度人力 seed（開發/Demo 起始值，之後由人力 API 覆蓋）。全部預設 off_duty；
@@ -60,6 +62,9 @@ async def lifespan(app: FastAPI):
               f"駐點員 {_alloc['stationed_assigned']} 名依歷史工作量分配至各行政區")
     # ADR-114 車隊主檔 seed（組單三入口與緊急救火需要車輛清單，缺 seed 會回空陣列）。
     seed_default_vehicles(n=45)
+    # ADR-119 總站待命車（DEPOT-001~005）。先前只有測試在 seed，正式啟動沒叫，
+    # 導致車源階梯最後一關「由總部載滿車出發」永遠無車可派，補車單全部配不出去。
+    seed_depot_vehicles(n=int(cfg.get("reserve", {}).get("總站待命車數", 5)))
     # ADR-118 靜態保留率：把車隊末端一定比例標為 standby（緊急救火用）。
     set_reserve_fleet(cfg.get("reserve", {}).get("保留率", 0.12))
     # ADR-306：背景預熱「同時段歷史代理」查表（讀 S3 1–6 月建一次，供即時預測補 lag）。
