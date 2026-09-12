@@ -76,6 +76,13 @@ jobs:
             --query 'service.{status:status,desired:desiredCount,running:runningCount}' \
             --output json
 
+      - name: Wait for ECS steady state
+        run: |
+          aws ecs wait services-stable \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_SERVICE}" \
+            --region "${AWS_REGION}"
+
       - name: Smoke check public URL
         run: |
           set -euo pipefail
