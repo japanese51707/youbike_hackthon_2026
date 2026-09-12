@@ -106,6 +106,8 @@ superseded-by:
 | ADR-303 | 觀測時間與資料可用性契約 | accepted |
 | ADR-304 | 派工可行性閘門與最適化套用一致性 | accepted |
 | ADR-305 | 開發模式資料源降級與逐筆新鮮度標記（正式模式不變，僅開發情境可降 mock 且不可派工） | accepted |
+| ADR-306 | 即時預測以同時段歷史代理 lag 特徵（比賽階段資料時間錯配的權宜；前端誠實標示代理） | accepted |
+| ADR-307 | 競賽現場雲端部署與 S3 遷移（us-east-1 / ECS Fargate / 金鑰雲端化 / SageMaker 批次推論示範） | accepted |
 
 ### 取號流程（新增 ADR 前必做）
 
