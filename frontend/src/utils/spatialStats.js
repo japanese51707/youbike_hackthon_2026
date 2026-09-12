@@ -120,12 +120,42 @@ export function getisOrdGiStar(stations, { radiusKm = 3 } = {}) {
   });
 }
 
+export const GI_STAR_RAMP = [
+  [-2.58, [25, 113, 194]],
+  [-1.96, [77, 171, 247]],
+  [0, [168, 176, 188]],
+  [1.96, [255, 107, 107]],
+  [2.58, [201, 42, 42]],
+];
+
+function lerpChannel(from, to, t) {
+  return Math.round(from + (to - from) * t);
+}
+
+export function giStarFillColor(z, alpha = 130) {
+  const value = Number(z);
+  if (!Number.isFinite(value) || value <= GI_STAR_RAMP[0][0]) {
+    return [...GI_STAR_RAMP[0][1], alpha];
+  }
+  const last = GI_STAR_RAMP[GI_STAR_RAMP.length - 1];
+  if (value >= last[0]) return [...last[1], alpha];
+  for (let i = 1; i < GI_STAR_RAMP.length; i += 1) {
+    const [z1, c1] = GI_STAR_RAMP[i - 1];
+    const [z2, c2] = GI_STAR_RAMP[i];
+    if (value <= z2) {
+      const t = (value - z1) / (z2 - z1);
+      return [lerpChannel(c1[0], c2[0], t), lerpChannel(c1[1], c2[1], t), lerpChannel(c1[2], c2[2], t), alpha];
+    }
+  }
+  return [...GI_STAR_RAMP[2][1], alpha];
+}
+
 export function giStarClass(z) {
-  if (z >= 2.58) return { key: "hot99", label: "顯著熱點 99%", color: [201, 42, 42] };
-  if (z >= 1.96) return { key: "hot95", label: "熱點 95%", color: [255, 107, 107] };
-  if (z <= -2.58) return { key: "cold99", label: "顯著冷點 99%", color: [25, 113, 194] };
-  if (z <= -1.96) return { key: "cold95", label: "冷點 95%", color: [77, 171, 247] };
-  return { key: "ns", label: "不顯著", color: [90, 100, 120] };
+  if (z >= 2.58) return { key: "hot99", label: "顯著熱點 99%", color: GI_STAR_RAMP[4][1] };
+  if (z >= 1.96) return { key: "hot95", label: "熱點 95%", color: GI_STAR_RAMP[3][1] };
+  if (z <= -2.58) return { key: "cold99", label: "顯著冷點 99%", color: GI_STAR_RAMP[0][1] };
+  if (z <= -1.96) return { key: "cold95", label: "冷點 95%", color: GI_STAR_RAMP[1][1] };
+  return { key: "ns", label: "不顯著", color: GI_STAR_RAMP[2][1] };
 }
 
 export function buildKnnNetwork(stations, { k = 3 } = {}) {

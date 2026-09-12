@@ -59,6 +59,21 @@ export function deriveServiceGrade(station) {
   return SERVICE_GRADES.neighbor;
 }
 
+// 北北基大致範圍；新竹約 24.81, 120.97，會被 lng 擋下。
+const SERVICE_BBOX = { minLat: 24.84, maxLat: 25.32, minLng: 121.28, maxLng: 122.05 };
+const SERVICE_NEAR_KM = 20;
+
+export function isInRiderServiceArea(origin, stations = []) {
+  const lat = Number(origin?.lat);
+  const lng = Number(origin?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  const nearby = (stations || []).filter((station) => Number.isFinite(Number(station?.lat)) && Number.isFinite(Number(station?.lng)));
+  if (nearby.length) {
+    return nearby.some((station) => haversineKm(origin, station) <= SERVICE_NEAR_KM);
+  }
+  return lat >= SERVICE_BBOX.minLat && lat <= SERVICE_BBOX.maxLat && lng >= SERVICE_BBOX.minLng && lng <= SERVICE_BBOX.maxLng;
+}
+
 export function isPeakHour(now = new Date()) {
   const hour = now.getHours();
   const weekend = now.getDay() === 0 || now.getDay() === 6;

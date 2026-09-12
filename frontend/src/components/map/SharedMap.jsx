@@ -72,6 +72,8 @@ export default function SharedMap({
   const onCameraIdleRef = useRef(onCameraIdle);
   onCameraMoveRef.current = onCameraMove;
   onCameraIdleRef.current = onCameraIdle;
+  const focusTargetRef = useRef(focusTarget);
+  focusTargetRef.current = focusTarget;
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
@@ -195,6 +197,13 @@ export default function SharedMap({
       if (!ensureOverlay() || fallbackAppliedRef.current) return;
       setFallbackReason(null);
       setBasemapStatus("ready");
+      const pending = focusTargetRef.current;
+      if (pending && Number.isFinite(pending.longitude) && Number.isFinite(pending.latitude)) {
+        map.jumpTo({
+          center: [pending.longitude, pending.latitude],
+          zoom: Number.isFinite(pending.zoom) ? pending.zoom : map.getZoom(),
+        });
+      }
       handleCameraIdle();
     };
     const handleMapError = () => {
@@ -229,6 +238,10 @@ export default function SharedMap({
     map.on("move", handleCameraMove);
     map.on("moveend", handleCameraIdle);
     window.addEventListener("offline", handleOffline);
+    const resizeObserver = new ResizeObserver(() => {
+      if (!disposed) map.resize();
+    });
+    resizeObserver.observe(containerRef.current);
 
     if (!startsOffline) {
       styleLoadTimer = window.setTimeout(
@@ -246,6 +259,7 @@ export default function SharedMap({
       map.off("error", handleMapError);
       map.off("move", handleCameraMove);
       map.off("moveend", handleCameraIdle);
+      resizeObserver.disconnect();
       overlay?.setProps({ layers: [] });
       overlayRef.current = null;
       mapRef.current = null;

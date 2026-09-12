@@ -1,4 +1,4 @@
-import { CompassOutlined } from "@ant-design/icons";
+import { CompassOutlined, DesktopOutlined, MobileOutlined } from "@ant-design/icons";
 import { ScatterplotLayer } from "@deck.gl/layers";
 import { Alert, Button, Empty, Segmented, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -11,12 +11,14 @@ import { stationStatusLabels } from "../utils/formatters.js";
 import { getStationColor } from "../utils/mapPresentation.js";
 import {
   deriveServiceGrade,
+  isInRiderServiceArea,
   recommendNearbyStations,
   SERVICE_GRADES,
   walkDirectionsUrl,
 } from "../utils/riderStations.js";
 
 const FALLBACK_ORIGIN = { lat: 25.01427, lng: 121.46256 };
+const PHONE_UI_KEY = "rider-phone-ui";
 const INTENT_OPTIONS = [
   { value: "rent", label: "我要借車" },
   { value: "return", label: "我要還車" },
@@ -30,6 +32,28 @@ export default function RiderPage() {
   const [moving, setMoving] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [focusTarget, setFocusTarget] = useState(null);
+  const [locateNote, setLocateNote] = useState(null);
+  const [phoneUi, setPhoneUi] = useState(() => {
+    try {
+      return sessionStorage.getItem(PHONE_UI_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(PHONE_UI_KEY, phoneUi ? "1" : "0");
+    } catch {
+      /* ignore quota / private mode */
+    }
+    document.body.classList.toggle("rider-phone-preview", phoneUi);
+    return () => document.body.classList.remove("rider-phone-preview");
+  }, [phoneUi]);
+
+  useEffect(() => {
+    if (geo.locating) setLocateNote(null);
+  }, [geo.locating]);
 
   const stations = dashboard.data?.stations ?? [];
   const advice = useMemo(
@@ -40,13 +64,20 @@ export default function RiderPage() {
 
   useEffect(() => {
     if (!geo.coords) return;
+    const origin = { lat: geo.coords.lat, lng: geo.coords.lng };
+    if (!isInRiderServiceArea(origin, stations)) {
+      setLocateNote("定位落到新北／臺北服務範圍外（桌機常被 IP 判到外縣市），已留在地圖上，請改拖中心搜尋。");
+      return;
+    }
+    setLocateNote(null);
+    setSearchOrigin(origin);
     setFocusTarget({
-      id: `gps-${geo.coords.lat}-${geo.coords.lng}`,
-      longitude: geo.coords.lng,
-      latitude: geo.coords.lat,
-      zoom: 15,
+      id: `gps-${geo.coords.at ?? Date.now()}`,
+      longitude: origin.lng,
+      latitude: origin.lat,
+      zoom: 16,
     });
-  }, [geo.coords]);
+  }, [geo.coords, stations]);
 
   const onCameraMove = useCallback(() => setMoving(true), []);
   const onCameraIdle = useCallback(({ lat, lng }) => {
@@ -98,118 +129,146 @@ export default function RiderPage() {
     };
   };
 
-  return (
-    <div className="fixed-page rider-page">
-      <div className="rider-toolbar">
-        <div>
-          <Typography.Title level={3}>附近找車</Typography.Title>
+  const toolbar = (
+    <div className="rider-toolbar">
+      <div>
+        <Typography.Title level={phoneUi ? 4 : 3}>附近找車</Typography.Title>
+        {phoneUi ? null : (
           <Typography.Text type="secondary">
             把地圖中心對準要找的地方，停下來才會更新附近推薦。排序以步行距離為主，庫存與站點等級只做小幅參考。等級依站名與規模推估，與實際調度會有誤差。
           </Typography.Text>
-        </div>
-        <div className="rider-toolbar-actions">
-          <Segmented value={intent} options={INTENT_OPTIONS} onChange={setIntent} />
-          <Button icon={<CompassOutlined />} loading={geo.locating} onClick={geo.locate}>
-            回到我的位置
+        )}
+      </div>
+      <div className="rider-toolbar-actions">
+        <Segmented size={phoneUi ? "small" : "middle"} value={intent} options={INTENT_OPTIONS} onChange={setIntent} />
+        <Button size={phoneUi ? "small" : "middle"} icon={<CompassOutlined />} loading={geo.locating} onClick={geo.locate}>
+          {phoneUi ? "定位" : "回到我的位置"}
+        </Button>
+        {phoneUi ? null : (
+          <Button icon={<MobileOutlined />} onClick={() => setPhoneUi(true)}>
+            手機 UI
           </Button>
-        </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const main = (
+    <div className="rider-main">
+      <div className="rider-map">
+        <SharedMap
+          ariaLabel="附近 YouBike 站點地圖"
+          className="map-fill"
+          initialViewState={{
+            ...presentationConfig.maps.dashboard,
+            longitude: FALLBACK_ORIGIN.lng,
+            latitude: FALLBACK_ORIGIN.lat,
+            zoom: 14,
+          }}
+          focusTarget={focusTarget}
+          layers={layers}
+          getTooltip={getTooltip}
+          onCameraMove={onCameraMove}
+          onCameraIdle={onCameraIdle}
+          overlay={
+            <>
+              <div className="rider-legend">
+                <div className="rider-legend-title">站點等級</div>
+                {Object.values(SERVICE_GRADES).map((grade) => (
+                  <div key={grade.key} className="rider-legend-item">
+                    <span
+                      className={`rider-legend-dot rider-legend-${grade.key}`}
+                      style={{ background: `rgba(${grade.halo.join(",")})` }}
+                    />
+                    <span>
+                      {grade.label}
+                      <small>{grade.hint}</small>
+                    </span>
+                  </div>
+                ))}
+                {phoneUi ? null : (
+                  <div className="rider-legend-note">目前依站名與規模推估，與實際調度會有誤差。圖釘顏色仍是可借／可還狀態。</div>
+                )}
+              </div>
+              <div className={`rider-aim${moving ? " is-moving" : ""}`} aria-hidden="true">
+                <span className="rider-aim-range" />
+                <span className="rider-aim-pin" />
+                <span className="rider-aim-label">{moving ? "移動中，停下來再搜尋" : "以地圖中心搜尋"}</span>
+              </div>
+            </>
+          }
+        />
       </div>
 
-      {geo.error ? <Alert type="info" showIcon className="rider-banner" title={geo.error} /> : null}
-
-      <div className="rider-main">
-        <div className="rider-map">
-          <SharedMap
-            ariaLabel="附近 YouBike 站點地圖"
-            className="map-fill"
-            initialViewState={{
-              ...presentationConfig.maps.dashboard,
-              longitude: FALLBACK_ORIGIN.lng,
-              latitude: FALLBACK_ORIGIN.lat,
-              zoom: 14,
-            }}
-            focusTarget={focusTarget}
-            layers={layers}
-            getTooltip={getTooltip}
-            onCameraMove={onCameraMove}
-            onCameraIdle={onCameraIdle}
-            overlay={
-              <>
-                <div className="rider-legend">
-                  <div className="rider-legend-title">站點等級</div>
-                  {Object.values(SERVICE_GRADES).map((grade) => (
-                    <div key={grade.key} className="rider-legend-item">
-                      <span
-                        className={`rider-legend-dot rider-legend-${grade.key}`}
-                        style={{ background: `rgba(${grade.halo.join(",")})` }}
-                      />
-                      <span>
-                        {grade.label}
-                        <small>{grade.hint}</small>
-                      </span>
-                    </div>
+      <aside className="rider-list" aria-label="推薦站點">
+        {dashboard.loading && !stations.length ? (
+          <Empty description="站況載入中" />
+        ) : advice.items.length === 0 ? (
+          <Empty description={intent === "return" ? "附近暫時沒有可還車位" : "附近暫時沒有可借車輛"} />
+        ) : (
+          advice.items.map((row, index) => {
+            const href = walkDirectionsUrl(searchOrigin, row);
+            const active = selected?.station_id === row.station_id;
+            return (
+              <button
+                key={row.station_id}
+                type="button"
+                className={`rider-card${active ? " is-active" : ""}`}
+                onClick={() => setSelectedId(row.station_id)}
+              >
+                <div className="rider-card-head">
+                  <span className="rider-rank">{index + 1}</span>
+                  <strong>{row.station_name}</strong>
+                  <Tag color={row.grade.color}>{row.grade.label}</Tag>
+                </div>
+                <div className="rider-card-meta">
+                  {row.reasons.map((reason) => (
+                    <span key={reason}>{reason}</span>
                   ))}
-                  <div className="rider-legend-note">目前依站名與規模推估，與實際調度會有誤差。圖釘顏色仍是可借／可還狀態。</div>
                 </div>
-                <div className={`rider-aim${moving ? " is-moving" : ""}`} aria-hidden="true">
-                  <span className="rider-aim-range" />
-                  <span className="rider-aim-pin" />
-                  <span className="rider-aim-label">{moving ? "移動中，停下來再搜尋" : "以地圖中心搜尋"}</span>
-                </div>
-              </>
-            }
-          />
-        </div>
-
-        <aside className="rider-list" aria-label="推薦站點">
-          {dashboard.loading && !stations.length ? (
-            <Empty description="站況載入中" />
-          ) : advice.items.length === 0 ? (
-            <Empty description={intent === "return" ? "附近暫時沒有可還車位" : "附近暫時沒有可借車輛"} />
-          ) : (
-            advice.items.map((row, index) => {
-              const href = walkDirectionsUrl(searchOrigin, row);
-              const active = selected?.station_id === row.station_id;
-              return (
-                <button
-                  key={row.station_id}
-                  type="button"
-                  className={`rider-card${active ? " is-active" : ""}`}
-                  onClick={() => setSelectedId(row.station_id)}
-                >
-                  <div className="rider-card-head">
-                    <span className="rider-rank">{index + 1}</span>
-                    <strong>{row.station_name}</strong>
-                    <Tag color={row.grade.color}>{row.grade.label}</Tag>
+                {href ? (
+                  <div className="rider-card-actions">
+                    <Button size="small" type="primary" href={href} target="_blank" rel="noreferrer">
+                      步行導航
+                    </Button>
                   </div>
-                  <div className="rider-card-meta">
-                    {row.reasons.map((reason) => (
-                      <span key={reason}>{reason}</span>
-                    ))}
-                  </div>
-                  {href ? (
-                    <div className="rider-card-actions">
-                      <Button size="small" type="primary" href={href} target="_blank" rel="noreferrer">
-                        步行導航
-                      </Button>
-                    </div>
-                  ) : null}
-                </button>
-              );
-            })
-          )}
+                ) : null}
+              </button>
+            );
+          })
+        )}
 
-          {advice.unavailable.length ? (
-            <div className="rider-unavailable">
-              <Typography.Text type="secondary">附近目前不可用</Typography.Text>
-              {advice.unavailable.map((row) => (
-                <div key={row.station_id}>
-                  {row.station_name} · {row.grade.label} · 步行約 {row.walkMin} 分
-                </div>
-              ))}
-            </div>
+        {advice.unavailable.length ? (
+          <div className="rider-unavailable">
+            <Typography.Text type="secondary">附近目前不可用</Typography.Text>
+            {advice.unavailable.map((row) => (
+              <div key={row.station_id}>
+                {row.station_name} · {row.grade.label} · 步行約 {row.walkMin} 分
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </aside>
+    </div>
+  );
+
+  return (
+    <div className={`fixed-page rider-page${phoneUi ? " is-phone" : ""}`}>
+      {phoneUi ? (
+        <Button className="rider-phone-exit" icon={<DesktopOutlined />} onClick={() => setPhoneUi(false)}>
+          桌面 UI
+        </Button>
+      ) : null}
+      <div className={phoneUi ? "rider-phone-stage" : "rider-shell"}>
+        <div className={phoneUi ? "rider-phone" : "rider-shell-inner"}>
+          {phoneUi ? <div className="rider-phone-notch" aria-hidden="true" /> : null}
+          {toolbar}
+          {geo.error || locateNote ? (
+            <Alert type="info" showIcon className="rider-banner" title={geo.error || locateNote} />
           ) : null}
-        </aside>
+          {main}
+          {phoneUi ? <div className="rider-phone-home" aria-hidden="true" /> : null}
+        </div>
       </div>
     </div>
   );

@@ -329,6 +329,13 @@ body {
   inset: 0;
 }
 
+.shared-map .maplibregl-ctrl-top-right,
+.shared-map .maplibregl-ctrl-top-left,
+.shared-map .maplibregl-ctrl-bottom-right,
+.shared-map .maplibregl-ctrl-bottom-left {
+  z-index: 4;
+}
+
 .shared-map .maplibregl-ctrl-group {
   overflow: hidden;
   border: 1px solid var(--ct-border);
@@ -1408,6 +1415,13 @@ body {
   border-radius: 12px;
 }
 
+/* 右上解讀面板寬 340px，避免蓋住縮放／指南針／2D */
+.twin-page .maplibregl-ctrl-top-right {
+  top: 12px;
+  right: 364px;
+  z-index: 6;
+}
+
 .twin-agent {
   position: relative;
   flex: none;
@@ -1645,6 +1659,25 @@ body.twin-agent-dragging .shared-map {
   height: 11px;
   border-radius: 3px;
   box-shadow: 0 0 6px currentColor;
+}
+
+.twin-legend-ramp {
+  height: 10px;
+  border-radius: 999px;
+}
+
+.twin-legend-ramp-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  color: var(--ct-text-dim);
+  font-size: 10px;
+}
+
+.twin-legend-note {
+  margin-top: 6px;
+  color: var(--ct-text-dim);
+  font-size: 10px;
 }
 
 .twin-pending {
@@ -2082,6 +2115,142 @@ body.twin-agent-dragging .shared-map {
   }
 }
 
+.rider-shell,
+.rider-shell-inner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rider-phone-exit {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 30;
+}
+
+.rider-phone-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  background: color-mix(in srgb, var(--ct-bg) 70%, #000);
+}
+
+.rider-phone {
+  position: relative;
+  width: min(430px, 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  padding: 34px 0 0;
+  border: 0;
+  border-left: 3px solid color-mix(in srgb, var(--ct-border) 80%, #111);
+  border-right: 3px solid color-mix(in srgb, var(--ct-border) 80%, #111);
+  border-radius: 0;
+  background: var(--ct-bg);
+  box-shadow: 0 0 64px rgba(0, 0, 0, 0.35);
+}
+
+.rider-phone-notch {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 8;
+  width: 118px;
+  height: 22px;
+  border-radius: 999px;
+  background: #111;
+  transform: translateX(-50%);
+}
+
+.rider-phone-home {
+  flex: none;
+  height: 20px;
+  display: grid;
+  place-items: center;
+}
+
+.rider-phone-home::after {
+  content: "";
+  width: 108px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ct-text) 28%, transparent);
+}
+
+.rider-page.is-phone .rider-toolbar {
+  padding: 0 12px;
+  align-items: center;
+}
+
+.rider-page.is-phone .rider-toolbar h4.ant-typography,
+.rider-page.is-phone .rider-toolbar h3.ant-typography {
+  margin: 0;
+}
+
+.rider-page.is-phone .rider-banner {
+  margin: 0 12px;
+}
+
+.rider-page.is-phone .rider-main {
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr) minmax(210px, 38%);
+  gap: 0;
+}
+
+.rider-page.is-phone .rider-map {
+  border: 0;
+  border-radius: 0;
+}
+
+.rider-page.is-phone .rider-list {
+  padding: 10px 12px 8px;
+  background: var(--ct-panel);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 24px var(--ct-shadow);
+}
+
+.rider-page.is-phone .rider-legend {
+  top: 8px;
+  left: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.rider-page.is-phone .rider-legend-item small,
+.rider-page.is-phone .rider-legend-note {
+  display: none;
+}
+
+.rider-page.is-phone .rider-card {
+  padding: 10px 12px;
+}
+
+body.rider-phone-preview .topbar,
+body.rider-phone-preview .mock-notice {
+  display: none;
+}
+
+body.rider-phone-preview .page-content {
+  padding: 0;
+  overflow: hidden;
+}
+
+body.rider-phone-preview .app-shell {
+  height: 100dvh;
+}
+
+body.rider-phone-preview .rider-page {
+  height: 100%;
+  gap: 0;
+}
+
 @media (max-width: 760px) {
   .twin-page {
     flex-direction: column;
@@ -2108,6 +2277,10 @@ body.twin-agent-dragging .shared-map {
     bottom: 72px;
     width: min(340px, calc(100% - 24px));
     max-height: 36%;
+  }
+
+  .twin-page .maplibregl-ctrl-top-right {
+    right: 12px;
   }
 
   .twin-timebar {

@@ -7,7 +7,7 @@ import {
   buildSpatialIndex,
   degreeCentrality,
   getisOrdGiStar,
-  giStarClass,
+  giStarFillColor,
   nearestStationKm,
   stationPressure,
   stationsWithCoords,
@@ -185,7 +185,7 @@ export function createGiStarVoronoiLayer({ data, id = "gi-voronoi" }) {
     .map((station, index) => {
       const polygon = voronoi.cellPolygon(index);
       if (!polygon) return null;
-      return { station, polygon, cls: giStarClass(gi[index].z), z: gi[index].z };
+      return { station, polygon, z: gi[index].z };
     })
     .filter(Boolean);
 
@@ -195,8 +195,8 @@ export function createGiStarVoronoiLayer({ data, id = "gi-voronoi" }) {
     stroked: true,
     filled: true,
     getPolygon: (c) => c.polygon,
-    getFillColor: (c) => [...c.cls.color, 70],
-    getLineColor: [36, 49, 73, 200],
+    getFillColor: (c) => giStarFillColor(c.z),
+    getLineColor: [220, 228, 238, 80],
     getLineWidth: 1,
     lineWidthUnits: "pixels",
     pickable: false,

@@ -26,7 +26,7 @@ import presentationConfig from "../config/presentation.json";
 import useDashboardData from "../hooks/useDashboardData.js";
 import { stationStatusLabels } from "../utils/formatters.js";
 import { getStationColor } from "../utils/mapPresentation.js";
-import { giStarClass } from "../utils/spatialStats.js";
+import { GI_STAR_RAMP } from "../utils/spatialStats.js";
 import { buildHeadline, buildTwinInsights, pickObservedAt } from "../utils/twinInsights.js";
 import { buildTwinView, pickTimelineFrame } from "../utils/twinSnapshot.js";
 
@@ -44,7 +44,7 @@ const DATA_MODE_TAG = {
   pending: { color: "default", text: "待接資料" },
 };
 
-const GI_LEGEND = [2.58, 1.96, 0, -1.96, -2.58].map((z) => giStarClass(z));
+const GI_RAMP_CSS = GI_STAR_RAMP.map(([, color]) => `rgb(${color.join(",")})`).join(", ");
 
 export default function TwinPage() {
   const dashboard = useDashboardData({ lite: true });
@@ -229,13 +229,14 @@ export default function TwinPage() {
 
         {active.includes("voronoi") ? (
           <div className="twin-legend">
-            <div className="twin-legend-title">Gi* 熱點顯著性</div>
-            {GI_LEGEND.map((c) => (
-              <span key={c.key} className="twin-legend-item">
-                <span className="twin-legend-dot" style={{ background: `rgb(${c.color.join(",")})` }} />
-                {c.label}
-              </span>
-            ))}
+            <div className="twin-legend-title">Gi* z 值（鄰近壓力）</div>
+            <div className="twin-legend-ramp" style={{ background: `linear-gradient(90deg, ${GI_RAMP_CSS})` }} />
+            <div className="twin-legend-ramp-labels">
+              <span>冷點</span>
+              <span>接近平均</span>
+              <span>熱點</span>
+            </div>
+            <div className="twin-legend-note">顏色依 z 連續漸層；|z|≥1.96 才算顯著，見右側解讀。</div>
           </div>
         ) : null}
 

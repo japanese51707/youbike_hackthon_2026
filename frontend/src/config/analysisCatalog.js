@@ -28,8 +28,8 @@ export const ANALYSIS_CATALOG = [
     name: "勢力範圍（Voronoi）＋熱點顯著性",
     discipline: "空間統計",
     dataMode: "method",
-    purpose: "每站服務領域＋是否為顯著熱點",
-    info: "Voronoi（泰森多邊形）把地圖切成每個站點負責的「勢力範圍」。再用 Getis-Ord Gi* 熱點統計，判斷某站及其鄰近是否形成統計上顯著的高壓熱點或低壓冷點。站數達 50 以上改標實算；少於 50 仍只是方法展示。",
+    purpose: "每站服務領域＋壓力群聚強度",
+    info: "Voronoi（泰森多邊形）把地圖切成每個站點負責的「勢力範圍」。顏色依 Getis-Ord Gi* 的 z 值連續漸層：越紅表示鄰近壓力越高、越藍越低、灰代表接近全市平均。右側解讀仍用 |z|≥1.96／2.58 算顯著熱冷點。站數達 50 以上改標實算；少於 50 仍只是方法展示。",
   },
   {
     key: "density",
