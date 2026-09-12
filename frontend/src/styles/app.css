@@ -3800,7 +3800,7 @@ body.rider-phone-preview .rider-page {
   white-space: nowrap;
 }
 
-/* 分派任務狀況：站點卡的三個水位數字 + 點擊開路線地圖（ADR-324） */
+/* 分派任務狀況：站點卡的三個水位數字 + 點擊開路線地圖（ADR-329） */
 .dts-stop.clickable { cursor: pointer; }
 .dts-stop.clickable:hover { background: var(--ct-bg-soft); }
 .dts-stop.clickable:focus-visible { outline: 2px solid var(--ct-accent); outline-offset: -2px; }

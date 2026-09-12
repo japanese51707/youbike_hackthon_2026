@@ -61,7 +61,7 @@ function StatusDot({ map, value }) {
   return <Tag color={meta.color}>{meta.label}</Tag>;
 }
 
-// ── 點站點卡跳出的路線地圖（ADR-324）──
+// ── 點站點卡跳出的路線地圖（ADR-329）──
 // 調度員看到某站落後時，第一個想知道的是「車現在在哪、還要跑幾站才到這裡」。
 // 用任務既有的停靠順序畫實走道路路線，並把被點的那站標成焦點。
 function RouteMapModal({ task, focusStationId, onClose }) {
@@ -196,7 +196,7 @@ function TaskCard({ task, now, onOpenMap }) {
         {route.map((s, i) => {
           const isDone = s.station_status === "completed";
           const isRemoved = s.station_status === "removed";
-            // 當下站況優先用後端補的 live_*（ADR-324）；拿不到才退回組單當下的快照
+            // 當下站況優先用後端補的 live_*（ADR-329）；拿不到才退回組單當下的快照
             const bikes = Number.isFinite(Number(s.live_available_bikes))
               ? Number(s.live_available_bikes)
               : Number(s.current_available);
@@ -325,7 +325,7 @@ function ShiftPanel({ operators, depotOperators }) {
 }
 
 export default function DispatchStatusPage() {
-  // ADR-324：點站點卡開路線地圖
+  // ADR-329：點站點卡開路線地圖
   const [routeMap, setRouteMap] = useState(null);
   const openRouteMap = (task, stationId) => setRouteMap({ task, stationId });
   const { data, error, loading, reload } = useDispatchStatus();

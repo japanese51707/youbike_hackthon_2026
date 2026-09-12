@@ -615,7 +615,7 @@ def _persist_trip_atomic(trip: dict) -> None:
         "estimated_total_minutes": feasibility.get("est_total_min"),
         "onboard_start": feasibility.get("onboard_start"),
         "onboard_planned_end": feasibility.get("onboard_end"),
-        # ADR-324：從總部裝車出發的趟次，把「在總部裝幾台」一起存進任務。
+        # ADR-329：從總部裝車出發的趟次，把「在總部裝幾台」一起存進任務。
         # 這是這趟的車源（取代趟內取車站），司機端要當成第 0 步顯示，
         # 否則他只會看到一堆補車站，不知道車從哪來、要裝多少。
         "depot_load": trip.get("depot_load"),

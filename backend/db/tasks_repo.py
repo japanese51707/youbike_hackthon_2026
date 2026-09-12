@@ -30,7 +30,7 @@ def _now() -> str:
 def _to_row(task: dict) -> dict:
     row = {c: task.get(c) for c in _COLUMNS}
     row["route_json"] = json.dumps(task.get("route", []), ensure_ascii=False)
-    # ADR-324：從總部裝車出發的裝車指示（車源不在趟內取車站，而在總部）。
+    # ADR-329：從總部裝車出發的裝車指示（車源不在趟內取車站，而在總部）。
     # 存 JSON 字串，沒有就存 NULL。
     depot_load = task.get("depot_load")
     row["depot_load_json"] = (json.dumps(depot_load, ensure_ascii=False)

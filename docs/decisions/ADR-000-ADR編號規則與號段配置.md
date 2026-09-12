@@ -126,6 +126,7 @@ superseded-by:
 | ADR-326 | 空滿時計獨立行程與專用庫（service_clock.db + 非 reload worker；原編 320 讓號） | accepted |
 | ADR-327 | 雲端空滿時計獨立收集與 EFS 共用庫（第二個 ECS + 網站只讀；原編 321 讓號） | accepted |
 | ADR-328 | 近 24 小時站況快照背景收集（完整站況入庫，逾窗刪） | accepted |
+| ADR-329 | 一趟取補組成、總部裝車與站點卡水位（一趟必有車源與去處；depot_load；站況現況+路線地圖；原編 324 讓號） | accepted |
 | ADR-311 | 戰情室 Bedrock 顧問代理（advisory-only，後端代理） | accepted |
 
 ### 取號流程（新增 ADR 前必做）

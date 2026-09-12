@@ -44,7 +44,7 @@ def _fill_station_targets(stations: list[dict]) -> None:
 
 def _ensure_trip_composition(stations, dispatch_list, extra_collectors, cfg,
                              capacity, start_lat, start_lng, onboard=0):
-    """ADR-324：一趟必須同時有「車源」與「去處」，否則那張單做不完。
+    """ADR-329：一趟必須同時有「車源」與「去處」，否則那張單做不完。
 
     現況會產出兩種做不完的單：
       - 只有補車站：車上沒車、沿途也沒安排取車 → 到了站沒東西可放。
@@ -367,7 +367,7 @@ def build_from_station(
         start_lng=tentative_veh.get("current_lng") if tentative_veh else None,
         extra_collectors=cross_collectors)
 
-    # ADR-324：補齊「只有取車」或「只有補車」的殘缺趟次（一趟要有車源也要有去處）
+    # ADR-329：補齊「只有取車」或「只有補車」的殘缺趟次（一趟要有車源也要有去處）
     stations, _composition_added = _ensure_trip_composition(
         stations, dispatch_list, cross_collectors, cfg, cap,
         tentative_veh.get("current_lat") if tentative_veh else seed.get("lat"),

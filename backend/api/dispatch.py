@@ -127,7 +127,7 @@ def claim_map(district: str | None = None):
 
 
 def _attach_live_station_status(tasks: list[dict]) -> None:
-    """ADR-324：把每個停靠站的「當下站況」補進任務路線（就地修改）。
+    """ADR-329：把每個停靠站的「當下站況」補進任務路線（就地修改）。
 
     路線裡的 current_available 是**組單當下**的快照，不是現在。調度員盯著進行中任務
     要看的是「這站現在有幾台車、還有幾個空位、目標補到幾台」，三個數字缺一不可：
