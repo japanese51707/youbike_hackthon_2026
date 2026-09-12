@@ -3417,3 +3417,20 @@ body.rider-phone-preview .rider-page {
   font-size: 12px;
 }
 .dts-chip .ant-tag { margin: 0; }
+
+/* 地圖上「沒有站點」的輕量提示（ADR-322）：不取代地圖，只疊在上面 */
+.map-empty-notice {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--ct-overlay);
+  border: 1px solid var(--ct-border);
+  color: var(--ct-text-dim);
+  font-size: 12px;
+  pointer-events: none;
+  white-space: nowrap;
+}

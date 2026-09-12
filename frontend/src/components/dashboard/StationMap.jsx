@@ -1,4 +1,4 @@
-import { Card, Checkbox, Empty } from "antd";
+import { Card, Checkbox } from "antd";
 import { ScatterplotLayer } from "@deck.gl/layers";
 import { useCallback, useMemo, useState } from "react";
 import SharedMap from "../map/SharedMap.jsx";
@@ -228,13 +228,11 @@ export default function StationMap({
     };
   }, []);
 
-  if (!stations.length) {
-    return (
-      <Card className="map-card">
-        <Empty description="目前篩選沒有站點" />
-      </Card>
-    );
-  }
+  // 沒有站點時不要把地圖整個換掉——調度員需要地圖一直在那裡當空間參考，
+  // 只是上面沒有標示而已。改成疊一張輕量提示（ADR-322）。
+  const emptyNotice = stations.length ? null : (
+    <div className="map-empty-notice">目前篩選沒有站點</div>
+  );
 
   return (
     <Card className="map-card" styles={{ body: { padding: 0, height: "100%" } }}>
@@ -244,7 +242,7 @@ export default function StationMap({
         initialViewState={presentationConfig.maps.dashboard}
         layers={layers}
         getTooltip={getTooltip}
-        overlay={<><StationLegend dimension={dimension} />{layerControl}</>}
+        overlay={<><StationLegend dimension={dimension} />{layerControl}{emptyNotice}</>}
         focusTarget={focus}
       />
     </Card>

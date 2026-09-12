@@ -33,6 +33,11 @@ COORDINATION_LOCK = threading.Lock()
 # True/False＝管理員 runtime 覆寫。背景 thread 恆在跑，每輪先看這個開關決定要不要配。
 _runtime_enabled: Optional[bool] = None
 
+# ADR-322：上一輪的診斷。原本配不出來時只回「本輪無可配的緊急站」，
+# 但那句話涵蓋了六種完全不同的原因（開關關著／級別過濾光了／站被認領／
+# 無車／無人／可行性被擋），害人只能瞎猜。這裡逐項記下來給後台看。
+_last_diagnostics: dict = {}
+
 
 def _cfg() -> dict:
     from config_loader import get_config
@@ -114,7 +119,11 @@ def scan_once() -> list[dict]:
     from core.task_execution import station_claim_map
 
     # ADR-320：後台開關關閉時，本輪不配（背景 thread 仍在跑，開關可即時再開）。
+    global _last_diagnostics
+    diag: dict = {"enabled": is_enabled(), "reasons": {}}
     if not is_enabled():
+        diag["stopped_because"] = "自動配單開關為關閉"
+        _last_diagnostics = diag
         return []
 
     cfg = _cfg()
@@ -130,8 +139,39 @@ def scan_once() -> list[dict]:
     with COORDINATION_LOCK:
         recs = _current_dispatch_list()
         # 已被進行中任務認領的站 + 人工手動預覽/草稿佔用的站 → 這輪都避開
-        skip_ids = set(station_claim_map().keys()) | active_draft_station_ids()
+        claimed = set(station_claim_map().keys())
+        drafted = active_draft_station_ids()
+        skip_ids = claimed | drafted
         queue = _eligible_queue(recs, skip_ids, levels)
+
+        fp = get_fleet_provider()
+        from core.providers import get_operator_provider
+        opp = get_operator_provider()
+        by_level: dict[str, int] = {}
+        for r in recs:
+            key = str(r.get("priority_level") or "unknown")
+            by_level[key] = by_level.get(key, 0) + 1
+        diag.update({
+            "dispatch_total": len(recs),
+            "by_level": by_level,
+            "level_filter": sorted(levels) if levels else "全部",
+            "skipped_claimed": len(claimed),
+            "skipped_draft": len(drafted),
+            "eligible": len(queue),
+            "vehicles_available": len(fp.available_vehicles()),
+            "vehicles_depot_standby": len(fp.depot_standby_vehicles()),
+            "operators_assignable": len(opp.assignable_operators()),
+            "operators_depot_standby": len(opp.depot_standby_operators()),
+        })
+        if not queue:
+            if not recs:
+                diag["stopped_because"] = "目前沒有任何需調度站"
+            elif levels:
+                diag["stopped_because"] = (
+                    f"需調度 {len(recs)} 站，但只配 {sorted(levels)} 級別；"
+                    f"各級別數量：{by_level}。放寬 config auto_dispatch.只配緊急級別 即可納入")
+            else:
+                diag["stopped_because"] = "需調度站全數已被任務認領或人工草稿佔用"
 
         placed: list[dict] = []
         # 同輪內就地累積「已配站」：一張單可能一次涵蓋多站（車源階梯會拉入取車站/鄰近補車站），
@@ -143,6 +183,7 @@ def scan_once() -> list[dict]:
             # ADR-320：沒有閒置車可出勤就「停止本輪」自動配單，等下一輪（5 分鐘後）再偵測。
             # 車隊已無可派車時，繼續掃其他站也配不出來，直接結束本輪最省。
             if not _has_available_vehicle():
+                diag["stopped_because"] = "車隊已無可出勤的車（一般閒置車與總站待命車皆為 0）"
                 break
             seed_id = str(rec.get("station_id"))
             if seed_id in consumed:
@@ -153,13 +194,16 @@ def scan_once() -> list[dict]:
                 draft = dispatch_builder.build_from_station(
                     seed_id, pool, operator_id=None, created_by=operator_id)
                 if draft.get("error") or not draft.get("stations"):
+                    _tally(diag, "組不出站點")
                     consumed.add(seed_id)  # 這站這輪組不出單，先擱著，避免卡住佇列
                     continue
                 if draft.get("blocking_reasons"):
                     # 有阻擋（無足夠人車/工時/重疊等）→ 這輪配不了，換下一站
+                    _tally(diag, draft["blocking_reasons"][0].get("message", "可行性被擋"))
                     consumed.add(seed_id)
                     continue
                 if not (draft.get("assigned_vehicle") and draft.get("assigned_operator")):
+                    _tally(diag, "無可用車" if not draft.get("assigned_vehicle") else "無可用人員")
                     consumed.add(seed_id)  # 無可用車或人，換下一站
                     continue
                 result = confirm({"draft_id": draft["draft_id"], "version": draft["version"]},
@@ -175,14 +219,24 @@ def scan_once() -> list[dict]:
                     "operator": draft.get("assigned_operator"),
                     "priority_level": rec.get("priority_level"),
                 })
-            except (DispatchConflict, DispatchForbidden, KeyError):
+            except (DispatchConflict, DispatchForbidden, KeyError) as exc:
                 # 站/車/人被搶或狀態已變：略過這站，換下一筆
+                _tally(diag, f"資源衝突：{exc}")
                 consumed.add(seed_id)
                 continue
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
+                _tally(diag, f"{type(exc).__name__}: {exc}")
                 consumed.add(seed_id)
                 continue
+        diag["placed"] = len(placed)
+        _last_diagnostics = diag
         return placed
+
+
+def _tally(diag: dict, reason: str) -> None:
+    """累計「這一輪為什麼配不出去」的原因次數（訊息過長時截斷）。"""
+    key = (reason or "未知")[:80]
+    diag["reasons"][key] = diag["reasons"].get(key, 0) + 1
 
 
 # ── 背景輪詢迴圈（daemon thread；main.py lifespan 啟動）──
@@ -216,6 +270,7 @@ def run_status() -> dict:
         "next_run_at": _next_run_at,
         "last_run_at": _last_run_at,
         "last_placed_count": _last_placed_count,
+        "diagnostics": dict(_last_diagnostics),
     }
 
 
@@ -233,7 +288,8 @@ def run_now() -> dict:
         _wakeup.set()
     else:
         _set_next_run(float(_cfg().get("輪詢間隔_秒", 300)))
-    return {"placed_count": len(placed), "placed": placed, "enabled": is_enabled()}
+    return {"placed_count": len(placed), "placed": placed, "enabled": is_enabled(),
+            "diagnostics": dict(_last_diagnostics)}
 
 
 def _loop(interval_sec: float, stop_event: threading.Event, wakeup: threading.Event) -> None:

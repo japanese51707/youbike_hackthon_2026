@@ -69,28 +69,48 @@ def stop_quantity(stop: dict) -> int:
     return 0
 
 
+def vehicle_is_idle(vehicle: Optional[dict]) -> bool:
+    """車在場站待命、身上沒有任務。
+
+    這種車不可能載著車：上一趟結案時載量已被推算寫回並釋放（ADR-123），
+    沒有任務又可派遣，就是空車停著。
+    """
+    if not vehicle:
+        return False
+    return (not vehicle.get("current_task_id")
+            and str(vehicle.get("status") or "") in {"available", "standby"})
+
+
 def onboard_start_of(vehicle: Optional[dict], cfg: dict, now: Optional[_dt.datetime] = None):
-    """車輛出車時的車上台數。回 (值或 None, 阻擋原因 list)。
+    """車輛出車時的車上台數。回 (值或 None, 阻擋原因 list, 是否為系統推定)。
 
     ADR-123 §1：未知不得當成 0；觀測過期同樣不可用。
+
+    例外（ADR-321）：「閒置且無任務」不是未知——車停在場站、上一趟已結案釋放，
+    載量就是 0。把這種情況標成**系統推定**而非阻擋，讓它出得了車，
+    同時在草稿上明講「出車前請司機確認」。不這樣做的話，從未回報過的車
+    （seed 出來的 41 台全部如此）永遠配不出任何一張單。
     """
     reasons: list[dict] = []
     if not vehicle:
-        return None, [_reason("missing_vehicle", "尚未指定調度車，無法檢查載量")]
+        return None, [_reason("missing_vehicle", "尚未指定調度車，無法檢查載量")], False
     raw = vehicle.get("onboard_bikes")
     if raw is None:
+        assume_idle_zero = bool((cfg.get("fleet", {}) or {}).get("閒置車未回報視為零", True))
+        if assume_idle_zero and vehicle_is_idle(vehicle):
+            return 0, [], True
         return None, [_reason(
             "vehicle_onboard_unknown",
             f"車輛 {vehicle.get('vehicle_id')} 尚未回報車上台數，無法確認載量是否足夠；"
-            f"請先回報後再確認派工")]
+            f"請先回報後再確認派工")], False
     try:
         onboard = int(raw)
     except (TypeError, ValueError):
         return None, [_reason("vehicle_onboard_unknown",
-                              f"車輛 {vehicle.get('vehicle_id')} 的車上台數不是整數，視為未知")]
+                              f"車輛 {vehicle.get('vehicle_id')} 的車上台數不是整數，視為未知")], False
     if onboard < 0:
         return None, [_reason("vehicle_onboard_unknown",
-                              f"車輛 {vehicle.get('vehicle_id')} 的車上台數為負值，視為未知")]
+                              f"車輛 {vehicle.get('vehicle_id')} 的車上台數為負值，視為未知")], False
 
     max_age = int(cfg.get("fleet", {}).get("車上載量有效期_分鐘", 240))
     observed = _naive(_parse_ts(vehicle.get("onboard_observed_at")))
@@ -106,7 +126,7 @@ def onboard_start_of(vehicle: Optional[dict], cfg: dict, now: Optional[_dt.datet
                 f"車輛 {vehicle.get('vehicle_id')} 的車上台數回報於 {age_min:.0f} 分鐘前，"
                 f"超過有效期 {max_age} 分鐘，請重新回報",
                 age_minutes=round(age_min, 1)))
-    return onboard, reasons
+    return onboard, reasons, False
 
 
 def build_load_plan(
@@ -116,8 +136,13 @@ def build_load_plan(
     start_lat=None,
     start_lng=None,
     now: Optional[_dt.datetime] = None,
-) -> tuple[list[dict], list[dict], Optional[int]]:
-    """依既定順序算逐站到達時間、對應視野與車上載量。回 (plan, reasons, onboard_end)。"""
+    onboard_override: Optional[int] = None,
+) -> tuple[list[dict], list[dict], Optional[int], bool]:
+    """依既定順序算逐站到達時間、對應視野與車上載量。
+
+    回 (plan, reasons, onboard_end, onboard_assumed)。
+    onboard_override：本趟出發前會先在總部裝車（ADR-321）時，用裝完的台數當起始載量。
+    """
     from .dispatcher import _default_capacity, _haversine_km
 
     reasons: list[dict] = []
@@ -126,9 +151,14 @@ def build_load_plan(
     per_stop = float(travel.get("每站搬運_分鐘", 5))
     capacity = int((vehicle or {}).get("max_capacity") or _default_capacity(cfg))
 
-    onboard, load_reasons = onboard_start_of(vehicle, cfg, now)
+    if onboard_override is not None:
+        onboard, load_reasons, assumed = int(onboard_override), [], False
+    else:
+        onboard, load_reasons, assumed = onboard_start_of(vehicle, cfg, now)
     reasons.extend(load_reasons)
     known_load = onboard is not None
+    # ADR-322：允許部分補車——先取後放放不滿安全水位仍算完成，不當成阻擋。
+    allow_partial = bool((cfg.get("fleet", {}) or {}).get("允許部分補車", True))
     running = onboard if known_load else 0
 
     plan: list[dict] = []
@@ -147,10 +177,26 @@ def build_load_plan(
         qty = stop_quantity(stop)
         action = stop.get("action")
         before = running
+        delivered = None
+        shortfall = 0
         if action == "取車":
             running = before + qty
         elif action == "補車":
-            running = before - qty
+            # ADR-322 部分補車：車上不夠不是失敗。先取後放本來就可能放不滿安全水位，
+            # 有補到就是完成——把「放不滿」從阻擋降級為「這站補 N 台（需求 M 台）」。
+            # 只有一台都放不出來時才真的擋下來。
+            if known_load and allow_partial and qty > max(before, 0):
+                delivered = max(before, 0)
+                shortfall = qty - delivered
+                running = before - delivered
+                if delivered <= 0:
+                    reasons.append(_reason(
+                        "no_bikes_to_deliver",
+                        f"第 {seq} 站 {stop.get('station_id')} 要補 {qty} 台，但抵達時車上 0 台，"
+                        f"本趟無車可放",
+                        station_id=stop.get("station_id"), quantity=qty))
+            else:
+                running = before - qty
         else:
             reasons.append(_reason(
                 "invalid_action",
@@ -182,7 +228,14 @@ def build_load_plan(
             "beyond_forecast_horizon": bool(beyond),
             "onboard_before": before if known_load else None,
             "onboard_after": running if known_load else None,
+            # ADR-322：實際可補台數與差額（delivered 為 None 代表足額，無需區分）
+            "delivered_quantity": qty if delivered is None else delivered,
+            "shortfall_quantity": int(shortfall),
         }
+        if delivered is not None and avail_bikes is not None:
+            # 放不滿時，該站的實際目標水位跟著下修，否則自動偵測完成（ADR-310）
+            # 會永遠等不到一個到不了的目標，任務結不了案。
+            entry["target_available"] = float(int(avail_bikes) + delivered)
         plan.append(entry)
 
         if beyond:
@@ -204,7 +257,7 @@ def build_load_plan(
                 f"但到站時車上只有 {before} 台",
                 station_id=stop.get("station_id"), onboard_before=before, quantity=qty))
 
-    return plan, reasons, (running if known_load else None)
+    return plan, reasons, (running if known_load else None), assumed
 
 
 def _shift_reasons(stations: list[dict], mode: Optional[str],
@@ -299,6 +352,7 @@ def evaluate_feasibility(
     est_total_min: Optional[float] = None,
     exclude_task: Optional[str] = None,
     check_resources: bool = True,
+    onboard_override: Optional[int] = None,
 ) -> dict:
     """評估一趟是否可執行。預覽與確認共用（ADR-304 §1）。
 
@@ -306,8 +360,9 @@ def evaluate_feasibility(
     回傳 {load_plan, blocking_reasons, onboard_start, onboard_end, est_total_min}。
     """
     cfg = config or get_config()
-    plan, reasons, onboard_end = build_load_plan(
-        stations, vehicle, cfg, start_lat, start_lng, now)
+    plan, reasons, onboard_end, onboard_assumed = build_load_plan(
+        stations, vehicle, cfg, start_lat, start_lng, now,
+        onboard_override=onboard_override)
 
     if est_total_min is None:
         per_stop = float(cfg.get("travel", {}).get("每站搬運_分鐘", 5))
@@ -336,6 +391,9 @@ def evaluate_feasibility(
         "onboard_start": onboard_start,
         "onboard_end": onboard_end,
         "est_total_min": round(float(est_total_min), 1),
+        # ADR-321：載量是系統推定（閒置車未回報→視為 0）而非司機回報。
+        # 不阻擋出車，但草稿/司機端要標明「出車前請確認」。
+        "onboard_assumed": bool(onboard_assumed),
         "capacity": int((vehicle or {}).get("max_capacity") or 0) or None,
     }
 

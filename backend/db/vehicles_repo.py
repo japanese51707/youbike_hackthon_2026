@@ -165,9 +165,14 @@ def set_reserve_fleet(reserve_ratio: float = 0.12) -> int:
 
     以 vehicle_id 排序取末段 ceil(總數×比例) 台設為 standby，其餘設回 available（冪等）。
     回傳設為 standby 的車數。
+
+    ★總站待命車（is_depot）不參與保留率計算：它本來就是獨立的支援池（ADR-119），
+      而且 "DEPOT-*" 字母序排在 "CAR-*" 之後，若一併排序會剛好整批被劃進末段 standby，
+      使 depot_standby_vehicles()（要求 status=="available"）永遠回空。
     """
     import math
-    all_v = sorted(list_vehicles(active_only=True), key=lambda v: v["vehicle_id"])
+    all_v = sorted([v for v in list_vehicles(active_only=True) if not v.get("is_depot")],
+                   key=lambda v: v["vehicle_id"])
     n_reserve = math.ceil(len(all_v) * reserve_ratio)
     reserve_ids = {v["vehicle_id"] for v in all_v[-n_reserve:]} if n_reserve > 0 else set()
     for v in all_v:

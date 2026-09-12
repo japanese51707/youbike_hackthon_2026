@@ -6,6 +6,7 @@ import pytest
 
 from core import dispatch_builder, task_execution
 from core.dispatch_errors import DispatchConflict
+from config_loader import get_config
 from core.dispatch_feasibility import evaluate_feasibility, first_blocking_message
 from db import operators_repo, tasks_repo, vehicles_repo
 from tests.conftest import OP_DISPATCHER, put_drivers_on_duty
@@ -78,10 +79,38 @@ def test_total_within_capacity_but_midway_overflow_is_blocked():
     assert result["load_plan"][1]["onboard_after"] == 17
 
 
-def test_supply_without_enough_onboard_is_blocked():
+def test_supply_without_enough_onboard_delivers_partially(): 
+    """ADR-322：車上不夠不是失敗——放多少算多少，不阻擋。
+
+    取代舊的 test_supply_without_enough_onboard_is_blocked：先取後放本來就可能
+    放不滿安全水位，有補到就是完成。原本判 load_below_zero 會讓這種單全部配不出去。
+    """
     stops = [_stop("S1", "補車", 8, 1)]
     result = evaluate_feasibility(stops, _vehicle(onboard=5), _operator(),
                                   now=NOW, check_resources=False)
+    assert result["blocking_reasons"] == []
+    entry = result["load_plan"][0]
+    assert entry["delivered_quantity"] == 5      # 車上只有 5 台，就補 5 台
+    assert entry["shortfall_quantity"] == 3      # 差額誠實記錄下來
+    assert entry["onboard_after"] == 0
+    assert result["onboard_end"] == 0
+
+
+def test_supply_with_zero_onboard_is_still_blocked():
+    """一台都沒有時仍要擋：那趟真的白跑，不該讓它出車。"""
+    stops = [_stop("S1", "補車", 8, 1)]
+    result = evaluate_feasibility(stops, _vehicle(onboard=0), _operator(),
+                                  now=NOW, check_resources=False)
+    assert "no_bikes_to_deliver" in _codes(result)
+
+
+def test_partial_delivery_can_be_disabled_by_config():
+    """關掉 允許部分補車 時回到舊行為（載量守恆嚴格模式）。"""
+    cfg = dict(get_config())
+    cfg["fleet"] = {**cfg.get("fleet", {}), "允許部分補車": False}
+    stops = [_stop("S1", "補車", 8, 1)]
+    result = evaluate_feasibility(stops, _vehicle(onboard=5), _operator(),
+                                  now=NOW, check_resources=False, config=cfg)
     assert "load_below_zero" in _codes(result)
 
 
@@ -182,7 +211,10 @@ def test_preview_reports_blocking_and_confirm_refuses_the_same(client, pool):
                                              operator_id="OP-004", created_by="OP-002")
     assert draft["blocking_reasons"], "預覽就該回報阻擋原因"
     codes = {r["code"] for r in draft["blocking_reasons"]}
-    assert codes == {"load_below_zero", "total_quantity_exceeds_capacity"}
+    # ADR-322：載量不足改判部分補車，不再產生 load_below_zero。
+    # 這趟兩站都是補車：第一站把車上 7 台放完，第二站抵達時一台都沒有
+    # → no_bikes_to_deliver（真的白跑，該擋）。總量超過車容量的硬限制也不變。
+    assert codes == {"no_bikes_to_deliver", "total_quantity_exceeds_capacity"}
     assert draft["load_plan"][0]["onboard_before"] == 7     # conftest 慣例：半載
     result = client.post("/api/v1/dispatch/confirm-trip",
                          json={"draft_id": draft["draft_id"], "version": draft["version"]},

@@ -57,6 +57,44 @@ def _validate_person(operator, exclude, role):
         raise DispatchConflict(f"{role}已有任務")
 
 
+# ── ADR-323：預覽→確認之間的資源狀態快照比對 ──────────────────────────
+# 草稿是對「當下的人車狀態」算出來的。如果預覽之後那個人被停用、改角色、
+# 轉去休息，或那台車被改容量/改狀態，這張草稿的前提就不成立了，必須重新預覽。
+#
+# 注意：不能只靠「這個狀態合不合法」來擋。司機 off_duty 是合法可派的
+# （ADR-114：司機不常態待命，派到任務當下才上工），所以 on_duty → off_duty
+# 用合法性檢查抓不到——但它確實是預覽之後的改變，一樣要擋。
+SNAPSHOT_OPERATOR_FIELDS = ("status", "is_active", "role_type")
+SNAPSHOT_VEHICLE_FIELDS = ("status", "is_active", "max_capacity")
+
+
+def _norm(value):
+    """DB 與記憶體之間 bool/int 表示不一致（is_active 可能是 1 或 True），先正規化再比。"""
+    if isinstance(value, bool):
+        return int(value)
+    return value
+
+
+def snapshot_of(entity, fields):
+    """擷取要比對的欄位；entity 為 None（例如沒有隨車）時回 None。"""
+    if not entity:
+        return None
+    return {field: _norm(entity.get(field)) for field in fields}
+
+
+def ensure_unchanged(snapshot, current, fields, label):
+    """快照與現況不符就擋下。沒有快照（舊草稿）時不檢查，維持相容。"""
+    if not snapshot:
+        return
+    if not current:
+        raise DispatchConflict(f"{label}在預覽後已不存在，請重新預覽")
+    for field in fields:
+        if _norm(current.get(field)) != snapshot.get(field):
+            raise DispatchConflict(
+                f"{label}的 {field} 在預覽後已改變"
+                f"（{snapshot.get(field)} → {_norm(current.get(field))}），請重新預覽")
+
+
 def validate_resources(trip, exclude=None):
     """驗證車 + 司機（+ 可選隨車 ADR-308）。回傳 (vehicle, operator, escort)；無隨車時 escort=None。"""
     vehicle = vehicles_repo.get_vehicle(trip.get("assigned_vehicle"))
@@ -68,6 +106,11 @@ def validate_resources(trip, exclude=None):
         raise DispatchConflict("車輛已有任務")
     _validate_person(operator, exclude, "司機")
 
+    # ADR-323：合法性通過還不夠——還要跟預覽當下的快照一致。
+    snapshot = trip.get("resource_snapshot") or {}
+    ensure_unchanged(snapshot.get("vehicle"), vehicle, SNAPSHOT_VEHICLE_FIELDS, "車輛")
+    ensure_unchanged(snapshot.get("operator"), operator, SNAPSHOT_OPERATOR_FIELDS, "司機")
+
     # ADR-308 隨車（可選第二名）：同樣可派、且不可與司機同一人。
     escort = None
     escort_id = trip.get("assigned_escort")
@@ -76,6 +119,7 @@ def validate_resources(trip, exclude=None):
             raise DispatchConflict("司機與隨車不可為同一人")
         escort = operators_repo.get_operator(escort_id)
         _validate_person(escort, exclude, "隨車人員")
+        ensure_unchanged(snapshot.get("escort"), escort, SNAPSHOT_OPERATOR_FIELDS, "隨車人員")
 
     occupied_people = {operator["operator_id"]}
     if escort:
