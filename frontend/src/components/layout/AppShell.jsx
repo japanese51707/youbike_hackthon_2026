@@ -1,5 +1,5 @@
 import {
-  AlertOutlined,
+  ProfileOutlined,
   BarChartOutlined,
   DashboardOutlined,
   DeploymentUnitOutlined,
@@ -7,7 +7,7 @@ import {
   MobileOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { Badge, Button, Layout, Menu, Select, Space, Tag, Typography, message } from "antd";
+import { Button, Layout, Menu, Select, Space, Tag, Typography, message } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
 import { resetDemoData } from "../../api/operationsApi.js";
 
@@ -25,7 +25,7 @@ import brandLogo from "../../assets/brand/youbike-logo.png";
 // 警示追蹤放在調度面板旁邊：它是調度員與管理後台共用的那份真相（ADR-309）。
 const baseNavigation = [
   { key: "/dashboard", icon: <DashboardOutlined />, label: "調度面板" },
-  { key: "/alerts", icon: <AlertOutlined />, label: "警示追蹤" },
+  { key: "/alerts", icon: <ProfileOutlined />, label: "分派任務狀況" },
   { key: "/driver", icon: <MobileOutlined />, label: "司機手機端" },
   { key: "/overview", icon: <BarChartOutlined />, label: "長官導覽面板" },
   { key: "/rider", icon: <EnvironmentOutlined />, label: "找車（使用者）" },
@@ -54,11 +54,8 @@ export default function AppShell({ children }) {
   const canAct = !isApiMode || (Boolean(actorId) && ["dispatcher", "maintainer"].includes(actorRole));
   const showPrompt = Boolean(promptCase) && promptCase.case_id !== dismissedCaseId && canAct;
 
-  const navigation = baseNavigation.map((item) =>
-    item.key === "/alerts" && escalation.counts.open
-      ? { ...item, label: <Badge count={escalation.counts.open} size="small" offset={[10, -2]}>
-            <span>警示追蹤</span></Badge> }
-      : item);
+  // escalation 的提示改走全域橫幅/彈窗（下方 EscalationBanner/Modal），不再掛在導覽項上。
+  const navigation = baseNavigation;
 
   const goHandle = (item) => {
     setDismissedCaseId(null);
