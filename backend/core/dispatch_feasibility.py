@@ -156,6 +156,17 @@ def build_load_plan(
                 "invalid_action",
                 f"站點 {stop.get('station_id')} 的動作 '{action}' 不是補車或取車"))
 
+        # ADR-315：帶當下站況（可借車數／可還位數）供前端卡片顯示「現況 vs 目標」。
+        avail_bikes = stop.get("available_bikes")
+        if avail_bikes is None:
+            avail_bikes = stop.get("current_available")
+        total_docks = stop.get("total_docks")
+        avail_docks = stop.get("available_docks")
+        if avail_docks is None and total_docks is not None and avail_bikes is not None:
+            try:
+                avail_docks = int(total_docks) - int(avail_bikes)
+            except (TypeError, ValueError):
+                avail_docks = None
         entry = {
             "seq": seq,
             "station_id": stop.get("station_id"),
@@ -163,6 +174,9 @@ def build_load_plan(
             "action": action,
             "quantity": qty,
             "target_available": stop.get("target_available"),
+            "available_bikes": avail_bikes,      # 當下可借車數
+            "available_docks": avail_docks,      # 當下可還位數
+            "total_docks": total_docks,
             "arrival_offset_min": round(arrival, 1),
             "horizon_used_min": None if beyond else horizon,
             "beyond_forecast_horizon": bool(beyond),

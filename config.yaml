@@ -21,7 +21,7 @@ data_source:
   tdx_api_key: ""           # 若用 TDX，正式環境填（勿寫進版控，用環境變數）
   youbike_official_url: ""  # 留空使用新北官方 HTTPS；其他來源需新增 adapter
   historical_local_dir: output/youbike_parquet  # 相對 repo；空字串才使用 S3，可用 YOUBIKE_HISTORY_DIR 覆寫
-  refresh_interval_sec: 300  # 多久抓一次即時資料
+  refresh_interval_sec: 120  # 多久抓一次官方即時資料（原 300 太久；官方 CSV 約 5-10 分更新，120 秒讓後端更快拿到最新，不過度打官方）
   stale_after_sec: 600      # 即時資料超過幾秒視為過期（觸發降級標記）
   future_tolerance_sec: 60
   timeout_sec: 10

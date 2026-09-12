@@ -191,8 +191,13 @@ def build_from_station(
         return {"error": f"站點 {station_id} 不在需調度清單", "is_draft": True, "stations": []}
     district = seed.get("district")
 
-    # 同區需調度站（含被點的站），依緊急度排序 → 切一趟
-    pool = sorted([r for r in dispatch_list if r.get("district") == district],
+    # ADR-116/315：選站範圍依班別——早/晚班只在同行政區配對；大夜班可跨區（全區大宗復原）。
+    # 被點的站永遠置頂，其餘依緊急度排序，供 _pack_trips 裝到「最高載運量」的一趟。
+    from core.shift import allow_cross_district
+    cross_ok = allow_cross_district(now)
+    candidates_pool = list(dispatch_list) if cross_ok else \
+        [r for r in dispatch_list if r.get("district") == district]
+    pool = sorted(candidates_pool,
                   key=lambda r: (str(r.get("station_id")) != str(station_id),
                                  -float(r.get("priority_score", 0))))
     default_cap = _dsp._default_capacity(cfg)
@@ -220,10 +225,14 @@ def build_from_station(
         oper = assignable[0] if assignable else (depot_ops[0] if depot_ops else None)
     escort = _resolve_escort(op, escort_id, oper)
 
-    draft = _make_draft(stations, veh, oper, district, cfg, now,
+    # 大夜跨區時本趟可能含多區站點，district 標示改為涵蓋範圍（否則落地/顯示會誤標單一區）。
+    trip_districts = {s.get("district") for s in stations if s.get("district")}
+    draft_district = district if len(trip_districts) <= 1 else "全區跨區"
+    note_area = district if not cross_ok else f"{district}／大夜可跨區"
+    draft = _make_draft(stations, veh, oper, draft_district, cfg, now,
                         start_lat=veh.get("current_lat") if veh else None,
                         start_lng=veh.get("current_lng") if veh else None,
-                        note=f"以站為起點（{station_id} / {district}）",
+                        note=f"以站為起點（{station_id} / {note_area}）",
                         escort=escort)
     # 附車輛候選（分類供後台選；無指定車時特別有用）
     draft["vehicle_candidates"] = {

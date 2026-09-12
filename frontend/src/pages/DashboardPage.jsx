@@ -543,11 +543,27 @@ export default function DashboardPage() {
     setBuilder(null);
   };
 
-  // 地圖草稿路線：mock 草稿有 start/stops；後端草稿的路線改由清單呈現（座標未來接即時定位）。
-  const draftRoute =
-    builder && !builder.draft_id
-      ? { start: builder.start, stops: builder.stops }
-      : null;
+  // 地圖草稿路線（先載後放）：mock 草稿用 builder.start/stops；後端草稿用 builder.stations
+  // （每站含 lat/lng/action，且後端 _order_route 已排「先取後補」順序）組多點路線。
+  // 起點用 builder.start（車位置）；後端未給座標時退回第一站。
+  const draftRoute = (() => {
+    if (!builder) return null;
+    if (!builder.draft_id) return { start: builder.start, stops: builder.stops };
+    const stops = (builder.stations ?? [])
+      .filter((s) => Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lng)))
+      .map((s) => ({
+        lat: Number(s.lat),
+        lng: Number(s.lng),
+        action: s.action,
+        station_name: s.station_name,
+      }));
+    if (!stops.length) return null;
+    const start =
+      builder.start && Number.isFinite(Number(builder.start.lat)) && Number.isFinite(Number(builder.start.lng))
+        ? { lat: Number(builder.start.lat), lng: Number(builder.start.lng) }
+        : { lat: stops[0].lat, lng: stops[0].lng };
+    return { start, stops };
+  })();
 
   return (
     <AsyncState

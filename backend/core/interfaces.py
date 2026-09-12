@@ -280,16 +280,26 @@ class RealUrgencyCalculator:
         raw_lo = prediction.raw_lower_bound if prediction else None
         raw_hi = prediction.raw_upper_bound if prediction else None
 
-        # 判斷層級（與 rule_engine 一致）：raw 穿透邊界=censored
-        breached = (raw_lo is not None and raw_lo < 0) or (raw_hi is not None and raw_hi > total)
+        # 當下已空/已滿（觀測已觸底）：本身就是最緊急，不需等預測再穿透才抬層。
+        # 這修正了「已空站但模型預測維持在 0、raw_lo 未 <0 → 只落 warning 層 → 被歸次安排」的問題。
+        at_capacity_now = available <= 0 or available >= total
+
+        # 判斷層級（與 rule_engine 一致）：raw 穿透邊界=censored；★當下已空/滿也直接視為 censored。
+        breached = (raw_lo is not None and raw_lo < 0) or (raw_hi is not None and raw_hi > total) \
+            or at_capacity_now
 
         # 時機分（越早穿透/觸發越急）：用 horizon 分鐘，30→1.0 遞減到 120→0.25
         hm = float(prediction.horizon_minutes) if prediction else 60.0
         timing = max(0.0, min(1.0, (150.0 - hm) / 120.0))  # 30→1.0, 120→0.25
         # 人流分
         flow = self._flow_score(station)
-        # 當下已空滿加成
-        at_limit = 1.0 if (available <= 0 or available >= total) else 0.0
+        # 當下已空滿加成（權重已提高，見下方 rank 計算）
+        at_limit = 1.0 if at_capacity_now else 0.0
+
+        # ★已空/滿站保底：直接給 censored 層高分（85 起跳），確保排進「緊急調度」而非次安排。
+        #   已經觸底是既成事實，比「預測會穿透」更確定該立即處理。之上再依人流/時機微幅加分。
+        if at_capacity_now:
+            return round(min(100.0, 85.0 + 15.0 * (0.6 * flow + 0.4 * timing)), 1)
 
         if breached:
             # 穿透幅度分：缺口深淺 / 總柱，封頂 1.0

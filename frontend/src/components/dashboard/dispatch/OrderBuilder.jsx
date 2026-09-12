@@ -80,6 +80,9 @@ function backendStops(draft) {
       action: s.action,
       quantity: s.quantity,
       target_available: s.target_available,
+      available_bikes: s.available_bikes,   // 當下可借車數
+      available_docks: s.available_docks,   // 當下可還位數
+      total_docks: s.total_docks,
       arrival_offset_min: s.arrival_offset_min,
       onboard_after: s.onboard_after,
     }));
@@ -90,6 +93,12 @@ function backendStops(draft) {
     action: s.action,
     quantity: s.quantity,
     target_available: s.target_available,
+    available_bikes: s.available_bikes ?? s.current_available,
+    available_docks: s.available_docks
+      ?? (s.total_docks != null && (s.available_bikes ?? s.current_available) != null
+        ? Number(s.total_docks) - Number(s.available_bikes ?? s.current_available)
+        : undefined),
+    total_docks: s.total_docks,
   }));
 }
 
@@ -203,11 +212,15 @@ function BackendBuilder({
                 <span className="ob-stop-main">
                   <span className="ob-stop-name">{s.station_name}</span>
                   <span className="ob-stop-sub mono">
-                    {Number.isFinite(Number(s.arrival_offset_min))
-                      ? `約 ${Math.round(s.arrival_offset_min)} 分到達`
+                    {/* 當下站況：可借車數 / 可還位數（現況 → 目標，一眼看出缺口）*/}
+                    {Number.isFinite(Number(s.available_bikes))
+                      ? `現況 可借 ${s.available_bikes}${Number.isFinite(Number(s.available_docks)) ? `／可還 ${s.available_docks}` : ""}`
                       : ""}
                     {Number.isFinite(Number(s.target_available))
                       ? `｜目標 ${s.target_available} 台`
+                      : ""}
+                    {Number.isFinite(Number(s.arrival_offset_min))
+                      ? `｜約 ${Math.round(s.arrival_offset_min)} 分到達`
                       : ""}
                   </span>
                 </span>

@@ -32,17 +32,21 @@ from .interfaces import PredictionInterval, get_predictor
 def _mk_rec(station: dict, action: str, quantity: int, reason: str,
             basis: str, at_arrival: float,
             urgency_tier: str = "normal", is_censored_demand: bool = False,
-            breach_horizon_min=None, arrival_by_horizon=None, extra=None) -> dict:
+            breach_horizon_min=None, arrival_by_horizon=None, extra=None,
+            target_available=None) -> dict:
     """組一筆規則引擎輸出（未含優先級，dispatcher 再補）。extra 為 ADR-124 等附加欄位。"""
     return {
         **(extra or {}),
         **{key: station.get(key) for key in ("source", "observed_at", "received_at",
-            "data_freshness", "dispatch_eligible", "quality_reasons", "total_docks") if key in station},
+            "data_freshness", "dispatch_eligible", "quality_reasons", "total_docks",
+            "available_bikes", "available_docks", "status") if key in station},
         "station_id": station.get("station_id", ""),
         "station_name": station.get("station_name", ""),
         "district": station.get("district", ""),
         "action": action,                    # "補車" / "取車"
         "quantity": int(quantity),
+        # ADR-115 動態目標水位（補/取到幾台）：主指令，供清單與組單卡片顯示「現況→目標」。
+        "target_available": round(float(target_available), 1) if target_available is not None else None,
         "reason": reason,                    # 人看得懂的中文原因
         "basis": basis,                      # 判斷依據：截斷訊號/區間下界上界/保底門檻/降級
         "current_available": int(station.get("available_bikes", 0)),
@@ -259,7 +263,8 @@ def evaluate_station(
     return _mk_rec(station, action, quantity, reason, basis, at_arrival,
                    urgency_tier=urgency_tier, is_censored_demand=is_censored_demand,
                    breach_horizon_min=breach_horizon_min,
-                   arrival_by_horizon=arrival_by_horizon, extra=extra)
+                   arrival_by_horizon=arrival_by_horizon, extra=extra,
+                   target_available=target_available)
 
 
 def generate_recommendations(
