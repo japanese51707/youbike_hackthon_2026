@@ -4,12 +4,9 @@
 import { ANALYSIS_CATALOG } from "../config/analysisCatalog.js";
 import {
   buildKnnNetwork,
-  buildSpatialIndex,
   degreeCentrality,
   getisOrdGiStar,
   giStarClass,
-  nearestStationKm,
-  queryNearbyIndices,
   stationPressure,
   stationsWithCoords,
 } from "./spatialStats.js";
@@ -20,10 +17,6 @@ export const TWIN_INSIGHT = {
   giRadiusKm: 3,
   giRealMinStations: 50,
   highPressure: 0.5,
-  gapThresholdKm: 0.8,
-  coverageCapKm: 4,
-  coverageSteps: 26,
-  coveragePadDeg: 0.04,
   districtMinStations: 5,
   topN: 3,
   cityWideCoverage: 0.8,
@@ -54,6 +47,7 @@ function emptyLayer(key, extra = {}) {
   return {
     key,
     title: item.name,
+    reading: extra.reading ?? item.reading ?? null,
     dataMode: extra.dataMode ?? item.dataMode,
     metrics: extra.metrics ?? [],
     findings: extra.findings ?? [],
@@ -105,7 +99,7 @@ export function districtStatusRows(stations, { minStations = TWIN_INSIGHT.distri
     .sort((a, b) => b.emptyRate - a.emptyRate || b.empty - a.empty);
 }
 
-export function buildGaugeInsight(stations) {
+export function buildGaugeInsight(stations, scopeLabel = "全市") {
   const n = stations.length;
   const empty = stations.filter((s) => s.status === "empty").length;
   const full = stations.filter((s) => s.status === "full").length;
@@ -116,11 +110,11 @@ export function buildGaugeInsight(stations) {
   const ranked = districtStatusRows(stations);
   const worst = ranked[0];
   const findings = [
-    `全市 ${n} 站中，空站 ${empty}（${emptyRate}%）、滿站 ${full}（${fullRate}%）。`,
+    `${scopeLabel} ${n} 站中，空站 ${empty}（${emptyRate}%）、滿站 ${full}（${fullRate}%）。`,
   ];
-  if (worst && worst.emptyRate > emptyRate) {
+  if (worst && ranked.length > 1 && worst.emptyRate > emptyRate) {
     findings.push(
-      `空站最集中在${worst.district}（該區 ${worst.empty}/${worst.count}，${worst.emptyRate}%，高於全市）。`,
+      `空站最集中在${worst.district}（該區 ${worst.empty}/${worst.count}，${worst.emptyRate}%，高於${scopeLabel}）。`,
     );
   }
   return {
@@ -140,7 +134,7 @@ export function buildGaugeInsight(stations) {
   };
 }
 
-export function buildKdeInsight(stations) {
+export function buildKdeInsight(stations, scopeLabel = "全市") {
   const pressures = stations.map((s) => ({ station: s, pressure: stationPressure(s) }));
   const total = pressures.reduce((acc, row) => acc + row.pressure, 0);
   const high = pressures.filter((row) => row.pressure >= TWIN_INSIGHT.highPressure);
@@ -155,7 +149,7 @@ export function buildKdeInsight(stations) {
     `壓力偏高站 ${high.length} 座（使用率明顯偏離 50% 或已空／滿）。`,
   ];
   if (leaders.length) {
-    findings.push(`壓力加總前段在${listNames(leaders.map((row) => row.district))}，合計約佔全市 ${leaders.reduce((acc, row) => acc + row.share, 0)}%。`);
+    findings.push(`壓力加總前段在${listNames(leaders.map((row) => row.district))}，合計約佔${scopeLabel} ${leaders.reduce((acc, row) => acc + row.share, 0)}%。`);
   }
   return {
     ...emptyLayer("kde", { dataMode: "real" }),
@@ -224,7 +218,7 @@ export function buildVoronoiInsight(stations) {
   };
 }
 
-export function buildDensityInsight(stations) {
+export function buildDensityInsight(stations, scopeLabel = "全市") {
   const docks = stations.map((s) => Number(s.total_docks) || 0);
   const totalDocks = docks.reduce((acc, value) => acc + value, 0);
   const median = docks.slice().sort((a, b) => a - b)[Math.floor(docks.length / 2)] || 0;
@@ -241,10 +235,10 @@ export function buildDensityInsight(stations) {
     .filter((row) => row.pressure > cityMeanPressure && row.capacity < totalDocks / Math.max(rows.length, 1))
     .sort((a, b) => b.pressure - a.pressure);
   const findings = [
-    `全市柱位 ${totalDocks}，單站中位數 ${median} 柱。容量較密的行政區是${listNames(topDistricts(byCapacity)) || "—"}。`,
+    `${scopeLabel}柱位 ${totalDocks}，單站中位數 ${median} 柱。容量較密的行政區是${listNames(topDistricts(byCapacity)) || "—"}。`,
   ];
-  if (mismatch.length) {
-    findings.push(`壓力高於全市、柱位卻偏低的區：${listNames(mismatch.slice(0, TWIN_INSIGHT.topN).map((row) => row.district))}，供需空間可能錯位。`);
+  if (mismatch.length > 0 && rows.length > 1) {
+    findings.push(`壓力高於${scopeLabel}、柱位卻偏低的區：${listNames(mismatch.slice(0, TWIN_INSIGHT.topN).map((row) => row.district))}，供需空間可能錯位。`);
   }
   return {
     ...emptyLayer("density", { dataMode: "real" }),
@@ -258,117 +252,16 @@ export function buildDensityInsight(stations) {
       label: row.district,
       detail: `${row.capacity} 柱／${row.count} 站`,
     })),
-    caveats: ["密度用總柱位，不是歷史借還量；錯位是行政區加總，不是選址模型。"],
-  };
-}
-
-export function computeCoverageGaps(stations, {
-  steps = TWIN_INSIGHT.coverageSteps,
-  padDeg = TWIN_INSIGHT.coveragePadDeg,
-  thresholdKm = TWIN_INSIGHT.gapThresholdKm,
-} = {}) {
-  const index = buildSpatialIndex(stations, 2);
-  if (index.stations.length < 2) {
-    return { medianKm: null, maxKm: null, overShare: null, overCount: 0, cells: 0 };
-  }
-  const lngs = index.stations.map((s) => Number(s.lng));
-  const lats = index.stations.map((s) => Number(s.lat));
-  const minLng = Math.min(...lngs) - padDeg;
-  const maxLng = Math.max(...lngs) + padDeg;
-  const minLat = Math.min(...lats) - padDeg;
-  const maxLat = Math.max(...lats) + padDeg;
-  const gaps = [];
-  for (let i = 0; i <= steps; i += 1) {
-    for (let j = 0; j <= steps; j += 1) {
-      const lng = minLng + ((maxLng - minLng) * i) / steps;
-      const lat = minLat + ((maxLat - minLat) * j) / steps;
-      gaps.push(nearestStationKm(index, lat, lng, TWIN_INSIGHT.coverageCapKm));
-    }
-  }
-  const sorted = gaps.slice().sort((a, b) => a - b);
-  const overCount = gaps.filter((gap) => gap > thresholdKm).length;
-  return {
-    medianKm: sorted[Math.floor(sorted.length / 2)],
-    maxKm: sorted[sorted.length - 1],
-    overShare: pct(overCount, gaps.length),
-    overCount,
-    cells: gaps.length,
-  };
-}
-
-export function buildCoverageInsight(stations) {
-  const gaps = computeCoverageGaps(stations);
-  if (gaps.medianKm == null) {
-    return emptyLayer("coverage", {
-      dataMode: "real",
-      caveats: ["有效座標不足，無法估計覆蓋缺口。"],
-    });
-  }
-  return {
-    ...emptyLayer("coverage", { dataMode: "real" }),
-    metrics: [
-      { label: "最近站中位距離", value: round(gaps.medianKm, 2), unit: "km" },
-      { label: `>${TWIN_INSIGHT.gapThresholdKm} km 格點`, value: gaps.overShare, unit: "%" },
-    ],
-    findings: [
-      `站網凸包內，到最近站的直線距離中位數 ${round(gaps.medianKm, 2)} km；超過 ${TWIN_INSIGHT.gapThresholdKm} km 的格點佔 ${gaps.overShare}%。`,
-    ],
-    evidence: [],
     caveats: [
-      "只評站網範圍內的格點，沒有人口加權；山區空地與市區死角看起來一樣紅。",
-      "直線距離，不是走路或騎車等時圈。",
+      "柱高用總柱位，顏色用平均使用率，都不是歷史借還量；錯位是行政區加總，不是選址模型。",
     ],
-  };
-}
-
-export function computeCatchmentStats(stations, radiusKm) {
-  const index = buildSpatialIndex(stations, Math.max(radiusKm, 0.5));
-  let isolated = 0;
-  let overlapSum = 0;
-  const isolatedStations = [];
-  for (let i = 0; i < index.stations.length; i += 1) {
-    const station = index.stations[i];
-    const neighbors = queryNearbyIndices(index, Number(station.lat), Number(station.lng), radiusKm)
-      .filter((idx) => idx !== i);
-    overlapSum += neighbors.length;
-    if (!neighbors.length) {
-      isolated += 1;
-      isolatedStations.push(station);
-    }
-  }
-  return {
-    isolated,
-    meanOverlap: index.stations.length ? round(overlapSum / index.stations.length, 1) : 0,
-    isolatedStations,
-  };
-}
-
-export function buildCatchmentInsight(stations, radiusKm) {
-  const stats = computeCatchmentStats(stations, radiusKm);
-  return {
-    ...emptyLayer("catchment", { dataMode: "real" }),
-    metrics: [
-      { label: "服務半徑", value: radiusKm, unit: "km" },
-      { label: "孤立站", value: stats.isolated, unit: "站" },
-      { label: "平均重疊", value: stats.meanOverlap, unit: "站" },
-    ],
-    findings: [
-      `${radiusKm} km 直線半徑下，孤立站 ${stats.isolated} 座，平均每站與 ${stats.meanOverlap} 站重疊。`,
-    ],
-    evidence: stats.isolatedStations.slice(0, 5).map((station) => ({
-      station_id: station.station_id,
-      label: station.station_name,
-      district: station.district,
-      detail: `${radiusKm} km 內無鄰站`,
-    })),
-    caveats: ["直線半徑近似集水區，真正等時圈需要路網。"],
   };
 }
 
 export function buildNetworkInsight(stations) {
   if (stations.length < 2) {
     return emptyLayer("network", {
-      dataMode: "method",
+      dataMode: "real",
       caveats: ["站點不足，無法建立鄰近網路。"],
     });
   }
@@ -379,7 +272,7 @@ export function buildNetworkInsight(stations) {
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
   return {
-    ...emptyLayer("network", { dataMode: "method" }),
+    ...emptyLayer("network", { dataMode: "real" }),
     metrics: [
       { label: "連線數", value: edges.length, unit: "" },
       { label: "最高中心性", value: round(hubs[0]?.score ?? 0, 2), unit: "" },
@@ -393,20 +286,21 @@ export function buildNetworkInsight(stations) {
       district: row.station.district,
       detail: `中心性 ${round(row.score, 2)}`,
     })),
-    caveats: ["無真實 OD，連線只看最近 3 站的地理距離。"],
+    caveats: ["連線與中心性由實際站點座標實算（最近 3 站、距離衰減）；不是真實借還 OD。"],
   };
 }
 
-export function buildFlowInsight(recommendations) {
-  const pairs = pairDispatchFlows(recommendations);
+export function buildFlowInsight(recommendations, { source = "dispatch", pairs: givenPairs } = {}) {
+  const pairs = givenPairs ?? pairDispatchFlows(recommendations);
   const stats = flowPairStats(pairs);
   if (!pairs.length) {
     return emptyLayer("flow", {
       dataMode: "method",
-      caveats: ["沒有可配對的取車與補車建議，或缺少座標。這不是真實 trip OD。"],
+      caveats: ["沒有可配對的取車與補車，或缺少座標。這不是真實 trip OD。"],
     });
   }
   const nearest = [...pairs].sort((a, b) => a.km - b.km).slice(0, 5);
+  const fromMock = source === "status-mock";
   return {
     ...emptyLayer("flow", { dataMode: "method" }),
     metrics: [
@@ -415,7 +309,9 @@ export function buildFlowInsight(recommendations) {
       { label: "同區占比", value: stats.sameDistrictShare, unit: "%" },
     ],
     findings: [
-      `以「同區最近、一對一」把 ${stats.count} 筆取車建議配到補車站，中位直線距離 ${round(stats.medianKm, 2)} km。`,
+      fromMock
+        ? `依當前使用率擬了 ${stats.count} 條示意取→補弧線（一站可連附近多站），中位直線距離 ${round(stats.medianKm, 2)} km。`
+        : `以「同區最近、一對一」把 ${stats.count} 筆取車建議配到補車站，中位直線距離 ${round(stats.medianKm, 2)} km。`,
     ],
     evidence: nearest.map((pair) => ({
       station_id: pair.to.station_id,
@@ -423,25 +319,27 @@ export function buildFlowInsight(recommendations) {
       district: pair.to.district,
       detail: `${round(pair.km, 2)} km${pair.sameDistrict ? "｜同區" : "｜跨區"}`,
     })),
-    caveats: ["這是調度建議的示意配對，不是真實借還 OD，也不能當成派車路線。"],
+    caveats: [
+      fromMock
+        ? "這是依站況空／滿擬的 mock 配對，不是真實借還 OD，也不進派工。"
+        : "這是調度建議的示意配對，不是真實借還 OD，也不能當成派車路線。",
+    ],
   };
 }
 
 const BUILDERS = {
-  gauge: (ctx) => buildGaugeInsight(ctx.stations),
-  kde: (ctx) => buildKdeInsight(ctx.stations),
+  gauge: (ctx) => buildGaugeInsight(ctx.stations, ctx.scopeLabel),
+  kde: (ctx) => buildKdeInsight(ctx.stations, ctx.scopeLabel),
   voronoi: (ctx) => buildVoronoiInsight(ctx.stations),
-  density: (ctx) => buildDensityInsight(ctx.stations),
-  coverage: (ctx) => buildCoverageInsight(ctx.stations),
-  catchment: (ctx) => buildCatchmentInsight(ctx.stations, ctx.catchmentKm),
+  density: (ctx) => buildDensityInsight(ctx.stations, ctx.scopeLabel),
   network: (ctx) => buildNetworkInsight(ctx.stations),
-  flow: (ctx) => buildFlowInsight(ctx.recommendations),
+  flow: (ctx) => buildFlowInsight(ctx.recommendations, { source: ctx.flowSource, pairs: ctx.flowPairs }),
 };
 
-export function cityWideGate({ mode, stations, temporalCovered, temporalAvailable }) {
+export function cityWideGate({ mode, stations, temporalCovered, temporalAvailable, scopeLabel = "全市" }) {
   const total = stations.length;
   if (total < 3) {
-    return { cityWideOk: false, reason: "有效站點少於 3，不足以做全市空間解讀。" };
+    return { cityWideOk: false, reason: `有效站點少於 3，不足以做${scopeLabel}空間解讀。` };
   }
   if (mode === "live") {
     return { cityWideOk: true, reason: null };
@@ -454,7 +352,7 @@ export function cityWideGate({ mode, stations, temporalCovered, temporalAvailabl
   const available = Number(temporalAvailable) || covered;
   return {
     cityWideOk: false,
-    reason: `時間機器不是即時，且僅 ${covered}/${total} 站有對應樣本（可用來源 ${available}）。覆蓋率未達 ${Math.round(TWIN_INSIGHT.cityWideCoverage * 100)}%，全市結論已關閉。`,
+    reason: `時間機器不是即時，且僅 ${covered}/${total} 站有對應樣本（可用來源 ${available}）。覆蓋率未達 ${Math.round(TWIN_INSIGHT.cityWideCoverage * 100)}%，${scopeLabel}結論已關閉。`,
   };
 }
 
@@ -483,11 +381,13 @@ export function buildTwinInsights({
   recommendations = [],
   activeLayers = [],
   mode = "live",
-  catchmentKm = 0.6,
   temporalCovered = 0,
   temporalAvailable = 0,
   stationsSource = "unknown",
   observedAt = null,
+  scopeLabel = "全市",
+  flowSource = "dispatch",
+  flowPairs = null,
 } = {}) {
   const usable = stationsWithCoords(stations);
   const gate = cityWideGate({
@@ -495,8 +395,9 @@ export function buildTwinInsights({
     stations: usable,
     temporalCovered,
     temporalAvailable,
+    scopeLabel,
   });
-  const ctx = { stations: usable, catchmentKm, recommendations };
+  const ctx = { stations: usable, recommendations, scopeLabel, flowSource, flowPairs };
   const layers = (activeLayers.length ? activeLayers : []).map((key) => {
     const builder = BUILDERS[key];
     if (!builder) return emptyLayer(key, { caveats: ["未知圖層。"] });
@@ -517,6 +418,7 @@ export function buildTwinInsights({
     nStations: usable.length,
     observedAt: observedAt || pickObservedAt(usable),
     stationsSource,
+    scopeLabel,
     mode,
     headline: gate.cityWideOk ? buildHeadline(layers, comparison) : null,
     comparison: gate.cityWideOk ? comparison : null,

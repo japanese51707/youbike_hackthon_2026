@@ -42,6 +42,7 @@ export default function TwinInsightPanel({
     <aside className="twin-insight" aria-label="當前解讀">
       <div className="twin-control-title">當前解讀</div>
       <div className="twin-insight-meta">
+        <span>{report.scopeLabel && report.scopeLabel !== "全市" ? report.scopeLabel : "新北市全區"}</span>
         <span>{report.nStations} 站</span>
         <span>{report.stationsSource === "backend" ? "後端站況" : report.stationsSource || "來源不明"}</span>
         {report.observedAt ? <span className="mono">{report.observedAt}</span> : null}
@@ -65,6 +66,8 @@ export default function TwinInsightPanel({
               <strong>{layer.title}</strong>
               <Tag color={tag.color} className="twin-mode-tag">{tag.text}</Tag>
             </button>
+
+            {layer.reading ? <p className="twin-insight-reading">{layer.reading}</p> : null}
 
             {layer.metrics.length ? (
               <div className="twin-insight-metrics">

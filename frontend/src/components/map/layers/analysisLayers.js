@@ -4,11 +4,10 @@ import { Delaunay } from "d3-delaunay";
 import presentationConfig from "../../../config/presentation.json";
 import {
   buildKnnNetwork,
-  buildSpatialIndex,
   degreeCentrality,
   getisOrdGiStar,
   giStarFillColor,
-  nearestStationKm,
+  interpolateColorRange,
   stationPressure,
   stationsWithCoords,
 } from "../../../utils/spatialStats.js";
@@ -19,14 +18,6 @@ const HEAT_RANGE = [
   [23, 58, 92],
   [45, 171, 247],
   [56, 217, 169],
-  [255, 169, 77],
-  [255, 107, 107],
-];
-
-const GAP_RANGE = [
-  [12, 24, 40],
-  [23, 58, 92],
-  [120, 90, 40],
   [255, 169, 77],
   [255, 107, 107],
 ];
@@ -65,39 +56,14 @@ export function createKdeHeatmapLayer({ data, id = "kde" }) {
   });
 }
 
-// 覆蓋缺口：鋪格點，權重＝到最近站點距離（越遠越紅），凸顯服務死角
-export function createCoverageGapLayer({ data, id = "coverage", steps = 26 }) {
-  const pts = withFiniteCoords(data);
-  if (!pts.length) return null;
-  const index = buildSpatialIndex(pts, 2);
-  const [minLng, minLat, maxLng, maxLat] = bounds(pts, 0.04);
-  const grid = [];
-  for (let i = 0; i <= steps; i += 1) {
-    for (let j = 0; j <= steps; j += 1) {
-      const lng = minLng + ((maxLng - minLng) * i) / steps;
-      const lat = minLat + ((maxLat - minLat) * j) / steps;
-      grid.push({ lng, lat, gap: nearestStationKm(index, lat, lng, 4) });
-    }
-  }
-  return new HeatmapLayer({
-    id,
-    data: grid,
-    getPosition: (p) => [p.lng, p.lat],
-    getWeight: (p) => p.gap,
-    radiusPixels: 60,
-    intensity: 1,
-    threshold: 0.03,
-    colorRange: GAP_RANGE,
-    opacity: 0.5,
-  });
-}
-
-// 鄰近網路 + 中心性：邊(LineLayer) + 節點大小依中心性
+// 鄰近網路 + 中心性：邊 + 節點；圓圈大小與顏色都依中心性連續漸層。
 export function createNetworkLayers({ data, onSelectStation, id = "network" }) {
   const pts = withFiniteCoords(data);
   if (pts.length < 2) return [];
   const edges = buildKnnNetwork(pts, { k: 3 });
   const centrality = degreeCentrality(pts, edges);
+  const ramp = presentationConfig.layers.centralityColorRange;
+  const scoreOf = (station) => centrality.get(station?.station_id) || 0;
 
   return [
     new LineLayer({
@@ -105,7 +71,7 @@ export function createNetworkLayers({ data, onSelectStation, id = "network" }) {
       data: edges,
       getSourcePosition: (e) => [Number(e.from.lng), Number(e.from.lat)],
       getTargetPosition: (e) => [Number(e.to.lng), Number(e.to.lat)],
-      getColor: [102, 217, 232, 150],
+      getColor: (edge) => interpolateColorRange(ramp, Math.max(scoreOf(edge.from), scoreOf(edge.to)), 150),
       getWidth: 2,
       widthUnits: "pixels",
       pickable: false,
@@ -116,11 +82,8 @@ export function createNetworkLayers({ data, onSelectStation, id = "network" }) {
       pickable: true,
       getPosition: (s) => [Number(s.lng), Number(s.lat)],
       radiusUnits: "pixels",
-      getRadius: (s) => 6 + (centrality.get(s.station_id) || 0) * 20,
-      getFillColor: (s) => {
-        const c = centrality.get(s.station_id) || 0;
-        return [56, 217, 169, Math.round(120 + c * 135)];
-      },
+      getRadius: (s) => 6 + scoreOf(s) * 20,
+      getFillColor: (s) => interpolateColorRange(ramp, scoreOf(s), 220),
       getLineColor: [255, 255, 255, 200],
       getLineWidth: 1,
       lineWidthUnits: "pixels",
@@ -132,42 +95,22 @@ export function createNetworkLayers({ data, onSelectStation, id = "network" }) {
   ];
 }
 
-// 服務集水區：每站服務半徑圓（公尺）
-export function createCatchmentLayer({ data, radiusKm = 0.6, id = "catchment" }) {
-  const pts = withFiniteCoords(data);
-  if (!pts.length) return null;
-  return new ScatterplotLayer({
-    id,
-    data: pts,
-    getPosition: (s) => [Number(s.lng), Number(s.lat)],
-    getRadius: radiusKm * 1000,
-    radiusUnits: "meters",
-    stroked: true,
-    filled: true,
-    getFillColor: [56, 217, 169, 22],
-    getLineColor: [56, 217, 169, 130],
-    getLineWidth: 1.5,
-    lineWidthUnits: "pixels",
-    pickable: false,
-  });
-}
-
 // 調度/流向弧線（示意 OD）：取車站 → 補車站，粗細依需求數量。
 // 無真實 trip OD，以調度建議示意；接上真實 OD 才是實際流向。
-export function createFlowArcLayer({ recommendations, id = "flow" }) {
-  const pairs = pairDispatchFlows(recommendations);
-  if (!pairs.length) return null;
+export function createFlowArcLayer({ recommendations, pairs, id = "flow" }) {
+  const data = pairs ?? pairDispatchFlows(recommendations);
+  if (!data.length) return null;
 
   return new ArcLayer({
     id,
-    data: pairs,
+    data,
     getSourcePosition: (pair) => [Number(pair.from.lng), Number(pair.from.lat)],
     getTargetPosition: (pair) => [Number(pair.to.lng), Number(pair.to.lat)],
-    getSourceColor: [255, 169, 77, 190],
-    getTargetColor: [56, 217, 169, 190],
-    getWidth: (pair) => Math.max(2, (pair.quantity || 0) * 0.4),
+    getSourceColor: [...presentationConfig.layers.arcSourceRgb, 200],
+    getTargetColor: [...presentationConfig.layers.arcTargetRgb, 200],
+    getWidth: (pair) => Math.max(1.4, (pair.quantity || 0) * 0.28),
     widthUnits: "pixels",
-    getHeight: 0.4,
+    getHeight: (pair) => Math.min(0.9, 0.18 + (Number(pair.km) || 0) * 0.08),
     pickable: false,
   });
 }
