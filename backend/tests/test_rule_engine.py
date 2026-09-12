@@ -51,6 +51,28 @@ def test_degradation_basis_when_no_prediction():
     assert rec is not None
     assert "保底門檻" in rec["basis"]
     assert rec["action"] == "補車"
+    assert rec["urgency_tier"] == "warning"
+    assert rec["is_censored_demand"] is False
+
+
+def test_empty_station_without_prediction_is_censored():
+    """無預測但已空：仍屬截斷層，前端緊急調度才看得到。"""
+    cfg = get_config()
+    rec = evaluate_station(_station(available=0, total=40, usage=0), None, cfg)
+    assert rec is not None
+    assert rec["action"] == "補車"
+    assert rec["urgency_tier"] == "censored"
+    assert rec["is_censored_demand"] is True
+
+
+def test_full_station_without_prediction_is_censored():
+    """無預測但已滿：仍屬截斷層。"""
+    cfg = get_config()
+    rec = evaluate_station(_station(available=40, total=40, usage=100), None, cfg)
+    assert rec is not None
+    assert rec["action"] == "取車"
+    assert rec["urgency_tier"] == "censored"
+    assert rec["is_censored_demand"] is True
 
 
 # ── ADR-111 截斷訊號三層判斷測試 ──
@@ -98,6 +120,29 @@ def test_warning_near_empty_not_breached():
     assert rec["action"] == "補車"
     assert rec["urgency_tier"] == "warning"
     assert rec["is_censored_demand"] is False
+
+
+def test_empty_without_prediction_is_high_on_dispatch_list():
+    """無預測的已空站必須進 high，否則調度面板緊急分頁會是空的。"""
+    from core.dispatcher import build_dispatch_list
+
+    class _NoPred:
+        def predict(self, station, horizon_minutes=30):
+            raise NotImplementedError("test")
+
+    stations = [
+        {**_station(available=0, total=40, usage=0), "station_id": "EMPTY",
+         "available_docks": 40, "status": "empty"},
+        {**_station(available=2, total=40, usage=5), "station_id": "LOW",
+         "available_docks": 38, "status": "low"},
+    ]
+    recs = build_dispatch_list(stations, get_config(), predictor=_NoPred(), apply_capacity=False)
+    by_id = {r["station_id"]: r for r in recs}
+    assert by_id["EMPTY"]["urgency_tier"] == "censored"
+    assert by_id["EMPTY"]["priority_level"] == "high"
+    assert by_id["EMPTY"]["priority_score"] >= 70
+    assert by_id["LOW"]["urgency_tier"] == "warning"
+    assert by_id["LOW"]["priority_level"] == "medium"
 
 
 def test_normal_tier_no_censor():

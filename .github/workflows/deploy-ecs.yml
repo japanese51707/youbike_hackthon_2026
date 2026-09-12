@@ -1,0 +1,101 @@
+# ADR-317：push main 自動把同源前後端打進 ECR 並滾 ECS。
+name: Deploy ECS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "backend/Dockerfile"
+      - "config.yaml"
+      - ".dockerignore"
+      - "docs/analysis/workforce_allocation.json"
+      - ".github/workflows/deploy-ecs.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ecs
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: youbike-backend
+  ECS_CLUSTER: youbike
+  ECS_SERVICE: youbike-backend
+  PUBLIC_URL: http://54.227.205.77:8000
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Roll ECS service
+        run: |
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER}" \
+            --service "${ECS_SERVICE}" \
+            --force-new-deployment \
+            --region "${AWS_REGION}" \
+            --query 'service.{status:status,desired:desiredCount,running:runningCount}' \
+            --output json
+
+      - name: Wait for ECS steady state
+        run: |
+          aws ecs wait services-stable \
+            --cluster "${ECS_CLUSTER}" \
+            --services "${ECS_SERVICE}" \
+            --region "${AWS_REGION}"
+
+      - name: Smoke check public URL
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 40); do
+            code="$(curl -sS -o /tmp/home.html -w '%{http_code}' "${PUBLIC_URL}/" || true)"
+            if [ "${code}" = "200" ] && grep -qi '<!doctype html' /tmp/home.html; then
+              curl -sf "${PUBLIC_URL}/health"
+              echo
+              echo "smoke ok after ${i} attempts"
+              exit 0
+            fi
+            echo "waiting (${i}/40) HTTP ${code}"
+            sleep 15
+          done
+          echo "smoke failed: homepage is not the SPA"
+          exit 1

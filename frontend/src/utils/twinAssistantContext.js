@@ -64,7 +64,7 @@ export function compactTwinContext(report, { snapshot = [], visibleLayers } = {}
       ...ANALYSIS_CATALOG.map((item) => ({
         key: item.key,
         name: item.name,
-        info: `${item.purpose}。${item.info}`,
+        info: `${item.reading ?? item.purpose} ${item.info}`,
       })),
       ...PENDING_ANALYSES.map((info, index) => ({
         key: `pending-${index}`,
@@ -106,7 +106,7 @@ export function fallbackTwinAnswer(context, question) {
     const hot = context.top_districts[0];
     return `依目前洞察，空站較集中在 ${hot.district}（${hot.empty}/${hot.count}，${hot.empty_rate}%）。${ADVISORY_NOTE}`;
   }
-  if (/什麼意思|是什麼|怎麼算|方法|Gi|KDE|Voronoi|覆蓋|集水/.test(q) && context.analysis_notes?.length) {
+  if (/什麼意思|是什麼|怎麼算|方法|Gi|KDE|Voronoi|流向|弧線/.test(q) && context.analysis_notes?.length) {
     return `這頁分析方法如下。沒有出現在目前圖層的資料我不會編造。\n${context.analysis_notes.map((n) => `${n.name}：${n.info}`).join("\n")}`;
   }
   if (context.headline) return `我只能根據目前戰情數字回答。當前摘要：${context.headline} ${ADVISORY_NOTE}`;

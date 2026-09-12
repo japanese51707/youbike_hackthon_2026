@@ -49,7 +49,10 @@
   "recommendations": [
     {"recommendation_id": "REC-20260602-0800-001", "station_id": "500101002", "station_name": "捷運景安站", "district": "中和區", "action": "補車", "quantity": 20, "priority_score": 95.0, "priority_level": "high", "reason": "已空站（可借0台），預測30分鐘內持續無車", "current_available": 0, "predicted_at_arrival": 0, "lat": 24.99420, "lng": 121.50490},
     {"recommendation_id": "REC-20260602-0800-002", "station_id": "500101001", "station_name": "捷運南勢角站(4號出口)", "district": "中和區", "action": "補車", "quantity": 30, "priority_score": 88.0, "priority_level": "high", "reason": "預測調度員到達時(35分後)僅剩0台，將空站", "current_available": 2, "predicted_at_arrival": 0, "lat": 24.99348, "lng": 121.48758},
-    {"recommendation_id": "REC-20260602-0800-003", "station_id": "500103005", "station_name": "三重國小", "district": "三重區", "action": "取車", "quantity": 30, "priority_score": 72.0, "priority_level": "medium", "reason": "已滿站（可還0位），使用者無法還車", "current_available": 77, "predicted_at_arrival": 77, "lat": 25.06868, "lng": 121.48071}
+    {"recommendation_id": "REC-20260602-0800-003", "station_id": "500103005", "station_name": "三重國小", "district": "三重區", "action": "取車", "quantity": 30, "priority_score": 72.0, "priority_level": "medium", "reason": "已滿站（可還0位），使用者無法還車", "current_available": 77, "predicted_at_arrival": 77, "lat": 25.06868, "lng": 121.48071},
+    {"recommendation_id": "REC-20260602-0800-004", "station_id": "500102010", "station_name": "板橋車站", "district": "板橋區", "action": "取車", "quantity": 18, "priority_score": 70.0, "priority_level": "medium", "reason": "示意：滿站需取車", "current_available": 60, "predicted_at_arrival": 58, "lat": 25.01427, "lng": 121.46256},
+    {"recommendation_id": "REC-20260602-0800-005", "station_id": "500102001", "station_name": "縣民廣場", "district": "板橋區", "action": "補車", "quantity": 16, "priority_score": 74.0, "priority_level": "medium", "reason": "示意：空站需補車", "current_available": 0, "predicted_at_arrival": 1, "lat": 25.01080, "lng": 121.46020},
+    {"recommendation_id": "REC-20260602-0800-006", "station_id": "500104012", "station_name": "三重商工", "district": "三重區", "action": "補車", "quantity": 14, "priority_score": 68.0, "priority_level": "medium", "reason": "示意：同區補車", "current_available": 2, "predicted_at_arrival": 2, "lat": 25.06210, "lng": 121.48640}
   ],
 
   "tasks": [

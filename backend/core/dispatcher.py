@@ -48,6 +48,15 @@ def _rec_id(station_id: str) -> str:
     return f"REC-{ts}-{station_id}"
 
 
+def _already_at_limit(station: dict) -> bool:
+    """現況已空或已滿。無預測時仍視為截斷層，不能打成中性 50 分。"""
+    total = float(station.get("total_docks") or 0)
+    available = float(station.get("available_bikes") or 0)
+    if total <= 0:
+        return available <= 0
+    return available <= 0 or available >= total
+
+
 def build_dispatch_list(
     stations: list[dict],
     config: Optional[dict] = None,
@@ -81,8 +90,11 @@ def build_dispatch_list(
             interval = None
         if interval is not None:
             score = urg.calc_urgency(st, interval, r["action"])
+        elif r.get("urgency_tier") == "censored" or _already_at_limit(st):
+            # 已空／已滿：截斷層打底 70（= high），無預測就不在層內再排序。
+            score = 70.0
         else:
-            score = 50.0   # 無預測時的中性分數（降級）
+            score = 50.0   # 無預測且尚未觸底：中性分數（降級）
         r["priority_score"] = score
         r["priority_level"] = _level(score, cfg)
         r["recommendation_id"] = _rec_id(r["station_id"])

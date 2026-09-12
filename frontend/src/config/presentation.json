@@ -33,41 +33,29 @@
     "hexagonRadiusMeters": 700,
     "hexagonElevationScale": 14,
     "hexagonColorRange": [
-      [
-        232,
-        224,
-        197
-      ],
-      [
-        217,
-        204,
-        146
-      ],
-      [
-        192,
-        187,
-        113
-      ],
-      [
-        149,
-        161,
-        93
-      ],
-      [
-        104,
-        132,
-        78
-      ],
-      [
-        70,
-        104,
-        70
-      ]
+      [25, 113, 194],
+      [120, 186, 232],
+      [190, 220, 230],
+      [232, 236, 214],
+      [255, 236, 168],
+      [255, 214, 112],
+      [244, 164, 96],
+      [220, 88, 64],
+      [183, 28, 28]
+    ],
+    "hexagonColorDomain": [0, 100],
+    "centralityColorRange": [
+      [86, 118, 168],
+      [64, 186, 196],
+      [255, 210, 96],
+      [232, 96, 48]
     ],
     "arcWidthMinPixels": 2,
     "arcWidthScale": 0.5,
-    "arcSourceColor": "#d7963c",
-    "arcTargetColor": "#73965d",
+    "arcSourceColor": "#ffa94d",
+    "arcTargetColor": "#38d9a9",
+    "arcSourceRgb": [255, 169, 77],
+    "arcTargetRgb": [56, 217, 169],
     "arcHeight": 0.35
   },
   "fallbackColor": "#858783",

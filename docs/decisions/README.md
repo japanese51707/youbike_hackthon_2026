@@ -69,6 +69,12 @@
 | [ADR-313](ADR-313-需調度清單背景預算快取.md) | 需調度清單背景預算快取（顯示讀快取，派工維持即時） | accepted | dispatch, api, performance | 背景每60秒預算全量build_dispatch_list進TTL快取,recommendations/alerts/escalations讀快取(14-32s→1s),派工端口維持即時;config開關+僅真實源 |
 | [ADR-312](ADR-312-班別人力配置與雲端固定位址.md) | 班別人力配置（三班×行政區）與雲端固定位址 | accepted | dispatch, data, database, deployment | 人力分早40/晚35/夜25三班,班內依行政區工作量配額;operators加shift欄;seed依行政區×班別分派;雲端 NLB+Elastic IP 固定位址(task重啟不變),workforce json 進 image 讓雲端分派生效 |
 | [ADR-314](ADR-314-前端同源上雲.md) | 前端與後端同源上雲 | accepted | deployment, frontend, api, security | ECS 同一 image 出 SPA；`http://54.227.205.77:8000/` 畫面、`/api/v1` API；不另開公開 S3／CloudFront |
+| [ADR-315](ADR-315-車源決策階梯.md) | 車源決策階梯（就近取車優先，總部載滿為最後手段） | accepted | dispatch, backend | 車上載量→同區取車就近取→同區湊不足跨區取一站補足→都湊不到才總部載滿並警示 needs_depot_refill；需總部時車人都派總部待命；複用 _pack_supply_aware_trip |
+| [ADR-316](ADR-316-全時段可跨區同區優先.md) | 全時段可跨區、同區優先 | accepted | dispatch, backend | 移除不可跨區硬規則（allow_cross_district 恆真）；同區為主池、跨區僅在同區湊不足時備援拉入；保留 config 開關特例 |
+| [ADR-317](ADR-317-git-push自動部署ECS.md) | push main 自動部署同源前後端 | accepted | deployment, security | GitHub Actions 建同一 image → ECR → ECS；觸發僅 `main` 與手動按鈕；憑證走 GitHub Secrets |
+| [ADR-318](ADR-318-出車載量自動預設.md) | 出車載量自動預設（取消人工回報並重算） | accepted | dispatch, backend, frontend | 非總部車=0、總部車=補車需求量，僅車上載量未知時套用（尊重已回報值）；預覽與落地同口徑；前端移除回報並重算 |
+| [ADR-319](ADR-319-任務地圖真實道路路線.md) | 任務地圖真實道路路線（非點對點直線） | accepted | frontend, backend | 後端 /routing/road 代理外部路由服務 + 直線降級 + 快取；前端沿道路畫，無 geometry 退直線；前端不直打外部服務 |
+| [ADR-320](ADR-320-系統為主的自動配單.md) | 系統為主的自動配單（依緊急度逐張配對鄰近人車） | accepted | dispatch, backend | 每輪掃緊急清單依緊急度逐張配對鄰近人車，複用 build_from_station 車源/人力階梯；過濾已認領+手動草稿站；無車停止本輪；與 auto_detect 共用鎖；後台開關；config 開關+僅真實源 |
 | [ADR-310](ADR-310-自動偵測調度完成.md) | 自動偵測調度完成（免人工回報，達標即結） | accepted | dispatch, data, backend | 背景輪詢即時站況，進行中任務待處理站達派工目標（補車升/取車降逼近 target+最小變化量濾波動）即自動標記完成、推進、結案，複用 report_station(auto=True)；不論車誰移動達目標即需求消化；config 開關+僅真實源啟用；待 owner 核准 |
 
 ## 新決策流程

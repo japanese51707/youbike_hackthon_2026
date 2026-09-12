@@ -14,6 +14,28 @@ import BasemapStatus from "./BasemapStatus.jsx";
 
 const BLOCKED_RESOURCE_URL = "data:application/octet-stream;base64,";
 
+function applyCameraFocus(map, target, { animate }) {
+  if (!map || !target) return;
+  if (target.bounds) {
+    map.fitBounds(target.bounds, {
+      padding: target.padding ?? 72,
+      duration: animate ? 800 : 0,
+      essential: true,
+    });
+    return;
+  }
+  if (!Number.isFinite(target.longitude) || !Number.isFinite(target.latitude)) return;
+  const camera = {
+    center: [target.longitude, target.latitude],
+    zoom: Number.isFinite(target.zoom) ? target.zoom : map.getZoom(),
+  };
+  if (animate) {
+    map.flyTo({ ...camera, duration: 800, essential: true });
+    return;
+  }
+  map.jumpTo(camera);
+}
+
 // 自訂「2D」控制鈕：一鍵把 pitch/bearing 歸零，回到正北俯視（ADR-204 地圖互動）。
 class Reset2DControl {
   onAdd(map) {
@@ -241,13 +263,7 @@ export default function SharedMap({
       if (!ensureOverlay() || fallbackAppliedRef.current) return;
       setFallbackReason(null);
       setBasemapStatus("ready");
-      const pending = focusTargetRef.current;
-      if (pending && Number.isFinite(pending.longitude) && Number.isFinite(pending.latitude)) {
-        map.jumpTo({
-          center: [pending.longitude, pending.latitude],
-          zoom: Number.isFinite(pending.zoom) ? pending.zoom : map.getZoom(),
-        });
-      }
+      applyCameraFocus(map, focusTargetRef.current, { animate: false });
       handleCameraIdle();
     };
     const handleMapError = () => {
@@ -327,17 +343,8 @@ export default function SharedMap({
 
   // 外部（例如缺口排行榜）觸發平滑飛越到指定站點。
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !focusTarget) return;
-    const { longitude, latitude, zoom } = focusTarget;
-    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return;
-    map.flyTo({
-      center: [longitude, latitude],
-      zoom: Number.isFinite(zoom) ? zoom : map.getZoom(),
-      duration: 800,
-      essential: true,
-    });
-  }, [focusTarget?.id, focusTarget?.longitude, focusTarget?.latitude, focusTarget?.zoom]);
+    applyCameraFocus(mapRef.current, focusTarget, { animate: true });
+  }, [focusTarget?.id, focusTarget?.longitude, focusTarget?.latitude, focusTarget?.zoom, focusTarget?.bounds]);
 
   return (
     <div className={`shared-map ${className}`} role="region" aria-label={ariaLabel}>

@@ -116,6 +116,7 @@ superseded-by:
 | ADR-314 | 前端與後端同源上雲（ECS 出 SPA，單一 NLB 網址） | accepted |
 | ADR-315 | 車源決策階梯（車上載量→同區取車就近取→同區湊不足跨區補足→總部載滿為最後手段並警示） | accepted |
 | ADR-316 | 全時段可跨區、同區優先（移除不可跨區硬規則，跨區僅在同區湊不足時備援） | accepted |
+| ADR-317 | push main 自動部署同源前後端（GitHub Actions → ECR → ECS） | accepted |
 | ADR-318 | 出車載量自動預設（取消人工回報並重算；非總部車=0、總部車=補車需求量，僅未知時套用） | accepted |
 | ADR-319 | 任務地圖真實道路路線（後端 /routing/road 代理 + 直線降級，前端沿道路畫） | accepted |
 | ADR-320 | 系統為主的自動配單（依緊急度逐張配對鄰近人車，過濾已認領/手動草稿站，與自動偵測共用鎖） | accepted |

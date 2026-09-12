@@ -742,27 +742,27 @@ export default function DashboardPage() {
                 <div className="kpi-primary">
                   <span className="kpi-primary-label">待調度站點</span>
                   <span className="kpi-primary-value mono">
-                    {dashboard.data.kpi.stations_need_dispatch}
+                    {dashboard.data.kpi?.stations_need_dispatch ?? "—"}
                   </span>
                   <span className="kpi-primary-unit">站需立即處理</span>
                 </div>
                 <div className="kpi-mini-group">
                   {/* 欄位被拖窄時只留數字（標籤用 title 補），不讓文字互相疊在一起 */}
-                  <span className="kpi-mini" title={`空站率 ${dashboard.data.kpi.empty_rate}%`}>
+                  <span className="kpi-mini" title={`空站率 ${dashboard.data.kpi?.empty_rate ?? "—"}%`}>
                     <span className="kpi-mini-label">空站率</span>
-                    <b className="mono">{dashboard.data.kpi.empty_rate}%</b>
+                    <b className="mono">{dashboard.data.kpi?.empty_rate ?? "—"}%</b>
                   </span>
-                  <span className="kpi-mini" title={`滿站率 ${dashboard.data.kpi.full_rate}%`}>
+                  <span className="kpi-mini" title={`滿站率 ${dashboard.data.kpi?.full_rate ?? "—"}%`}>
                     <span className="kpi-mini-label">滿站率</span>
-                    <b className="mono">{dashboard.data.kpi.full_rate}%</b>
+                    <b className="mono">{dashboard.data.kpi?.full_rate ?? "—"}%</b>
                   </span>
-                  <span className="kpi-mini" title={`平均使用率 ${dashboard.data.kpi.avg_usage_rate}%`}>
+                  <span className="kpi-mini" title={`平均使用率 ${dashboard.data.kpi?.avg_usage_rate ?? "—"}%`}>
                     <span className="kpi-mini-label">平均使用率</span>
-                    <b className="mono">{dashboard.data.kpi.avg_usage_rate}%</b>
+                    <b className="mono">{dashboard.data.kpi?.avg_usage_rate ?? "—"}%</b>
                   </span>
-                  <span className="kpi-mini" title={`全系統 ${dashboard.data.kpi.total_stations} 站`}>
+                  <span className="kpi-mini" title={`全系統 ${dashboard.data.kpi?.total_stations ?? "—"} 站`}>
                     <span className="kpi-mini-label">全系統</span>
-                    <b className="mono">{dashboard.data.kpi.total_stations}</b>
+                    <b className="mono">{dashboard.data.kpi?.total_stations ?? "—"}</b>
                     <span className="kpi-mini-label">站</span>
                   </span>
                 </div>

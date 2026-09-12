@@ -1,8 +1,8 @@
 import { HexagonLayer } from "@deck.gl/aggregation-layers";
 import presentationConfig from "../../../config/presentation.json";
 
-// 站點容量密度基底（HexagonLayer）：以 total_docks 作為聚合權重，
-// 作為暗色底圖上的對比基底。權重來自既有站點欄位，非歷史借還量，命名據實標示。
+// 柱高＝格內車柱總數（容量密度）；顏色＝格內平均使用率（0% 空、50% 平衡、100% 滿）。
+// 不是歷史借還流量。缺使用率時當 50%，避免被當成空站。
 export function createDensityLayer({ data, id }) {
   if (!Array.isArray(data) || !data.length) return null;
 
@@ -14,10 +14,16 @@ export function createDensityLayer({ data, id }) {
     radius: presentationConfig.layers.hexagonRadiusMeters,
     elevationScale: presentationConfig.layers.hexagonElevationScale,
     coverage: 0.85,
-    opacity: 0.35,
+    opacity: 0.55,
+    colorAggregation: "MEAN",
+    elevationAggregation: "SUM",
+    colorDomain: presentationConfig.layers.hexagonColorDomain,
     colorRange: presentationConfig.layers.hexagonColorRange,
     getPosition: (station) => [Number(station.lng), Number(station.lat)],
     getElevationWeight: (station) => Number(station.total_docks) || 0,
-    getColorWeight: (station) => Number(station.total_docks) || 0,
+    getColorWeight: (station) => {
+      const usage = Number(station.usage_rate);
+      return Number.isFinite(usage) ? usage : 50;
+    },
   });
 }

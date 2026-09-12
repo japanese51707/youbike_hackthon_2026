@@ -3,12 +3,11 @@ import assert from "node:assert/strict";
 import { getisOrdGiStar } from "./spatialStats.js";
 import {
   TWIN_INSIGHT,
-  buildCatchmentInsight,
   buildFlowInsight,
   buildGaugeInsight,
+  buildNetworkInsight,
   buildTwinInsights,
   cityWideGate,
-  computeCatchmentStats,
   districtStatusRows,
 } from "./twinInsights.js";
 
@@ -36,6 +35,14 @@ function cluster(prefix, lat0, lng0, count, extra) {
     station(`${prefix}-${i}`, lat0 + i * 0.001, lng0 + (i % 5) * 0.001, extra),
   );
 }
+
+test("district scope rewrites the gate and gauge wording", () => {
+  const stations = cluster("a", 25.01, 121.46, 8, { district: "板橋區", status: "empty", available_bikes: 0, usage_rate: 0 });
+  const gate = cityWideGate({ mode: "past", stations, temporalCovered: 1, temporalAvailable: 2, scopeLabel: "板橋區" });
+  assert.match(gate.reason, /板橋區結論已關閉/);
+  const insight = buildGaugeInsight(stations, "板橋區");
+  assert.match(insight.findings[0], /板橋區 8 站/);
+});
 
 test("city-wide gate stays closed when the time machine is not live", () => {
   const stations = cluster("a", 25.01, 121.46, 20, { status: "empty", available_bikes: 0, usage_rate: 0 });
@@ -76,6 +83,17 @@ test("past mode builds no city-wide findings even if layers are on", () => {
   assert.equal(report.layers.every((layer) => layer.findings.length === 0), true);
 });
 
+test("network centrality is a real computation on actual station coordinates", () => {
+  const stations = [
+    ...cluster("banqiao", 25.01, 121.46, 5, { district: "板橋區" }),
+    ...cluster("xindian", 24.97, 121.54, 5, { district: "新店區" }),
+  ];
+  const insight = buildNetworkInsight(stations);
+  assert.equal(insight.dataMode, "real");
+  assert.ok(insight.metrics[0].value >= 1);
+  assert.match(insight.caveats.join(""), /實際站點座標實算/);
+});
+
 test("flow concludes only as illustrative pairing", () => {
   const insight = buildFlowInsight([
     { station_id: "P1", station_name: "取1", action: "取車", district: "板橋區", lat: 25.01, lng: 121.46, quantity: 10 },
@@ -84,6 +102,15 @@ test("flow concludes only as illustrative pairing", () => {
   assert.equal(insight.dataMode, "method");
   assert.match(insight.findings[0], /同區最近/);
   assert.match(insight.caveats.join(""), /不是真實借還 OD/);
+  const mockInsight = buildFlowInsight(
+    [
+      { station_id: "P1", station_name: "取1", action: "取車", district: "板橋區", lat: 25.01, lng: 121.46, quantity: 10 },
+      { station_id: "D1", station_name: "補1", action: "補車", district: "板橋區", lat: 25.012, lng: 121.462, quantity: 8 },
+    ],
+    { source: "status-mock" },
+  );
+  assert.match(mockInsight.findings[0], /示意取→補/);
+  assert.match(mockInsight.caveats.join(""), /mock 配對/);
 });
 
 test("high coverage past snapshots can open city-wide conclusions", () => {
@@ -100,18 +127,6 @@ test("high coverage past snapshots can open city-wide conclusions", () => {
   });
   assert.equal(report.cityWideOk, true);
   assert.ok(report.headline);
-});
-
-test("catchment marks an isolated station", () => {
-  const stations = [
-    ...cluster("core", 25.01, 121.46, 6, { district: "板橋區" }),
-    station("far", 24.7, 121.2, { station_name: "偏遠站", district: "萬里區" }),
-  ];
-  const stats = computeCatchmentStats(stations, 0.6);
-  assert.equal(stats.isolated, 1);
-  const insight = buildCatchmentInsight(stations, 0.6);
-  assert.match(insight.findings[0], /孤立站 1/);
-  assert.equal(insight.evidence[0].station_id, "far");
 });
 
 test("Gi* tags method below the sample floor and real at city scale", () => {

@@ -30,11 +30,14 @@ flowchart TB
         CWA["中央氣象署 CWA<br/>雨量/氣象測站"]
     end
 
+    GHA["GitHub Actions<br/>push main 建 image（ADR-317）"]
+
     User -->|"HTTP :8000／ 畫面與 /api/v1"| BE
     Proxy -->|"本機開發仍可 proxy"| BE
     BE -->|"讀歷史(補 lag 代理)<br/>task role 最小權限"| S3
     BE -->|即時站況| YB
     BE -->|即時天氣<br/>金鑰在雲端| CWA
+    GHA -->|ECR push + 滾動| ECR
     ECR -.->|拉 image| ECS
     ECS -.->|寫 log| CW
     SM -->|讀模型+站點快照| S3
@@ -75,6 +78,7 @@ flowchart TB
 | Security Group | sg-09e0635d293224992（只開 8000） |
 | IAM roles | youbike-ecs-execution / youbike-ecs-task / youbike-sagemaker-exec |
 | CloudWatch log group | /ecs/youbike-backend |
+| GitHub Actions | `.github/workflows/deploy-ecs.yml`（push `main` 建 image 並滾 ECS，ADR-317） |
 
 > 賽後關閉：`aws ecs update-service --cluster youbike --service youbike-backend --desired-count 0`
 > → 刪 service / cluster / task-def；前端 `YOUBIKE_BACKEND_URL` 改回 `http://127.0.0.1:8000`。
