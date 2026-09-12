@@ -581,7 +581,7 @@ export default function DashboardPage() {
   const [draftRoad, setDraftRoad] = useState(null);
 
   useEffect(() => {
-    if (!draftRoadKey || !isApiMode()) {
+    if (!draftRoadKey || !isApiMode) {
       setDraftRoad(null);
       return undefined;
     }
