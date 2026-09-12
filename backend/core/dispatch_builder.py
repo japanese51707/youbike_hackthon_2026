@@ -117,6 +117,9 @@ def _make_draft(stations, vehicle, operator, district, cfg, now,
     estimate = {
         **kpi,
         "total_quantity": sum(int(s.get("quantity", 0)) for s in ordered),
+        # ADR-322：本趟實際補車量 / 原始需求量（放不滿時兩者不同）
+        "requested_quantity": sum(int(s.get("requested_quantity", s.get("quantity", 0)) or 0)
+                                  for s in ordered if s.get("action") != "取車"),
         "stop_count": len(ordered),
         "urgency_sum": round(sum(float(s.get("priority_score", 0)) for s in ordered), 1),
     }
@@ -132,6 +135,21 @@ def _make_draft(stations, vehicle, operator, district, cfg, now,
         stop["arrival_offset_min"] = entry["arrival_offset_min"]
         stop["horizon_used_min"] = entry["horizon_used_min"]
         stop["onboard_after"] = entry["onboard_after"]
+        # ADR-322：實際能補幾台（可能少於需求）。把它連同下修後的目標水位寫回站點，
+        # 派工單、司機卡片與自動偵測完成（ADR-310）都以「做得到的目標」為準，
+        # 否則任務會卡在一個永遠到不了的水位而結不了案。
+        delivered = entry.get("delivered_quantity")
+        # ★只有「補得到一部分」才下修數量。完全補不到（delivered==0）的站不可以改成 0——
+        #   那會讓它變成一個沒有工作量的站，順帶把 no_bikes_to_deliver / 超重的阻擋洗掉，
+        #   確認閘門就形同虛設。這種站要原樣保留，讓它繼續擋下這張單。
+        if delivered is not None and delivered > 0 and stop.get("action") != "取車":
+            stop["est_quantity"] = int(delivered)
+            stop["shortfall_quantity"] = int(entry.get("shortfall_quantity") or 0)
+            if entry.get("shortfall_quantity"):
+                stop["requested_quantity"] = int(stop.get("quantity") or 0)
+                stop["quantity"] = int(delivered)
+                if entry.get("target_available") is not None:
+                    stop["target_available"] = entry["target_available"]
     return {
         "is_draft": True,                       # ★草稿：預覽用，未確認不落地
         "district": district,
@@ -150,6 +168,8 @@ def _make_draft(stations, vehicle, operator, district, cfg, now,
         "load_plan": feasibility["load_plan"],  # ADR-123：逐站到達時間／視野／車上載量
         "onboard_start": feasibility["onboard_start"],
         "onboard_end": feasibility["onboard_end"],
+        # ADR-321：True＝載量是系統推定（閒置車未回報視為 0），不是司機回報的實測值
+        "onboard_assumed": bool(feasibility.get("onboard_assumed")),
         "note": note,
     }
 
@@ -255,6 +275,19 @@ def build_from_station(
         [r for r in dispatch_list
          if r.get("action") == "取車" and r.get("district") != district],
         key=lambda r: -float(r.get("quantity", 0) or 0))
+    # ADR-321 供車站：早尖峰全市幾乎都是空站，規則引擎不會標出任何「取車」站，
+    # 於是車源結構性為 0，每張補車單都誤判成「附近無車源」。真實情況是
+    # 「附近沒有正在出事的滿站」，不是「附近沒有車可拿」。
+    # 這裡補上水位高於目標、借幾台也不會變空的站當車源（排在真正的取車站之後）。
+    if bool((cfg.get("fleet", {}) or {}).get("啟用供車站", True)):
+        from core.donor_stations import donor_candidates, get_all_stations
+        taken = {str(r.get("station_id")) for r in dispatch_list}
+        donors = donor_candidates(
+            get_all_stations(), taken, cfg, district=district,
+            near_lat=tentative_veh.get("current_lat") if tentative_veh else seed.get("lat"),
+            near_lng=tentative_veh.get("current_lng") if tentative_veh else seed.get("lng"),
+            limit=int((cfg.get("fleet", {}) or {}).get("供車站候選上限", 8)))
+        cross_collectors = cross_collectors + donors
     stations = _dsp._pack_supply_aware_trip(
         pool, cap, max_stops, seed_id=station_id, onboard=onboard,
         start_lat=tentative_veh.get("current_lat") if tentative_veh else None,
@@ -305,6 +338,9 @@ def build_from_station(
     draft["operator_candidates"] = _operator_candidates(assignable, depot_ops, district)
     if not in_district and not nearby:
         draft["note"] += "｜該區與鄰近無閒置車，建議用總站待命車"
+    # ADR-321：載量若為系統推定（閒置車未回報→視為 0），草稿要講明，不要讓人以為是實測值。
+    if draft.get("onboard_assumed"):
+        draft["note"] += "｜車上載量為系統推定，出車前請司機確認"
 
     # ADR-315 車源階梯最後一關：若補車需求仍超過（車上載量 + 趟內取車站可取量），
     # 代表同區＋跨區都湊不到足夠車源 → 需從總部載滿車出發調度（供未來全自動流程升級為警示）。
@@ -314,7 +350,34 @@ def build_from_station(
         gap = _demand - _supply
         draft["supply_shortfall"] = gap
         draft["needs_depot_refill"] = True
-        draft["note"] += f"｜⚠ 附近無足夠車源可取（缺 {gap} 台），需由總部載滿車出發調度"
+        # ADR-321：由總部裝車出發是「計畫」，不是「例外」。派到總站待命車時照實寫成
+        # 出發前的裝車指示（含台數），司機才知道要裝幾台；只有連總部都沒車可派時才是警告。
+        depot_assigned = bool(veh and veh.get("is_depot"))
+        if depot_assigned or depot:
+            load_qty = min(gap, int((veh or {}).get("max_capacity") or default_cap))
+            draft["depot_load"] = {
+                "quantity": load_qty,
+                "vehicle_id": (veh or {}).get("vehicle_id"),
+                "label": f"出發前於總部裝 {load_qty} 台",
+                "reason": "本趟補車需求超過沿途可取車量，差額由總部補足",
+            }
+            draft["note"] += f"｜出發前於總部裝 {load_qty} 台（本趟差額 {gap} 台）"
+        else:
+            # ADR-322：拿不到總部車不代表這趟白跑。先取後放能補多少算多少，
+            # 訊息講「本趟可補幾台」而不是「無車源、需總部出發」——後者會讓調度員
+            # 誤以為這張單沒有價值，實際上它已經解掉了大半個缺口。
+            deliverable = max(0, _demand - gap)
+            draft["partial_fill"] = {
+                "deliverable": deliverable,
+                "requested": _demand,
+                "shortfall": gap,
+            }
+            if deliverable > 0:
+                draft["note"] += (f"｜本趟可補 {deliverable}/{_demand} 台"
+                                  f"（差 {gap} 台，待下一輪或總部補足）")
+            else:
+                draft["supply_blocked"] = True
+                draft["note"] += f"｜⚠ 沿途與鄰近皆無車可取，且無總站待命車，本趟無法補車"
     return draft
 
 
