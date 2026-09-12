@@ -240,6 +240,54 @@ def cancel_by_executor(task_id, operator, reason):
             "status": task["task_status"]}
 
 
+def cleanup_malformed_tasks(operator: str = "system") -> dict:
+    """ADR-333：清理「殘缺趟」髒任務——route 全是取車、沒有任何補車站（取了車沒地方放），
+    或含 quantity=0 的無意義站。這些是修正前配出的舊單，占著車人卻做不完。
+    走正規 release 釋放認領與人車，讓站回到緊急清單由新邏輯重配。回被清任務清單。
+
+    只清 assigned / in_progress 且未釋放資源的任務；只讀後端資料，不硬刪 DB。
+    """
+    from db.task_resources_repo import release
+    tm = get_task_manager()
+    cleaned = []
+    for task in tm.pending_or_active():
+        if task.get("resources_released"):
+            continue
+        if task.get("task_status") not in ("assigned", "in_progress"):
+            continue
+        route = _route(task)
+        active = [s for s in route if s.get("station_status") != "removed"]
+        if not active:
+            continue
+        actions = [s.get("action") for s in active]
+        has_supply = any(a == "取車" for a in actions)
+        has_deliver = any(a == "補車" for a in actions)
+        zero_qty = any(int(s.get("est_quantity") or s.get("quantity") or 0) <= 0 for s in active)
+        # 殘缺：只有取車沒有補車（取了沒地方放）、或只有補車卻無車源、或有 0 量站
+        malformed = (has_supply and not has_deliver) or (has_deliver and not has_supply and not task.get("depot_load")) or zero_qty
+        if not malformed:
+            continue
+        tid = task["task_id"]
+        reason = "系統清理殘缺趟（只有取車無補車／0 量站），釋放資源重配"
+        try:
+            if task["task_status"] == "in_progress":
+                t = tm.fail(tid, retryable=False)
+                t.update(cancel_reason=reason, cancelled_by=operator)
+            else:
+                t = tm.cancel(tid, reason, operator)
+            release(t)
+            t["resources_released"] = 1
+            for stop in _route(t):
+                stop["claimed_by"] = None
+            tasks_repo.update(t)
+            _audit(f"清理殘缺趟 {tid}（{actions}），釋放認領及人車", operator=operator, reason=reason)
+            cleaned.append({"task_id": tid, "actions": actions})
+        except Exception as exc:  # noqa: BLE001
+            print(f"[cleanup] 任務 {tid} 清理失敗（略過）：{exc}")
+            continue
+    return {"cleaned_count": len(cleaned), "cleaned": cleaned}
+
+
 def station_claim_map(district: Optional[str] = None):
     claimed = {}
     for task in get_task_manager().pending_or_active():

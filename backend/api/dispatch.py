@@ -310,3 +310,10 @@ def auto_dispatch_progress():
     """ADR-331：自動配單即時進度（供前端執行視窗流動圖 + 逐筆清單）。免權限（只讀）。"""
     from core import auto_dispatch
     return auto_dispatch.get_progress()
+
+
+@router.post("/dispatch/cleanup-malformed-tasks")
+def cleanup_malformed_tasks(operator: dict = Depends(require_role("dispatcher", "maintainer"))):
+    """ADR-333：清理殘缺趟髒任務（只有取車無補車／0 量站），釋放車人重配。需 dispatcher/maintainer。"""
+    from core import task_execution as tx
+    return _call(tx.cleanup_malformed_tasks, operator["operator_id"])
