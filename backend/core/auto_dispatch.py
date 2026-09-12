@@ -107,15 +107,18 @@ def reset_runtime_enabled() -> None:
 
 
 def _current_dispatch_list() -> list[dict]:
-    """當前需調度清單（與 api/dispatch._current_dispatch_list 同口徑，全量不截斷）。"""
-    from core.data.degradation import get_stations_with_degradation
-    from core import build_dispatch_list
-    from core.override_service import get_override_service
+    """當前需調度清單（全量不截斷）。
 
-    stations = get_stations_with_degradation()
-    overrides = get_override_service().active_station_ids()
-    # apply_capacity=False：拿完整排序清單（自動配單自己會逐張配，不靠這裡截量能）
-    recs = build_dispatch_list(stations, override_station_ids=overrides, apply_capacity=False)
+    ADR-331 修正：改讀 dispatch_cache 的背景預算快取（get_snapshot），不要每輪自己重跑
+    全站規則引擎（1600+ 站逐站 LightGBM 預測，雲端冷 20s+）——那會讓自動配單卡在 selecting
+    數十秒、甚至因超時/例外每輪都跑不完。快取由 dispatch_cache 背景 thread 每 60 秒刷新，
+    自動配單直接讀秒回；快取未就緒時 get_snapshot 會同步算一次（不回空）。
+    """
+    from core.dispatch_cache import get_snapshot
+
+    snap = get_snapshot()
+    stations = snap.get("stations", []) or []
+    recs = list(snap.get("recs", []) or [])
     by_id = {str(s["station_id"]): s for s in stations}
     for rec in recs:
         st = by_id.get(str(rec["station_id"]), {})
@@ -195,7 +198,8 @@ def scan_once(trigger: str = "auto") -> list[dict]:
                   trigger=trigger, queue_total=0, processed=0, placed=[],
                   resources=_fleet_op_snapshot(), stopped_because=None)
 
-    with COORDINATION_LOCK:
+    try:
+      with COORDINATION_LOCK:
         recs = _current_dispatch_list()
         # 已被進行中任務認領的站 + 人工手動預覽/草稿佔用的站 → 這輪都避開
         claimed = set(station_claim_map().keys())
@@ -316,6 +320,15 @@ def scan_once(trigger: str = "auto") -> list[dict]:
                       processed=processed, resources=_fleet_op_snapshot(),
                       stopped_because=stop_reason)
         return placed
+    except Exception as exc:  # noqa: BLE001
+        # ADR-331：任何未預期例外（清單讀取失敗等）都要把進度收尾成 done，附錯誤原因，
+        # 否則 phase 會永遠停在 selecting，前端視窗一直轉圈（實測卡住的根因）。
+        _last_diagnostics = {"enabled": is_enabled(), "reasons": {},
+                             "stopped_because": f"本輪發生錯誤：{type(exc).__name__}: {exc}"}
+        _progress_set(phase="done", finished_at=_utc_now().isoformat(),
+                      stopped_because=f"本輪發生錯誤：{type(exc).__name__}: {exc}")
+        print(f"[auto_dispatch] scan_once 例外，已收尾：{exc}")
+        return []
 
 
 def _tally(diag: dict, reason: str) -> None:
