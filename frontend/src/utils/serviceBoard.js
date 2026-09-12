@@ -145,6 +145,52 @@ export function districtLongestOpen(district, problems, nowMs = Date.now()) {
   return Math.max(...rows.map((item) => elapsedMinutesSince(item.opened_at, nowMs) ?? item.elapsed_minutes ?? 0));
 }
 
+export function collectedMinutes(history, nowMs = Date.now()) {
+  const raw = history?.collected_minutes;
+  if (raw != null && Number.isFinite(Number(raw))) return Number(raw);
+  const first = Date.parse(history?.first_observed_at);
+  const last = Date.parse(history?.last_observed_at || nowMs);
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return null;
+  return Math.max(0, (last - first) / 60000);
+}
+
+export function resolveCardCopy({ city = {}, history = {}, longestOpen, liveProblems = 0 } = {}) {
+  const resolved = Number(city.resolved_count) || 0;
+  const avg = city.avg_resolved_minutes;
+  const collected = collectedMinutes(history);
+  const collectedText = collected == null
+    ? ""
+    : collected < 60
+      ? `已收集 ${Math.round(collected)} 分`
+      : `已收集 ${formatDurationMinutes(collected)}`;
+  if (avg != null) {
+    return {
+      value: formatDurationMinutes(avg),
+      timer: longestOpen == null ? "目前沒有進行中的空／滿" : `進行中最長 ${formatDurationMinutes(longestOpen)}`,
+      hint: `${collectedText ? `${collectedText}｜` : ""}近 24 時內已排除 ${resolved} 件｜點開看各區`,
+    };
+  }
+  if (longestOpen != null) {
+    return {
+      value: formatDurationMinutes(longestOpen),
+      timer: "尚無排除，先看進行中最長",
+      hint: `${collectedText || "未滿 24 時也會算"}｜點開看各區`,
+    };
+  }
+  if (liveProblems > 0) {
+    return {
+      value: `${liveProblems} 站`,
+      timer: "時計還沒接上，先看目前空／滿數",
+      hint: "未滿 24 時也會顯示已有資料｜點開看各區",
+    };
+  }
+  return {
+    value: "—",
+    timer: "目前沒有空／滿站",
+    hint: collectedText ? `${collectedText}，窗口內尚無空滿` : "窗口內尚無空滿｜未滿 24 時也會算",
+  };
+}
+
 export function longestOpenOfKind(problems, kind, nowMs = Date.now()) {
   const values = (problems?.open ?? [])
     .filter((item) => !kind || item.kind === kind)

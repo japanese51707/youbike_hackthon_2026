@@ -139,6 +139,16 @@ def test_clock_writes_dedicated_file_not_memory_main(tmp_path, monkeypatch):
     assert main_count == 0
 
 
+def test_snapshot_does_not_require_a_full_24h():
+    """窗口內有一筆排除就顯示，不必等滿 24 小時。"""
+    sp.sync_service_problems([_station()], now=T0)
+    sp.sync_service_problems([_station(status="normal")], now=T1)
+    snap = sp.snapshot(now=T1)
+    assert snap["city"]["resolved_count"] == 1
+    assert snap["city"]["avg_resolved_minutes"] == 20.0
+    assert snap["history"]["poll_count"] == 0
+
+
 def test_record_station_history_keeps_rolling_24h():
     from db import station_snapshots_repo
 
