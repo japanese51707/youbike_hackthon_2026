@@ -1,7 +1,13 @@
 import { ReloadOutlined, CarOutlined, UserOutlined, EnvironmentOutlined, HomeOutlined } from "@ant-design/icons";
-import { Button, Card, Empty, Progress, Space, Tabs, Tag, Tooltip, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { Button, Card, Empty, Modal, Progress, Space, Tabs, Tag, Tooltip, Typography } from "antd";
+import { useEffect, useMemo, useState } from "react";
 import AsyncState from "../components/common/AsyncState.jsx";
+import SharedMap from "../components/map/SharedMap.jsx";
+import {
+  createPlanRouteLayers,
+  createVehicleLayer,
+} from "../components/map/layers/planLayers.js";
+import { getRoadRoute } from "../api/routingApi.js";
 import useDispatchStatus from "../hooks/useDispatchStatus.js";
 import { formatDateTime } from "../utils/formatters.js";
 
@@ -55,8 +61,91 @@ function StatusDot({ map, value }) {
   return <Tag color={meta.color}>{meta.label}</Tag>;
 }
 
+// ── 點站點卡跳出的路線地圖（ADR-329）──
+// 調度員看到某站落後時，第一個想知道的是「車現在在哪、還要跑幾站才到這裡」。
+// 用任務既有的停靠順序畫實走道路路線，並把被點的那站標成焦點。
+function RouteMapModal({ task, focusStationId, onClose }) {
+  const stops = useMemo(
+    () =>
+      (task?.route ?? [])
+        .map((s, i) => ({
+          ...s,
+          seq: i + 1,
+          lat: Number(s.lat),
+          lng: Number(s.lng),
+          quantity: s.est_quantity ?? s.quantity,
+        }))
+        .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng)),
+    [task],
+  );
+  const start = stops[0] ? { lat: stops[0].lat, lng: stops[0].lng } : null;
+  const [geometry, setGeometry] = useState(null);
+
+  useEffect(() => {
+    if (!start || !stops.length) return undefined;
+    let cancelled = false;
+    const coords = [[start.lng, start.lat], ...stops.map((s) => [s.lng, s.lat])];
+    getRoadRoute(coords)
+      .then((res) => {
+        if (!cancelled && res?.mode === "road") setGeometry(res.geometry);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task?.task_id]);
+
+  const layers = useMemo(() => {
+    if (!start || !stops.length) return [];
+    return [
+      ...createPlanRouteLayers({ start, route: stops, geometry }),
+      createVehicleLayer({ start }),
+    ].filter(Boolean);
+  }, [start, stops, geometry]);
+
+  const focus = stops.find((s) => String(s.station_id) === String(focusStationId));
+
+  return (
+    <Modal
+      open={Boolean(task)}
+      onCancel={onClose}
+      footer={null}
+      width={820}
+      title={`${task?.task_id ?? ""} 路線${focus ? `｜第 ${focus.seq} 站 ${focus.station_name ?? ""}` : ""}`}
+    >
+      <div className="dts-route-map">
+        {start && stops.length ? (
+          <SharedMap
+            ariaLabel="任務路線地圖"
+            className="map-fill"
+            initialViewState={{
+              longitude: focus ? focus.lng : start.lng,
+              latitude: focus ? focus.lat : start.lat,
+              zoom: focus ? 14.5 : 12.5,
+            }}
+            layers={layers}
+            getTooltip={({ object }) =>
+              object?.station_name
+                ? { text: `${object.seq}. ${object.station_name}\n${object.action} ${object.quantity ?? ""} 台` }
+                : null
+            }
+          />
+        ) : (
+          <div className="dts-route-map-empty">此任務沒有可用座標，無法顯示路線</div>
+        )}
+      </div>
+      {task?.depot_load ? (
+        <div className="dts-depot-load">
+          <HomeOutlined /> {task.depot_load.label ?? `出發前於總部裝 ${task.depot_load.quantity} 台`}
+        </div>
+      ) : null}
+    </Modal>
+  );
+}
+
 // ── B：進行中任務卡 ──
-function TaskCard({ task, now }) {
+function TaskCard({ task, now, onOpenMap }) {
   const meta = TASK_STATUS[task.task_status] ?? TASK_STATUS.assigned;
   const route = task.route ?? [];
   const done = route.filter((s) => s.station_status === "completed").length;
@@ -90,6 +179,14 @@ function TaskCard({ task, now }) {
         </Space>
       </div>
 
+      {task.depot_load ? (
+        <div className="dts-depot-load">
+          <HomeOutlined />{" "}
+          {task.depot_load.label ?? `出發前於總部裝 ${task.depot_load.quantity} 台`}
+          <span className="dts-muted">（本趟車源，非沿途取車）</span>
+        </div>
+      ) : null}
+
       <div className="dts-progress-row">
         <Progress percent={pct} size="small" status={pct === 100 ? "success" : "active"}
           format={() => `${done}/${active.length} 站`} />
@@ -99,15 +196,46 @@ function TaskCard({ task, now }) {
         {route.map((s, i) => {
           const isDone = s.station_status === "completed";
           const isRemoved = s.station_status === "removed";
-          return (
-            <div key={s.station_id ?? i} className={`dts-stop ${isDone ? "done" : ""} ${isRemoved ? "removed" : ""}`}>
+            // 當下站況優先用後端補的 live_*（ADR-329）；拿不到才退回組單當下的快照
+            const bikes = Number.isFinite(Number(s.live_available_bikes))
+              ? Number(s.live_available_bikes)
+              : Number(s.current_available);
+            const total = Number.isFinite(Number(s.live_total_docks))
+              ? Number(s.live_total_docks)
+              : Number(s.total_docks);
+            const docks = Number.isFinite(Number(s.live_available_docks))
+              ? Number(s.live_available_docks)
+              : (Number.isFinite(total) && Number.isFinite(bikes) ? total - bikes : NaN);
+            const target = Number(s.target_available);
+            const isLive = Number.isFinite(Number(s.live_available_bikes));
+            return (
+            <div
+              key={s.station_id ?? i}
+              className={`dts-stop ${isDone ? "done" : ""} ${isRemoved ? "removed" : ""} clickable`}
+              role="button"
+              tabIndex={0}
+              onClick={() => onOpenMap?.(task, s.station_id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onOpenMap?.(task, s.station_id);
+                }
+              }}
+              title="點擊查看路線地圖"
+            >
               <span className="dts-stop-seq mono">{i + 1}</span>
               <span className="dts-stop-main">
                 <span className="dts-stop-name">{s.station_name ?? s.station_id}</span>
                 <span className="dts-stop-sub dts-muted mono">
                   {s.action}
-                  {Number.isFinite(Number(s.target_available)) ? `｜目標水位 ${s.target_available} 台` : ""}
                   {isDone && Number.isFinite(Number(s.actual_available)) ? `｜實際 ${s.actual_available} 台` : ""}
+                </span>
+                {/* 三個數字一起看才有意義：現在幾台、還剩幾個空位、要補到幾台 */}
+                <span className="dts-stop-levels mono">
+                  <b>現有 {Number.isFinite(bikes) ? bikes : "—"} 台</b>
+                  <span>空位 {Number.isFinite(docks) ? docks : "—"}</span>
+                  <span className="dts-target">目標 {Number.isFinite(target) ? target : "—"} 台</span>
+                  {!isLive ? <span className="dts-muted">（組單當下）</span> : null}
                 </span>
               </span>
               <span className="dts-stop-status">
@@ -197,6 +325,9 @@ function ShiftPanel({ operators, depotOperators }) {
 }
 
 export default function DispatchStatusPage() {
+  // ADR-329：點站點卡開路線地圖
+  const [routeMap, setRouteMap] = useState(null);
+  const openRouteMap = (task, stationId) => setRouteMap({ task, stationId });
   const { data, error, loading, reload } = useDispatchStatus();
   // 每 30 秒重算一次相對時間（讓「已等待 / 至今」跟著走，不必等輪詢）。
   const [now, setNow] = useState(Date.now());
@@ -280,7 +411,9 @@ export default function DispatchStatusPage() {
           </Typography.Paragraph>
           {activeTasks.length ? (
             <div className="dts-task-list">
-              {activeTasks.map((t) => <TaskCard key={t.task_id} task={t} now={now} />)}
+              {activeTasks.map((t) => (
+                <TaskCard key={t.task_id} task={t} now={now} onOpenMap={openRouteMap} />
+              ))}
             </div>
           ) : (
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="目前沒有進行中的分派任務" />
@@ -317,6 +450,12 @@ export default function DispatchStatusPage() {
           </div>
         </Card>
       </AsyncState>
+
+      <RouteMapModal
+        task={routeMap?.task ?? null}
+        focusStationId={routeMap?.stationId}
+        onClose={() => setRouteMap(null)}
+      />
     </div>
   );
 }
