@@ -2829,24 +2829,38 @@ body.twin-agent-dragging .shared-map {
   display: flex;
   justify-content: center;
   align-items: stretch;
+}
+
+.rider-page.has-bezel .rider-phone-stage {
+  align-items: center;
+  padding: 20px 16px 72px;
   background: color-mix(in srgb, var(--ct-bg) 70%, #000);
 }
 
 .rider-phone {
   position: relative;
-  width: min(430px, 100%);
+  width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
   overflow: hidden;
-  padding: 34px 0 0;
+  padding: 8px 0 0;
   border: 0;
-  border-left: 3px solid color-mix(in srgb, var(--ct-border) 80%, #111);
-  border-right: 3px solid color-mix(in srgb, var(--ct-border) 80%, #111);
-  border-radius: 0;
   background: var(--ct-bg);
-  box-shadow: 0 0 64px rgba(0, 0, 0, 0.35);
+}
+
+.rider-page.has-bezel .rider-phone {
+  width: min(390px, calc((100dvh - 96px) * 9 / 20), calc(100vw - 48px));
+  max-width: 390px;
+  aspect-ratio: 9 / 20;
+  height: auto;
+  max-height: calc(100dvh - 96px);
+  flex: none;
+  padding: 36px 0 10px;
+  border: 10px solid #111;
+  border-radius: 36px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
 }
 
 .rider-phone-notch {
@@ -2879,11 +2893,25 @@ body.twin-agent-dragging .shared-map {
 .rider-page.is-phone .rider-toolbar {
   padding: 0 12px;
   align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.rider-page.is-phone .rider-toolbar > div:first-child {
+  flex: none;
 }
 
 .rider-page.is-phone .rider-toolbar h4.ant-typography,
 .rider-page.is-phone .rider-toolbar h3.ant-typography {
   margin: 0;
+  font-size: 15px;
+  line-height: 1.2;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.rider-page.is-phone .rider-toolbar-actions {
+  flex-wrap: nowrap;
 }
 
 .rider-page.is-phone .rider-banner {
@@ -2892,13 +2920,46 @@ body.twin-agent-dragging .shared-map {
 
 .rider-page.is-phone .rider-main {
   grid-template-columns: 1fr;
-  grid-template-rows: minmax(0, 1fr) minmax(210px, 38%);
+  grid-template-rows: minmax(0, 1.35fr) minmax(168px, 34%);
   gap: 0;
 }
 
 .rider-page.is-phone .rider-map {
   border: 0;
   border-radius: 0;
+}
+
+.rider-page.is-phone .rider-map .maplibregl-ctrl-group {
+  opacity: 0.78;
+  transition: opacity 0.16s ease;
+}
+
+.rider-page.is-phone .rider-map .maplibregl-ctrl-group:hover,
+.rider-page.is-phone .rider-map .maplibregl-ctrl-group:focus-within,
+.rider-page.is-phone .rider-map .maplibregl-ctrl-group:has(:active) {
+  opacity: 1;
+}
+
+.rider-page.is-phone .rider-map .basemap-status {
+  left: auto;
+  right: 8px;
+  bottom: 6px;
+  max-width: 42%;
+  padding: 0 2px;
+  box-shadow: none;
+  z-index: 2;
+}
+
+.rider-page.is-phone .rider-map .basemap-status-ready {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.rider-page.is-phone .rider-map .basemap-status .map-attribution {
+  font-size: 7px;
+  letter-spacing: 0;
+  line-height: 1.2;
 }
 
 .rider-page.is-phone .rider-list {
@@ -2911,17 +2972,57 @@ body.twin-agent-dragging .shared-map {
 .rider-page.is-phone .rider-legend {
   top: 8px;
   left: 8px;
+  right: auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
-  padding: 8px 10px;
+  max-width: calc(100% - 56px);
+  padding: 4px 8px;
 }
 
+.rider-page.is-phone .rider-legend-title,
 .rider-page.is-phone .rider-legend-item small,
 .rider-page.is-phone .rider-legend-note {
   display: none;
 }
 
+.rider-page.is-phone .rider-legend-item {
+  margin: 0;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.rider-page.is-phone .rider-legend-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 2px;
+}
+
+.rider-page.is-phone .rider-aim-range {
+  width: 72px;
+  height: 72px;
+}
+
+.rider-page.is-phone .rider-aim-label {
+  top: calc(50% + 48px);
+  font-size: 10px;
+}
+
 .rider-page.is-phone .rider-card {
-  padding: 10px 12px;
+  padding: 8px 10px;
+  gap: 6px;
+}
+
+.rider-page.is-phone .rider-card-head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rider-page.is-phone:not(.has-bezel) .rider-phone-exit {
+  display: none;
 }
 
 body.rider-phone-preview .topbar,
