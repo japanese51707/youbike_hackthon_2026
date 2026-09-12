@@ -74,6 +74,11 @@ export function setAutoDispatchState(enabled) {
   return request("/dispatch/auto-dispatch", { method: "POST", body: { enabled } });
 }
 
+// ADR-320：後台手動立即執行一輪自動配單（看得到結果），並重設下一輪倒數。需 dispatcher/maintainer。
+export function runAutoDispatchNow() {
+  return request("/dispatch/auto-dispatch/run-now", { method: "POST" });
+}
+
 export function acknowledgeAlert(alertId) {
   return isApiMode ? request(`/alerts/${encodeURIComponent(alertId)}/acknowledge`, { method: "POST" })
     : mockAdapter.acknowledgeAlert(alertId);

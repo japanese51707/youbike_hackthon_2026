@@ -209,18 +209,16 @@ def confirm_trip(
 
 @router.get("/dispatch/auto-dispatch")
 def get_auto_dispatch_state():
-    """回傳自動配單目前狀態（供調度決策儀表板顯示開關）。
+    """回傳自動配單目前狀態（供調度決策儀表板顯示開關與倒數）。
 
     enabled：目前是否啟用（runtime 開關優先於 config 預設）。
     running：背景輪詢 thread 是否在跑（mock 源不啟）。
     interval_sec：輪詢間隔（對齊官方約 5 分更新）。
+    next_run_at：下一輪預定執行時間（ISO/UTC，供前端倒數）。
+    last_run_at / last_placed_count：上一輪執行時間與落地張數。
     """
     from core import auto_dispatch
-    return {
-        "enabled": auto_dispatch.is_enabled(),
-        "running": auto_dispatch._thread is not None and auto_dispatch._thread.is_alive(),
-        "interval_sec": int(auto_dispatch._cfg().get("輪詢間隔_秒", 300)),
-    }
+    return auto_dispatch.run_status()
 
 
 @router.post("/dispatch/auto-dispatch")
@@ -238,3 +236,20 @@ def set_auto_dispatch_state(
         type="param_edit", operator=operator["operator_id"],
         action=f"{'開啟' if enabled else '關閉'}自動配單")
     return {"enabled": enabled}
+
+
+@router.post("/dispatch/auto-dispatch/run-now")
+def run_auto_dispatch_now(
+    operator: dict = Depends(require_role("dispatcher", "maintainer")),
+):
+    """後台手動立即執行一輪自動配單（看得到結果），並重設下一輪倒數。需 dispatcher/maintainer。
+
+    回 {placed_count, placed[], enabled}。若開關為關則回 placed_count=0（不強制配單）。
+    """
+    from core import auto_dispatch
+    from core.audit import get_audit_service
+    result = auto_dispatch.run_now()
+    get_audit_service().record(
+        type="param_edit", operator=operator["operator_id"],
+        action=f"手動觸發自動配單一輪（落地 {result['placed_count']} 張）")
+    return result

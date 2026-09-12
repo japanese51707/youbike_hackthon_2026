@@ -160,6 +160,44 @@ def test_auto_dispatch_toggle_endpoint(client):
     auto_dispatch.reset_runtime_enabled()
 
 
+def test_run_now_executes_immediately_and_reports(monkeypatch):
+    """ADR-320：run_now 立即跑一輪並回報結果，更新上次執行狀態。"""
+    _setup()
+    _patch_list(monkeypatch, DL)
+    from core import auto_dispatch as ad
+
+    res = ad.run_now()
+    assert res["placed_count"] >= 1
+    assert res["enabled"] is True
+    status = ad.run_status()
+    assert status["last_run_at"] is not None
+    assert status["last_placed_count"] == res["placed_count"]
+
+
+def test_run_now_endpoint_requires_dispatcher(client, monkeypatch):
+    """ADR-320：手動觸發端點需 dispatcher 權限；一般 operator 被擋。"""
+    from tests.conftest import OP_DISPATCHER, OP_OPERATOR
+
+    r = client.post("/api/v1/dispatch/auto-dispatch/run-now", headers=OP_OPERATOR)
+    assert r.status_code == 403
+
+    r = client.post("/api/v1/dispatch/auto-dispatch/run-now", headers=OP_DISPATCHER)
+    assert r.status_code == 200
+    assert "placed_count" in r.json()
+
+    from core import auto_dispatch
+    auto_dispatch.reset_runtime_enabled()
+
+
+def test_status_endpoint_exposes_next_run(client):
+    """ADR-320：狀態端點回傳倒數所需欄位。"""
+    r = client.get("/api/v1/dispatch/auto-dispatch")
+    assert r.status_code == 200
+    body = r.json()
+    for key in ("enabled", "running", "interval_sec", "next_run_at", "last_run_at", "last_placed_count"):
+        assert key in body
+
+
 def test_only_configured_levels_are_dispatched(monkeypatch):
     _setup()
     mixed = [

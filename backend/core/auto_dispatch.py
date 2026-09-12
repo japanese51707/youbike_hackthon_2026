@@ -54,9 +54,12 @@ def set_enabled(enabled: bool) -> bool:
 
 
 def reset_runtime_enabled() -> None:
-    """清掉 runtime 覆寫，回到 config 預設（測試/重置用）。"""
-    global _runtime_enabled
+    """清掉 runtime 覆寫與執行狀態，回到 config 預設（測試/重置用）。"""
+    global _runtime_enabled, _next_run_at, _last_run_at, _last_placed_count
     _runtime_enabled = None
+    _next_run_at = None
+    _last_run_at = None
+    _last_placed_count = 0
 
 
 def _current_dispatch_list() -> list[dict]:
@@ -185,18 +188,70 @@ def scan_once() -> list[dict]:
 # ── 背景輪詢迴圈（daemon thread；main.py lifespan 啟動）──
 _stop_event: Optional[threading.Event] = None
 _thread: Optional[threading.Thread] = None
+_wakeup: Optional[threading.Event] = None   # 手動立即觸發：叫醒迴圈提早跑一輪
+
+# 執行狀態（供儀表板顯示倒數與上次結果）。時間用 UTC ISO 字串。
+import datetime as _dt
+
+_next_run_at: Optional[str] = None      # 下一輪預定執行時間（ISO，UTC）
+_last_run_at: Optional[str] = None      # 上一輪實際執行時間
+_last_placed_count: int = 0             # 上一輪落地張數
 
 
-def _loop(interval_sec: float, stop_event: threading.Event) -> None:
+def _utc_now() -> _dt.datetime:
+    return _dt.datetime.now(_dt.timezone.utc)
+
+
+def _set_next_run(interval_sec: float) -> None:
+    global _next_run_at
+    _next_run_at = (_utc_now() + _dt.timedelta(seconds=interval_sec)).isoformat()
+
+
+def run_status() -> dict:
+    """供 API/儀表板：目前開關、背景是否在跑、下一輪時間、上次結果與間隔。"""
+    return {
+        "enabled": is_enabled(),
+        "running": _thread is not None and _thread.is_alive(),
+        "interval_sec": int(_cfg().get("輪詢間隔_秒", 300)),
+        "next_run_at": _next_run_at,
+        "last_run_at": _last_run_at,
+        "last_placed_count": _last_placed_count,
+    }
+
+
+def run_now() -> dict:
+    """立即執行一輪自動配單（後台手動觸發，看得到結果），並重設下一輪倒數。
+
+    回傳本輪結果（含落地張數與明細）。不受背景排程影響；若開關為關，scan_once 會回空。
+    """
+    global _last_run_at, _last_placed_count
+    placed = scan_once()
+    _last_run_at = _utc_now().isoformat()
+    _last_placed_count = len(placed)
+    # 叫醒背景迴圈重設下一輪計時（避免剛手動跑完，背景又緊接著跑一次）
+    if _wakeup is not None:
+        _wakeup.set()
+    else:
+        _set_next_run(float(_cfg().get("輪詢間隔_秒", 300)))
+    return {"placed_count": len(placed), "placed": placed, "enabled": is_enabled()}
+
+
+def _loop(interval_sec: float, stop_event: threading.Event, wakeup: threading.Event) -> None:
+    global _last_run_at, _last_placed_count
     while not stop_event.is_set():
         try:
             placed = scan_once()
+            _last_run_at = _utc_now().isoformat()
+            _last_placed_count = len(placed)
             if placed:
                 print(f"[auto_dispatch] 自動配單完成 {len(placed)} 張："
                       f"{[(p['seed_station'], p['trip_id']) for p in placed]}")
         except Exception as e:  # noqa: BLE001
             print(f"[auto_dispatch] 輪詢發生錯誤（略過本輪）：{e}")
-        stop_event.wait(interval_sec)
+        _set_next_run(interval_sec)
+        # 等到下一輪，或被 run_now 叫醒提早結束等待（重設倒數後進下一輪）。
+        wakeup.clear()
+        wakeup.wait(interval_sec)   # 被 set 立即返回；否則等滿 interval_sec
 
 
 def start_background(mode: str) -> bool:
@@ -205,7 +260,7 @@ def start_background(mode: str) -> bool:
     僅在資料源為真實源（非 mock/None）時啟動。thread 恆在跑，每輪由 is_enabled()
     （runtime 開關優先於 config 預設）決定要不要配單——讓後台能即時開關，不必重啟服務。
     """
-    global _stop_event, _thread
+    global _stop_event, _thread, _wakeup
     cfg = _cfg()
     if mode in (None, "mock"):
         return False  # mock 資料不動，自動配單沒有意義
@@ -213,15 +268,20 @@ def start_background(mode: str) -> bool:
         return True   # 已在跑
     interval = float(cfg.get("輪詢間隔_秒", cfg.get("interval_sec", 300)))
     _stop_event = threading.Event()
+    _wakeup = threading.Event()
+    _set_next_run(interval)
     _thread = threading.Thread(
-        target=_loop, args=(interval, _stop_event), daemon=True, name="auto-dispatch")
+        target=_loop, args=(interval, _stop_event, _wakeup), daemon=True, name="auto-dispatch")
     _thread.start()
     return True
 
 
 def stop_background() -> None:
     """停止背景輪詢（測試/關機用）。"""
-    global _stop_event, _thread
+    global _stop_event, _thread, _next_run_at
     if _stop_event is not None:
         _stop_event.set()
+    if _wakeup is not None:
+        _wakeup.set()
     _thread = None
+    _next_run_at = None

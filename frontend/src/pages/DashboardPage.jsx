@@ -2,8 +2,9 @@ import {
   ClockCircleOutlined,
   CloudOutlined,
   EnvironmentOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Card, Checkbox, Segmented, Select, Space, Switch, Tag, Tooltip, Typography, message } from "antd";
+import { Button, Card, Checkbox, Segmented, Select, Space, Switch, Tag, Tooltip, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import AsyncState from "../components/common/AsyncState.jsx";
@@ -25,6 +26,7 @@ import {
   buildFromVehicle as apiBuildFromVehicle,
   confirmRecommendation,
   getAutoDispatchState,
+  runAutoDispatchNow,
   setAutoDispatchState,
 } from "../api/dispatchApi.js";
 import { getRoadRoute } from "../api/routingApi.js";
@@ -113,11 +115,30 @@ export default function DashboardPage() {
   const orderSeq = useRef(0);
 
   // ADR-320：自動配單後台開關（狀態由後端提供，dispatcher/maintainer 可切換）。
-  const [autoDispatch, setAutoDispatch] = useState(null); // {enabled, running, interval_sec}
+  // {enabled, running, interval_sec, next_run_at, last_run_at, last_placed_count}
+  const [autoDispatch, setAutoDispatch] = useState(null);
   const [autoDispatchBusy, setAutoDispatchBusy] = useState(false);
+  const [runNowBusy, setRunNowBusy] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now()); // 每秒推進，驅動倒數重繪
+  // 定期刷新自動配單狀態（含 next_run_at），讓倒數與上次結果保持新鮮。
   useEffect(() => {
-    if (!isApiMode) return;
-    getAutoDispatchState().then(setAutoDispatch).catch(() => setAutoDispatch(null));
+    if (!isApiMode) return undefined;
+    let cancelled = false;
+    const pull = () =>
+      getAutoDispatchState()
+        .then((s) => !cancelled && setAutoDispatch(s))
+        .catch(() => !cancelled && setAutoDispatch(null));
+    pull();
+    const id = setInterval(pull, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+  // 每秒 tick 驅動倒數框重繪（純前端，不打 API）。
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
   }, []);
   const toggleAutoDispatch = async (next) => {
     setAutoDispatchBusy(true);
@@ -131,6 +152,31 @@ export default function DashboardPage() {
       setAutoDispatchBusy(false);
     }
   };
+  const runAutoDispatch = async () => {
+    setRunNowBusy(true);
+    try {
+      const res = await runAutoDispatchNow();
+      message.success(
+        res.placed_count > 0
+          ? `已立即執行自動配單：本輪配出 ${res.placed_count} 張派工單`
+          : "已立即執行自動配單：本輪無可配的緊急站（清單為空或無可用人車）",
+      );
+      // 執行後刷新狀態（更新倒數與上次結果），並重載儀表板讓新任務顯示。
+      getAutoDispatchState().then(setAutoDispatch).catch(() => {});
+      dashboard.reload({ silent: true }).catch(() => {});
+    } catch (err) {
+      message.error(err?.message || "立即執行失敗（需 dispatcher 權限）");
+    } finally {
+      setRunNowBusy(false);
+    }
+  };
+  // 下一輪倒數（秒）。next_run_at 為 UTC ISO；用 nowTick 每秒重算。
+  const autoDispatchCountdown = useMemo(() => {
+    if (!autoDispatch?.next_run_at) return null;
+    const target = new Date(autoDispatch.next_run_at).getTime();
+    if (Number.isNaN(target)) return null;
+    return Math.max(0, Math.round((target - nowTick) / 1000));
+  }, [autoDispatch?.next_run_at, nowTick]);
 
   const stations = dashboard.data?.stations || [];
   const vehicles = dashboard.data?.vehicles || [];
@@ -641,25 +687,61 @@ export default function DashboardPage() {
                   </Tag>
                 </Tooltip>
               ) : null}
-              {/* ADR-320：自動配單開關（dispatcher/maintainer 可切換；一般人切換會被後端擋） */}
+              {/* ADR-320：自動配單開關 + 下一輪倒數 + 立即執行（dispatcher/maintainer 可操作） */}
               {isApiMode && autoDispatch ? (
-                <Tooltip
-                  title={
-                    autoDispatch.enabled
-                      ? `系統每 ${autoDispatch.interval_sec ?? 300} 秒自動依緊急度配對鄰近人車配單`
-                      : "自動配單已關閉，改由人工手動組單／緊急介入"
-                  }
-                >
-                  <span className="auto-dispatch-switch">
-                    <Switch
-                      checked={!!autoDispatch.enabled}
-                      loading={autoDispatchBusy}
-                      onChange={toggleAutoDispatch}
-                      checkedChildren="自動配單 開"
-                      unCheckedChildren="自動配單 關"
-                    />
-                  </span>
-                </Tooltip>
+                <Space size={6} className="auto-dispatch-controls">
+                  <Tooltip
+                    title={
+                      autoDispatch.enabled
+                        ? `系統每 ${autoDispatch.interval_sec ?? 300} 秒自動依緊急度配對鄰近人車配單`
+                        : "自動配單已關閉，改由人工手動組單／緊急介入"
+                    }
+                  >
+                    <span className="auto-dispatch-switch">
+                      <Switch
+                        checked={!!autoDispatch.enabled}
+                        loading={autoDispatchBusy}
+                        onChange={toggleAutoDispatch}
+                        checkedChildren="自動配單 開"
+                        unCheckedChildren="自動配單 關"
+                      />
+                    </span>
+                  </Tooltip>
+                  {/* 下一次自動派單倒數小框（開關開啟時顯示） */}
+                  {autoDispatch.enabled && autoDispatchCountdown != null ? (
+                    <Tooltip
+                      title={
+                        <span>
+                          下一次自動派單倒數
+                          {autoDispatch.last_run_at ? (
+                            <>
+                              <br />
+                              上次執行配出 {autoDispatch.last_placed_count ?? 0} 張
+                            </>
+                          ) : null}
+                        </span>
+                      }
+                    >
+                      <Tag icon={<ClockCircleOutlined />} color="geekblue" className="auto-dispatch-countdown mono">
+                        下次派單 {String(Math.floor(autoDispatchCountdown / 60)).padStart(2, "0")}:
+                        {String(autoDispatchCountdown % 60).padStart(2, "0")}
+                      </Tag>
+                    </Tooltip>
+                  ) : null}
+                  {/* 立即執行一輪（看得到有沒有在動） */}
+                  <Tooltip title="立即執行一輪自動配單（需 dispatcher 權限），並重設倒數">
+                    <Button
+                      size="small"
+                      type="primary"
+                      ghost
+                      icon={<ThunderboltOutlined />}
+                      loading={runNowBusy}
+                      onClick={runAutoDispatch}
+                    >
+                      立即配單
+                    </Button>
+                  </Tooltip>
+                </Space>
               ) : null}
               <Tag icon={<EnvironmentOutlined />}>{dashboard.data.weather.district}</Tag>
               <Tag icon={<CloudOutlined />} color="blue">
