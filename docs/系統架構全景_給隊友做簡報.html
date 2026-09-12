@@ -1,0 +1,718 @@
+<title>YouBike 智慧調度全景</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#FCFBF7;
+  --surface:#FFFFFF;
+  --surface-2:#F4F1E8;
+  --surface-3:#EBE7DA;
+  --ink:#191814;
+  --ink-2:#4C483E;
+  --ink-3:#7C7768;
+  --rule:#E2DECF;
+  --rule-2:#CFC9B5;
+  --accent:#E4741A;
+  --accent-2:#F2B21C;
+  --accent-soft:#FCEFDC;
+  --critical:#BE3320;
+  --critical-soft:#FAE3DE;
+  --warn:#B8830B;
+  --warn-soft:#FBF0D3;
+  --ok:#2C7A5A;
+  --ok-soft:#DDEFE5;
+  --info:#2A5E88;
+  --info-soft:#DEEAF4;
+  --shadow:0 1px 2px rgba(25,24,20,.05), 0 8px 24px -16px rgba(25,24,20,.25);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#15150F;
+    --surface:#1D1C15;
+    --surface-2:#24231A;
+    --surface-3:#2E2C21;
+    --ink:#F3F0E5;
+    --ink-2:#C5C0AF;
+    --ink-3:#8D8878;
+    --rule:#332F23;
+    --rule-2:#453F2E;
+    --accent:#F59A47;
+    --accent-2:#FFCC5C;
+    --accent-soft:#33270F;
+    --critical:#F0705A;
+    --critical-soft:#3A1E18;
+    --warn:#E6B535;
+    --warn-soft:#352A10;
+    --ok:#54BC8E;
+    --ok-soft:#14301F;
+    --info:#79AEDC;
+    --info-soft:#14263A;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#15150F;
+  --surface:#1D1C15;
+  --surface-2:#24231A;
+  --surface-3:#2E2C21;
+  --ink:#F3F0E5;
+  --ink-2:#C5C0AF;
+  --ink-3:#8D8878;
+  --rule:#332F23;
+  --rule-2:#453F2E;
+  --accent:#F59A47;
+  --accent-2:#FFCC5C;
+  --accent-soft:#33270F;
+  --critical:#F0705A;
+  --critical-soft:#3A1E18;
+  --warn:#E6B535;
+  --warn-soft:#352A10;
+  --ok:#54BC8E;
+  --ok-soft:#14301F;
+  --info:#79AEDC;
+  --info-soft:#14263A;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Helvetica Neue",system-ui,sans-serif;
+  font-size:16px;
+  line-height:1.78;
+  margin:0;
+  padding-inline:20px;
+  padding-block:0;
+  -webkit-font-smoothing:antialiased;
+}
+.shell{max-width:1040px;margin:0 auto}
+.prose{max-width:70ch}
+h1,h2,h3,h4{font-family:"Newsreader","Noto Serif TC",Georgia,serif;text-wrap:balance;line-height:1.32;margin:0}
+.mono,code,.tag,.kpi-n,.num{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+
+/* ---------- masthead ---------- */
+header.mast{padding-block:64px 40px;border-bottom:2px solid var(--ink);}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--accent-2)}
+h1{font-size:clamp(38px,6.4vw,66px);font-weight:600;letter-spacing:-.015em;margin-block:18px 14px}
+.dek{font-size:clamp(17px,2.1vw,20px);color:var(--ink-2);max-width:62ch;line-height:1.7}
+.mast-meta{display:flex;flex-wrap:wrap;gap:10px 28px;margin-top:26px;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-3)}
+.mast-meta b{color:var(--ink-2);font-weight:500}
+
+/* ---------- sections ---------- */
+section{padding-block:52px;border-bottom:1px solid var(--rule)}
+.sec-head{display:flex;gap:18px;align-items:baseline;margin-bottom:8px}
+.sec-num{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--accent);font-weight:600;padding-top:6px;flex:none}
+h2{font-size:clamp(25px,3.6vw,34px);font-weight:600;letter-spacing:-.01em}
+h3{font-size:19px;font-weight:700;font-family:"Noto Serif TC",serif;margin-top:34px;margin-bottom:10px}
+h4{font-size:15.5px;font-weight:700;font-family:"Noto Sans TC",sans-serif;margin-top:22px;margin-bottom:6px;color:var(--ink)}
+p{margin:0 0 14px}
+.lede{font-size:17.5px;color:var(--ink-2);max-width:64ch;margin-bottom:22px}
+ul,ol{padding-left:1.25em;margin:0 0 14px;max-width:70ch}
+li{margin-bottom:7px}
+li::marker{color:var(--ink-3)}
+strong{font-weight:700}
+a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}
+
+/* ---------- ELI5 ---------- */
+.eli5{
+  background:var(--accent-soft);
+  border-left:3px solid var(--accent);
+  padding:18px 22px;
+  margin:24px 0;
+  max-width:70ch;
+}
+.eli5 .lab{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:6px;font-weight:600}
+.eli5 p{margin:0;color:var(--ink);font-size:15.5px;line-height:1.75}
+.eli5 p + p{margin-top:10px}
+
+/* ---------- flow chain ---------- */
+.chain{display:flex;flex-direction:column;gap:0;margin:26px 0}
+.chain.row{flex-direction:column}
+@media(min-width:760px){ .chain.row{flex-direction:row;align-items:stretch;gap:0} }
+.node{
+  background:var(--surface);border:1px solid var(--rule-2);border-radius:3px;
+  padding:13px 15px;flex:1;min-width:0;box-shadow:var(--shadow);
+}
+.node .t{font-weight:700;font-size:14.5px;display:block;margin-bottom:3px}
+.node .s{font-size:12.5px;color:var(--ink-3);line-height:1.6;display:block}
+.node.acc{border-color:var(--accent);border-left-width:3px}
+.node.crit{border-color:var(--critical);border-left-width:3px}
+.node.ok{border-color:var(--ok);border-left-width:3px}
+.node.info{border-color:var(--info);border-left-width:3px}
+.arw{display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:15px;padding:6px 10px;flex:none}
+.arw::before{content:"↓"}
+@media(min-width:760px){ .chain.row .arw::before{content:"→"} }
+
+/* ---------- grid ---------- */
+.cols{display:grid;gap:16px;margin:24px 0}
+@media(min-width:720px){ .cols.c2{grid-template-columns:1fr 1fr} .cols.c3{grid-template-columns:repeat(3,1fr)} }
+.panel{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:18px 20px}
+.panel h4{margin-top:0}
+.panel p:last-child,.panel ul:last-child{margin-bottom:0}
+.panel .hd{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.panel .hd .pill{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;padding:2px 7px;border-radius:2px;font-weight:600}
+.pill.morning{background:var(--warn-soft);color:var(--warn)}
+.pill.evening{background:var(--accent-soft);color:var(--accent)}
+.pill.night{background:var(--info-soft);color:var(--info)}
+
+/* ---------- KPI strip ---------- */
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--rule);border:1px solid var(--rule);margin:26px 0}
+@media(min-width:720px){ .kpis{grid-template-columns:repeat(4,1fr)} }
+.kpi{background:var(--surface);padding:16px 16px 14px}
+.kpi-n{font-size:26px;font-weight:600;letter-spacing:-.02em;display:block;line-height:1.2}
+.kpi-l{font-size:12px;color:var(--ink-3);display:block;margin-top:4px;line-height:1.5}
+
+/* ---------- table ---------- */
+.tw{overflow-x:auto;margin:22px 0;border:1px solid var(--rule)}
+table{border-collapse:collapse;width:100%;min-width:520px;font-size:13.8px;background:var(--surface)}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.6}
+thead th{background:var(--surface-2);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;font-family:"IBM Plex Mono",monospace;color:var(--ink-2);font-weight:600;white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+td.num{text-align:right;white-space:nowrap}
+.yes{color:var(--ok);font-weight:600}
+.no{color:var(--critical);font-weight:600}
+.part{color:var(--warn);font-weight:600}
+
+/* ---------- tags ---------- */
+.tag{display:inline-block;font-size:11px;padding:1.5px 6px;border:1px solid var(--rule-2);border-radius:2px;color:var(--ink-3);margin-right:5px;white-space:nowrap}
+.tag.a{border-color:var(--accent);color:var(--accent)}
+.tag.c{border-color:var(--critical);color:var(--critical)}
+.tag.o{border-color:var(--ok);color:var(--ok)}
+
+/* ---------- figure ---------- */
+figure{margin:26px 0;background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:20px}
+figcaption{font-size:12.5px;color:var(--ink-3);margin-top:12px;line-height:1.6;font-family:"IBM Plex Mono",monospace}
+svg{display:block;max-width:100%;height:auto}
+
+/* ---------- callout ---------- */
+.note{border:1px solid var(--rule-2);border-top:3px solid var(--critical);background:var(--surface);padding:16px 20px;margin:24px 0;max-width:72ch}
+.note.warn{border-top-color:var(--warn)}
+.note.ok{border-top-color:var(--ok)}
+.note .lab{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--critical);font-weight:600;display:block;margin-bottom:6px}
+.note.warn .lab{color:var(--warn)}
+.note.ok .lab{color:var(--ok)}
+.note p:last-child{margin-bottom:0}
+.note ul:last-child{margin-bottom:0}
+
+/* ---------- gap list ---------- */
+.gap{border:1px solid var(--rule);border-left:4px solid var(--critical);background:var(--surface);padding:16px 20px;margin-bottom:14px}
+.gap.g-mid{border-left-color:var(--warn)}
+.gap.g-low{border-left-color:var(--info)}
+.gap-h{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;margin-bottom:6px}
+.gap-h .n{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-3);font-weight:600}
+.gap-h .ttl{font-weight:700;font-size:15.5px}
+.gap p{font-size:14.5px;margin-bottom:8px;color:var(--ink-2)}
+.gap .fix{font-size:14px;background:var(--surface-2);padding:9px 13px;border-radius:2px;color:var(--ink);margin:0}
+.gap .fix b{color:var(--accent)}
+
+footer{padding-block:40px 64px;color:var(--ink-3);font-size:13px;font-family:"IBM Plex Mono",monospace}
+footer p{max-width:70ch}
+@media (prefers-reduced-motion:no-preference){ a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px} }
+</style>
+
+<div class="shell">
+
+<header class="mast">
+  <div class="eyebrow"><span>新北市交通局黑客松 2026</span><span class="dot"></span><span>給隊友的簡報底稿</span></div>
+  <h1>YouBike 智慧調度全景</h1>
+  <p class="dek">從「事後補救」變成「事前預防」。這份文件把整套系統從歷史資料一路講到派工單落地，每一節都附一段白話（ELI5）版本——直接抓去做投影片。</p>
+  <div class="mast-meta">
+    <span><b>資料</b> 2026/01–06　1,583 站　約 1,330 萬筆　30 分快照</span>
+    <span><b>模型</b> LightGBM 分位數 × 4 視野</span>
+    <span><b>決策</b> 規則引擎 + 人在迴圈</span>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head"><span class="sec-num">§00</span><h2>一頁看懂：系統在做什麼</h2></div>
+  <p class="lede">一句話：<strong>我們用六個月的歷史資料訓練出一個「猜未來車數」的公式，讓它每幾分鐘猜一次全市 1,583 站，把快出事的站排出先後順序，再自動組成一張張「先收車再放車」的派工單。</strong></p>
+
+  <div class="eli5">
+    <span class="lab">ELI5</span>
+    <p>想像全市 1,583 個水桶，有人一直在舀水、有人一直在倒水。以前的做法是等某個桶空了，路人打電話抱怨，才派人拿水去補。</p>
+    <p>我們做的是：先看六個月每個桶的水位變化，學會「這個桶星期一早上八點通常會被舀光」。然後每隔幾分鐘看一次現在水位，算出「再過半小時、一小時、兩小時，這桶大概剩多少水」。哪個桶最快見底、而且平常最多人用，就先派人去。</p>
+  </div>
+
+  <div class="chain row">
+    <div class="node info"><span class="t">① 歷史資料</span><span class="s">六個月存量快照<br>清掉調度介入造成的假訊號</span></div>
+    <div class="arw"></div>
+    <div class="node info"><span class="t">② 訓練模型</span><span class="s">LightGBM 學出 45 個因子<br>與未來車數變化的關係</span></div>
+    <div class="arw"></div>
+    <div class="node acc"><span class="t">③ 模型檔案</span><span class="s">存在本機，之後每次<br>推論免費、毫秒級</span></div>
+  </div>
+  <p style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink-3);margin:-6px 0 22px">↑ 離線做一次　／　↓ 上線後每次即時資料進來就跑一輪</p>
+  <div class="chain row">
+    <div class="node"><span class="t">即時站況</span><span class="s">官方 API + 天氣</span></div>
+    <div class="arw"></div>
+    <div class="node"><span class="t">預測水位</span><span class="s">30/60/90/120 分<br>含 P10–P90 區間</span></div>
+    <div class="arw"></div>
+    <div class="node"><span class="t">規則引擎</span><span class="s">三層判斷<br>要不要調度</span></div>
+    <div class="arw"></div>
+    <div class="node acc"><span class="t">緊急度 0–100</span><span class="s">排出先後順序</span></div>
+    <div class="arw"></div>
+    <div class="node crit"><span class="t">派工單</span><span class="s">媒合車與人<br>先取後放路徑</span></div>
+  </div>
+  <p>整條線旁邊還掛著一套<strong>警示與升級追蹤</strong>：某站空太久、滿太久、或整個行政區同時卡死，會主動跳出來催人，而不是安靜地躺在清單裡。</p>
+
+  <div class="note ok">
+    <span class="lab">這套系統的定位</span>
+    <p><strong>AI 只負責估計，規則引擎負責決策，人負責拍板。</strong>模型會失手，但判斷不能跟著失手——所有「要不要派、派給誰、派幾台」都是看得懂、改得動的規則與門檻，集中放在 <code>config.yaml</code>。這是面對評審時最強的一句話。</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">§01</span><h2>模型端：LightGBM 到底怎麼學</h2></div>
+  <p class="lede">這節回答「歷史資料丟進 LightGBM，它在做什麼」。簡報上只需要三張圖：一群樹、接力改錯、三條線。</p>
+
+  <div class="eli5">
+    <span class="lab">ELI5：一群笨學生接力改考卷</span>
+    <p>第一個學生很笨，他對每一站都猜同一個數字，錯得一塌糊塗。<br>第二個學生不重新猜答案，他只負責<strong>猜第一個人錯了多少</strong>，然後把修正量加上去。<br>第三個學生再猜「前兩個人加起來還錯多少」……如此接力幾百輪。</p>
+    <p>每個學生都只是一棵很淺的決策樹（一連串 if／else，像「現在是不是尖峰？是→往左；這站海拔高不高？高→往左」）。單獨一棵蠢得可以，幾百棵疊起來就很準。這就是 Gradient Boosting，LightGBM 是它跑得最快的實作之一。</p>
+  </div>
+
+  <h3>三個技術重點（給比較懂的評審聽）</h3>
+  <div class="cols c3">
+    <div class="panel">
+      <h4>直方圖分箱</h4>
+      <p style="font-size:14px;color:var(--ink-2);margin:0">連續數值（溫度、距離、lag）先切成離散的箱子再找切點。1,300 萬列資料因此能在幾分鐘內訓練完，不用逐點掃描。</p>
+    </div>
+    <div class="panel">
+      <h4>Leaf-wise 長樹</h4>
+      <p style="font-size:14px;color:var(--ink-2);margin:0">每次只挑「能讓誤差降最多」的那一片葉子往下長，不是整層齊頭長。同樣的樹數下更準，但也更容易過擬合——所以要用 <code>min_child_samples</code> 夾住。</p>
+    </div>
+    <div class="panel">
+      <h4>分位數回歸</h4>
+      <p style="font-size:14px;color:var(--ink-2);margin:0">改一下損失函數，同一組資料可以分別訓練出 P10／P50／P90 三個模型。這就是我們預測區間的來源——不是「估計值 ± 誤差」硬湊的。</p>
+    </div>
+  </div>
+
+  <h3>我們實際訓練出什麼</h3>
+  <p>不是一個模型，是 <strong>12 個 booster</strong>：4 個預測視野（30／60／90／120 分）× 3 個分位數（P10／P50／P90）。全部 1,583 站共用同一組模型，站與站的差異靠特徵表達（見 §02），不是訓練 1,583 個模型。</p>
+
+  <figure>
+    <svg viewBox="0 0 640 190" role="img" aria-label="三條分位數預測線與安全水位帶">
+      <defs>
+        <linearGradient id="bandg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.20"/>
+          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.06"/>
+        </linearGradient>
+      </defs>
+      <line x1="56" y1="160" x2="620" y2="160" stroke="var(--rule-2)" stroke-width="1"/>
+      <line x1="56" y1="14" x2="56" y2="160" stroke="var(--rule-2)" stroke-width="1"/>
+      <rect x="56" y="126" width="564" height="34" fill="var(--critical)" opacity="0.10"/>
+      <text x="64" y="145" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--critical)">安全水位下界（低於此＝觸發調度）</text>
+      <path d="M56 60 L197 70 L338 86 L479 104 L620 118" fill="none" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 3"/>
+      <path d="M56 60 L197 100 L338 126 L479 142 L620 150 L620 118 L479 104 L338 86 L197 70 Z" fill="url(#bandg)"/>
+      <path d="M56 60 L197 100 L338 126 L479 142 L620 150" fill="none" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 3"/>
+      <path d="M56 60 L197 85 L338 106 L479 124 L620 134" fill="none" stroke="var(--accent)" stroke-width="2.2"/>
+      <circle cx="56" cy="60" r="3.5" fill="var(--accent)"/>
+      <text x="626" y="121" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="end">P90</text>
+      <text x="626" y="137" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--accent)" text-anchor="end">P50</text>
+      <text x="626" y="159" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="end">P10</text>
+      <text x="50" y="64" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="end">18</text>
+      <text x="50" y="164" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="end">0</text>
+      <text x="56" y="180" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">現在</text>
+      <text x="197" y="180" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="middle">+30</text>
+      <text x="338" y="180" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="middle">+60</text>
+      <text x="479" y="180" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="middle">+90</text>
+      <text x="614" y="180" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="middle">+120 分</text>
+    </svg>
+    <figcaption>規則引擎不看 P50，看的是 <b>P10（悲觀下界）</b>。「最壞情況會不會破底」比「平均會怎樣」更適合當派車依據——寧可多派一趟，不要漏掉一站。</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">§02</span><h2>45 個因子與消融試驗</h2></div>
+  <p class="lede">因子分兩種角色，簡報上一定要講清楚，不然評審會問「天氣為什麼不直接讓它變緊急」。</p>
+
+  <div class="chain row">
+    <div class="node info"><span class="t">預測因子</span><span class="s">決定「未來供需會怎樣」<br>餵進模型</span></div>
+    <div class="arw"></div>
+    <div class="node"><span class="t">預測結果（含區間）</span><span class="s">未來車數</span></div>
+    <div class="arw"></div>
+    <div class="node acc"><span class="t">緊急度因子</span><span class="s">決定「現在有多急」<br>不進模型，另外加權</span></div>
+  </div>
+  <p>天氣不會直接產生緊急度，而是：<strong>下雨 → 需求下降 → 預測改變 → 緊急度改變</strong>。兩者不能混在一起算。</p>
+
+  <h3>六大特徵群組</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>群組</th><th>代表因子</th><th>取得方式</th><th>為什麼重要</th></tr></thead>
+      <tbody>
+        <tr><td><b>時序自身</b></td><td>lag 30分／1時／2時／1日／1週、1–2 小時變化量、站點時段中位數</td><td>該站歷史</td><td><b>最強的一組</b>。「半小時前有幾台」幾乎決定了「半小時後有幾台」</td></tr>
+        <tr><td><b>站況／時間</b></td><td>可借車數、可還空位、總柱數、小時、星期、月、時段碼</td><td>當下快照</td><td>建立「星期幾 × 時段」的主軸節奏</td></tr>
+        <tr><td><b>天氣</b></td><td>溫度、濕度、風速、舒適度、雨量分級</td><td>氣象 API 批次</td><td>溫度對需求是倒 U 型（太冷太熱都少），不是線性</td></tr>
+        <tr><td><b>假日</b></td><td>國定假日、連假、補班日</td><td>行事曆</td><td>分辨「週末」與「平日型假日」</td></tr>
+        <tr><td><b>POI 距離</b></td><td>到捷運／火車／學校／商場／傳統市場／夜市／醫院／公園／河濱／場館等 14 類最近距離 + 區域類型</td><td>外部地圖批次算</td><td>讓模型自己學「捷運站旁邊早上會被借光」，不用人工標站性</td></tr>
+        <tr><td><b>行為指紋</b></td><td>日夜活動比、平假日比、早峰淨流向、峰度、歷史空站頻率、歷史滿站頻率</td><td>訓練期資料算</td><td>一站一組「性格」數值，取代「1,583 個模型」的做法</td></tr>
+        <tr><td><b>地形</b></td><td>海拔、坡度%、坡度分級</td><td>高程 API 批次</td><td>坡上易空、坡下易滿</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--ink-3)">正式訓練採用的組合共 <b>45 個特徵欄位</b>（以 <code>feature_pipeline.py</code> 與 <code>serving_features.json</code> 為準，版本間會微調）。</p>
+
+  <h3>消融試驗：怎麼證明某個因子有用</h3>
+  <div class="eli5">
+    <span class="lab">ELI5</span>
+    <p>消融＝<strong>把某個因子抽掉，重跑一次，看準度掉多少</strong>。掉很多＝這因子有用；沒差＝它只是佔記憶體。就像把食譜裡的一味調料拿掉，看菜還好不好吃。</p>
+  </div>
+  <p>我們踩過的一個坑值得寫進簡報，因為它展現方法論的嚴謹：</p>
+  <div class="note warn">
+    <span class="lab">坑：78% 的答案是 0</span>
+    <p>預測目標是「車數的變化量 Δ」，而<strong>約 78% 的樣本 Δ＝0</strong>（大多數站大多數時候沒動靜）。用 MAE 做消融時，這一大堆 0 把所有因子的差異都稀釋掉，跑出來每個因子都「+0.00%」。</p>
+    <p style="margin-top:10px">解法有二：<b>(1)</b> 消融改用 L2 探針放大差異；<b>(2)</b> 訓練時用<strong>流量加權</strong>，讓高周轉站的樣本權重更高——因為系統的價值本來就在那些站，不在一天借兩次的郊區站。</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">§03</span><h2>異常點分析：從噪音裡挖出營運真相</h2></div>
+  <p class="lede">這一節是整份簡報最有記憶點的地方——我們沒有任何調度紀錄，卻從存量曲線反推出整間公司的調度規模，還跟官方數字對上了。</p>
+
+  <div class="eli5">
+    <span class="lab">ELI5</span>
+    <p>如果一個水桶在三十分鐘內少了三十公升，那不會是路人一瓢一瓢舀走的，一定是有人開卡車來載走。我們就是在六個月的資料裡找這種「不可能是自然借還」的跳動。</p>
+  </div>
+
+  <h3>三步驟</h3>
+  <div class="chain">
+    <div class="node acc"><span class="t">① 標出異常點</span><span class="s">以「該站 × 平假日 × 時段」的自身分布為基準：偏離超過 3σ <b>且</b> 單次變動量超過總車柱數的 50% → 標為疑似人為調度。全期約 5.1 萬筆，佔 0.38%。</span></div>
+    <div class="arw"></div>
+    <div class="node acc"><span class="t">② 配對成調度鏈</span><span class="s">同一行政區內，把「淨流出暴增（取車）」與 60 分鐘內、5 公里內的「淨流入暴增（放車）」配成一趟。數同時進行中的鏈條數 → 推估同時作業車數。</span></div>
+    <div class="arw"></div>
+    <div class="node ok"><span class="t">③ 跟官方數字對答案</span><span class="s">拿新北市交通局 2025-09-01 公開新聞稿的車隊規模交叉驗證。</span></div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><span class="kpi-n">45<span style="font-size:14px;color:var(--ink-3)"> 台</span></span><span class="kpi-l">我們反推的尖峰同時作業車數</span></div>
+    <div class="kpi"><span class="kpi-n" style="color:var(--accent)">41<span style="font-size:14px;color:var(--ink-3)"> 輛</span></span><span class="kpi-l">官方公布調度貨車數</span></div>
+    <div class="kpi"><span class="kpi-n">480<span style="font-size:14px;color:var(--ink-3)"> 次</span></span><span class="kpi-l">我們反推的每日調度次數</span></div>
+    <div class="kpi"><span class="kpi-n" style="color:var(--accent)">330–490</span><span class="kpi-l">官方 41 車 × 8–12 趟推估</span></div>
+  </div>
+  <p><strong>兩個完全獨立的來源落在同一個數量級。</strong>這同時證明兩件事：異常偵測抓對了真實的調度行為；而系統有能力只靠公開存量資料就還原營運實況——這對還沒開放資料的縣市是可複製的。</p>
+
+  <h3>異常點的第二個用途：清訓練資料</h3>
+  <p>被標為「調度介入」的樣本，代表那段時間的車數變化<strong>不是使用者行為</strong>。如果照單全收餵進模型，模型會學到「這站下午三點會突然多 20 台車」這種假規律。所以訓練時把這些格子遮掉（<code>is_rebalancing</code> 逐視野判定），只學真實的借還節奏。</p>
+
+  <div class="note warn">
+    <span class="lab">你提到但目前還沒做的：成因歸類</span>
+    <p>你的構想是把異常點再分類成「補車／天氣／活動造成」。目前 repo 只做到<strong>二元判定</strong>（是不是調度介入）＋規模反推，<strong>還沒有做成因歸因</strong>。這是加分項而非必要項——若時間允許，最快的做法是拿已有的天氣欄位與活動日期做交叉表，不需要新模型。</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">§04</span><h2>從預測到緊急度：怎麼決定誰先派</h2></div>
+  <p class="lede">預測出來是一堆數字，要變成「先去哪一站」需要兩層轉換：先分層，再排序。</p>
+
+  <h3>第一層：規則引擎三層判斷</h3>
+  <div class="cols c3">
+    <div class="panel" style="border-left:3px solid var(--critical)">
+      <h4 style="color:var(--critical)">截斷 censored</h4>
+      <p style="font-size:14px;color:var(--ink-2);margin:0">預測下界已經穿透 0（或穿透滿柱）。代表<strong>已經或即將真的出事</strong>，一定排在警示層前面。</p>
+    </div>
+    <div class="panel" style="border-left:3px solid var(--warn)">
+      <h4 style="color:var(--warn)">警示 warning</h4>
+      <p style="font-size:14px;color:var(--ink-2);margin:0">快空／快滿但還沒穿透。需要調度，但可以排在截斷層之後。</p>
+    </div>
+    <div class="panel" style="border-left:3px solid var(--ok)">
+      <h4 style="color:var(--ok)">正常 normal</h4>
+      <p style="font-size:14px;color:var(--ink-2);margin:0">不進調度清單、不給分數。減少雜訊，調度員只看該看的。</p>
+    </div>
+  </div>
+
+  <h3>第二層：緊急度分數 0–100</h3>
+  <p>採<strong>分層打底 + 層內排序</strong>的結構，數學上保證截斷層一定大於警示層，不會因為權重亂調而出現「快空的站排在已空的站前面」。</p>
+
+  <figure>
+    <svg viewBox="0 0 640 128" role="img" aria-label="緊急度分數分層區間">
+      <rect x="30" y="30" width="183" height="30" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="1"/>
+      <rect x="213" y="30" width="244" height="30" fill="var(--warn-soft)" stroke="var(--warn)" stroke-width="1"/>
+      <rect x="457" y="30" width="153" height="30" fill="var(--critical-soft)" stroke="var(--critical)" stroke-width="1"/>
+      <text x="121" y="50" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ok)" text-anchor="middle">normal（不進清單）</text>
+      <text x="335" y="50" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--warn)" text-anchor="middle">warning　30–69</text>
+      <text x="533" y="50" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--critical)" text-anchor="middle">censored　70–100</text>
+      <text x="30" y="76" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">0</text>
+      <text x="213" y="76" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="middle">30</text>
+      <text x="457" y="76" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="middle">70</text>
+      <text x="610" y="76" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="end">100</text>
+      <text x="30" y="104" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-2)">層內排序權重：</text>
+      <text x="146" y="104" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent)">穿透時機 .35</text>
+      <text x="256" y="104" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent)">當下已空滿 .25</text>
+      <text x="388" y="104" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent)">該時段人流 .20</text>
+      <text x="512" y="104" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent)">穿透幅度 .20</text>
+    </svg>
+    <figcaption>「該時段人流」用該站該小時的歷史周轉量（前後一小時）。同樣要空的兩站，<b>服務人數多的先派</b>——這是把有限的 41 台車用在刀口上的關鍵。</figcaption>
+  </figure>
+
+  <h3>第三層：補幾台？動態目標水位</h3>
+  <div class="eli5">
+    <span class="lab">ELI5</span>
+    <p>不要每站都補到一半滿。捷運站早尖峰補到一半，二十分鐘後又空了，等於白跑一趟。</p>
+    <p>正確做法是<strong>補到「撐得過接下來一小時」的水位</strong>：拿 60 分鐘的悲觀累積流量當依據，再用 80/20 護欄夾住避免爆掉。過了尖峰、流量趨緩，目標水位會自然回落到接近一半——不用另外寫規則。</p>
+  </div>
+  <p>安全緩衝也從固定 2 台改成<strong>總柱數的 12%</strong>：60 柱的大站留 7 台，20 柱的小站留 2 台，自動隨站大小縮放。</p>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">§05</span><h2>調度怎麼排：三種班別，三種策略</h2></div>
+  <p class="lede">同一套演算法不可能同時服務尖峰與大夜。我們依「當前時段」切成三種模式，並且對齊 YouBike 現行以行政區為單位的作業方式。</p>
+
+  <div class="cols c3">
+    <div class="panel">
+      <div class="hd"><span class="pill morning">尖峰模式</span></div>
+      <h4>折返跑 shuttle</h4>
+      <p style="font-size:14px;color:var(--ink-2)">早 07:30–09:30／晚 17:00–19:00。同行政區內選定<strong>一組站</strong>（例如 1 個滿站收車 + 2 個順路空站放車），這台車就固定在這組站之間循環，直到尖峰結束。</p>
+      <p style="font-size:14px;color:var(--ink-2);margin:0">不追求一趟跑很多站，追求<strong>高頻循環消化人流</strong>。歷史估算早尖峰約 39 台、晚尖峰約 38 台同時作業。</p>
+    </div>
+    <div class="panel">
+      <div class="hd"><span class="pill evening">離峰模式</span></div>
+      <h4>任務型，效率最大化</h4>
+      <p style="font-size:14px;color:var(--ink-2)">尖峰前預佈 + 尖峰後至收班。一趟盡量裝滿 + 路徑短 + 依緊急度排序，讓「每公里搬運量」最大化。<strong>限本行政區內</strong>。</p>
+      <p style="font-size:14px;color:var(--ink-2);margin:0">關鍵約束：尖峰前派的任務若預估完成時間會<strong>撞到尖峰起點，就不派</strong>——避免車卡在半路錯過佈署。</p>
+    </div>
+    <div class="panel">
+      <div class="hd"><span class="pill night">大夜模式</span></div>
+      <h4>跨區大宗復原</h4>
+      <p style="font-size:14px;color:var(--ink-2)">22:00–翌日 06:30，<strong>唯一開放跨行政區</strong>的班別。趁人流少，用最少趟次把白天累積的跨區失衡一次搬回。</p>
+      <p style="font-size:14px;color:var(--ink-2);margin:0">裝滿再跑、長距離可接受。夜間路況好、時間充裕。</p>
+    </div>
+  </div>
+
+  <h3>一趟任務的定義</h3>
+  <div class="chain row">
+    <div class="node"><span class="t">出發</span><span class="s">車在閒置位置</span></div>
+    <div class="arw"></div>
+    <div class="node acc"><span class="t">先取</span><span class="s">到滿站收車<br>載到接近車容量上限</span></div>
+    <div class="arw"></div>
+    <div class="node acc"><span class="t">後放</span><span class="s">依路徑順序<br>到數個空站放完</span></div>
+    <div class="arw"></div>
+    <div class="node ok"><span class="t">結案</span><span class="s">釋放車與人<br>回報當前位置</span></div>
+  </div>
+  <p>站數不固定，受<strong>車輛載運上限</strong>約束——載滿就開始放。這是你說的「先收車再放車，做完一輪就是一次任務」的系統化版本。</p>
+
+  <h3>人與車的配置</h3>
+  <p>你提的 (a) 已經落地了：離線腳本讀六個月官方資料，算出各行政區的<strong>調度工作量分數</strong>（標準化周轉量 ×2 ＋ 標準化空站次數 ＋ 標準化滿站次數，以周轉量為主導），用最大餘數法把 350 名調度員整數分配到各區、每區至少 1 人；30 名駐點員依各區「高周轉尖峰站（日均周轉量 ≥ 全市 P75）」數分配。</p>
+  <p>預備量能也在：全車隊固定保留 <strong>12%</strong> 為 standby，不參與常態派單，只由緊急救火觸發。加上熱門站的<strong>駐點預備車</strong>——備多少＝該站尖峰周轉量減去站上現有車，不是「柱數一半」（對大站會備過頭）。</p>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">§06</span><h2>自動化派工的迴圈（你的第 5 點）</h2></div>
+  <p class="lede">你描述的自動出單流程，跟 repo 目前的定案<strong>有一個重要分歧</strong>。這是全份文件最需要團隊拍板的一件事，先放在最前面。</p>
+
+  <div class="note">
+    <span class="lab">必須先決定：全自動出單 vs 人在迴圈</span>
+    <p><b>你的口述 (b)(c)：</b>系統偵測到緊急度 → 自動媒合車與人 → 自動出單 → 標記已派 → 繼續處理下一筆，全程不需人力介入。</p>
+    <p><b>repo 目前定案：</b>系統自動算出<strong>草稿派工單</strong>（含預估路徑、預估時間、預估影響），但<strong>由後台管理人員預覽後按「確認」才成立</strong>。理由寫在決策紀錄裡：這是決策輔助工具，不是自動最佳化派工器；派錯了要有人負責。</p>
+    <p style="margin-top:10px"><b>建議的收斂方式（兩者其實可以共存）：</b>保留自動組單的全部演算法——它就是你說的那套迴圈——但輸出停在「草稿」，後台一鍵確認。Demo 時這反而更強：評審會問「模型錯了怎麼辦」，「人在迴圈 + 全部門檻可調」是最好的答案，而全自動很難回答這題。</p>
+  </div>
+
+  <h3>自動組單的迴圈（演算法本身，與你描述一致）</h3>
+  <div class="chain">
+    <div class="node crit"><span class="t">① 取最緊急的站</span><span class="s">從緊急度清單頂端開始（分數相同時，以流量信心當次要排序鍵）</span></div>
+    <div class="arw"></div>
+    <div class="node acc"><span class="t">② 媒合最近的閒置資源</span><span class="s">找車順序：該區閒置車 → 鄰近區閒置車 → 總站待命車。人員池＝該區閒置者 ＋ 總站待命人力。可派兩人（司機 ＋ 隨車）。</span></div>
+    <div class="arw"></div>
+    <div class="node acc"><span class="t">③ 串鄰近站</span><span class="s">看這站附近有沒有其他也需要調度的站（不必是最緊急的），順路一起做</span></div>
+    <div class="arw"></div>
+    <div class="node acc"><span class="t">④ 算先取後放路徑</span><span class="s">最近鄰排序 + 載運量切趟，且逐站檢查「到得了嗎、裝得下嗎」（路線載量守恆）</span></div>
+    <div class="arw"></div>
+    <div class="node ok"><span class="t">⑤ 佔用與標記</span><span class="s">該站標記已派單、該車與該人標記被此單佔用 → 下一輪不會被重複選中</span></div>
+    <div class="arw"></div>
+    <div class="node info"><span class="t">⑥ 回到 ① 處理下一筆</span><span class="s">直到清單處理完或資源用盡</span></div>
+  </div>
+
+  <h3>兩個時鐘（你的第 5 點 d，repo 做得比你想的更嚴謹）</h3>
+  <div class="cols c2">
+    <div class="panel">
+      <h4>任務時鐘</h4>
+      <p style="font-size:14px;color:var(--ink-2);margin:0">派工單一出就開始計時，追蹤這趟跑了多久、有沒有超出預估。用於績效與後續預估校準。</p>
+    </div>
+    <div class="panel">
+      <h4>站點時鐘（案件追蹤）</h4>
+      <p style="font-size:14px;color:var(--ink-2);margin:0">某站第一次需要緊急調度時開始計時，追蹤「這站沒人管幾分鐘了」。<strong>30 分鐘再提示、45 分鐘再提示並電話聯絡。</strong></p>
+    </div>
+  </div>
+
+  <div class="note ok">
+    <span class="lab">這裡有一個很值得講的設計細節</span>
+    <p>站點時鐘<strong>不掛在警示上，掛在「案件」上</strong>。因為警示是每次查詢即時重算的——站況一恢復就整筆刪掉重建，<code>alert_id</code> 會換、計時會歸零，根本無法誠實回答「這站已經晾了多久」。</p>
+    <p style="margin-top:10px">而且<strong>「已讀」不關案、不重置時鐘，只靜音一段時間</strong>。否則現場的均衡解就是「大家按已讀讓它安靜」，30／45 分鐘的升級永遠不會觸發。關案只認兩種確定性事件：<span class="tag o">已派工涵蓋該站</span><span class="tag o">站況已恢復</span>——由系統判定，不由人宣告。</p>
+  </div>
+
+  <h3>去重（你的第 5 點 d 後半）</h3>
+  <p>你擔心的「下一輪資料進來，同一站還是緊急，會不會重複派單」已經有三道防線：<b>(1)</b> 站點標記已派單；<b>(2)</b> 同一站同時間最多只有一個未結案案件（資料庫層 partial unique index 強制）；<b>(3)</b> 車與人被該單佔用，不會出現在可用資源池。</p>
+  <p>另外還有一個你沒提到但已經做了的：<strong>自動偵測調度完成</strong>。背景輪詢即時站況，補車站的可借數上升且逼近目標、取車站下降且逼近目標，就自動標記該站完成、推進任務，最後一站完成時自動結案並釋放車與人。調度員不必逐站手動回報。判斷哲學很值得放進簡報：<em>不管那批車是調度員搬的、還是剛好一批人還車造成的，只要站點已達目標水位，對該站而言調度需求就已消化。</em></p>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">§07</span><h2>故障偵測（你的第 6 點 — 這塊還沒做）</h2></div>
+  <p class="lede">目前 repo 只有「騎士主動通報」的收集端（累加數量、不觸發派工），<strong>沒有任何從資料自動推斷故障的機制</strong>。你這個想法是真的缺口，而且我認為它可以做得比你描述的更強。</p>
+
+  <div class="eli5">
+    <span class="lab">ELI5</span>
+    <p>有些站看起來永遠有 3 台車，好像很健康。但那 3 台可能是壞車，沒人借得走——系統以為這站沒事，實際上使用者一台都騎不到。</p>
+    <p>怎麼抓？在<strong>本來應該很忙</strong>的站，如果車數連續很久<strong>完全不動</strong>，那不是健康，那是卡住了。</p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 640 180" role="img" aria-label="正常熱點站與疑似故障站的車數曲線對照">
+      <line x1="44" y1="150" x2="620" y2="150" stroke="var(--rule-2)" stroke-width="1"/>
+      <line x1="44" y1="16" x2="44" y2="150" stroke="var(--rule-2)" stroke-width="1"/>
+      <path d="M44 46 L116 74 L188 40 L260 96 L332 58 L404 110 L476 66 L548 92 L620 50" fill="none" stroke="var(--ok)" stroke-width="2"/>
+      <text x="200" y="32" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ok)">正常熱點站：整天上上下下</text>
+      <path d="M44 124 L116 124 L188 124 L260 124 L332 124 L404 124 L476 124 L548 124 L620 124" fill="none" stroke="var(--critical)" stroke-width="2.4"/>
+      <rect x="260" y="116" width="288" height="16" fill="var(--critical)" opacity="0.13"/>
+      <text x="404" y="146" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--critical)" text-anchor="middle">連續 N 次觀測一動也不動 → 疑似故障</text>
+      <text x="50" y="118" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--critical)">卡在 3 台</text>
+      <text x="38" y="20" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="end">車數</text>
+      <text x="44" y="168" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)">06:00</text>
+      <text x="620" y="168" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-3)" text-anchor="end">22:00</text>
+    </svg>
+    <figcaption>同樣是「站上有 3 台車」，在熱點站代表出事，在郊區站代表正常。<b>判準必須綁定站點的歷史行為</b>，這就是你說的「只適用熱點區域」。</figcaption>
+  </figure>
+
+  <h3>建議的判準（比單一訊號可靠）</h3>
+  <p>你提的是「連續 30 分鐘數字不變」。我建議改成<strong>雙訊號交叉</strong>，因為 repo 裡已經有一個現成但沒被用起來的強訊號：</p>
+  <div class="cols c2">
+    <div class="panel" style="border-left:3px solid var(--accent)">
+      <h4>訊號 A｜死水位（你的想法）</h4>
+      <p style="font-size:14px;color:var(--ink-2);margin:0 0 8px">在熱點站，可借車數<strong>連續 N 次觀測完全不變</strong>，且該站在該時段的歷史周轉量遠高於 0。</p>
+      <p style="font-size:13.5px;color:var(--ink-3);margin:0">熱點站定義直接複用現成的：日均周轉量 ≥ 全市 P75（駐點站分派已經在用同一個門檻，不用另造一套）。</p>
+    </div>
+    <div class="panel" style="border-left:3px solid var(--accent)">
+      <h4>訊號 B｜車柱缺口（現成但沒用）</h4>
+      <p style="font-size:14px;color:var(--ink-2);margin:0 0 8px"><code>缺口 = 總柱數 − 可借車數 − 可還空位</code>。柱子既沒車又不能還，通常就是壞柱或壞車卡位。</p>
+      <p style="font-size:13.5px;color:var(--ink-3);margin:0">這個欄位<strong>資料裡本來就算得出來</strong>，且全期約 23.5% 的紀錄有缺口。目前只當弱特徵餵模型，沒拿來做警示。</p>
+    </div>
+  </div>
+  <p><strong>A 且 B 同時成立 → 發「疑似故障」警示；只有 A 或只有 B → 降級為觀察，不跳警示。</strong>這樣誤判率會低很多，而且不需要任何新資料源。</p>
+
+  <div class="note warn">
+    <span class="lab">三個實作上的注意事項</span>
+    <ul>
+      <li><b>別用「30 分鐘」當單位。</b>歷史資料是 30 分鐘快照，30 分鐘只有 1–2 個點，判不出「連續不動」。要用即時源的頻率定義「連續 N 次觀測」——先確認官方即時 API 的更新頻率（通常 1–5 分鐘），再回推 N。</li>
+      <li><b>故障警示不該自動觸發派工。</b>它是「通知維修」不是「通知調度」，派車過去補車解決不了壞車。應該走獨立的通知流，顯示在單站詳情、任務卡片與後台，但不進緊急度清單。</li>
+      <li><b>被標記的站要在預測端降級。</b>那 3 台壞車不該算進「可借車數」。建議給該站掛一個「供給受限」旗標，讓規則引擎知道這站的可借數是假的——這跟我們已經在處理的「空站截斷會遮蔽真實需求」是同一類問題，可以沿用同一套邏輯。</li>
+    </ul>
+  </div>
+  <p>另外，既有的<strong>騎士通報信箱</strong>可以當第三個訊號源：同一站短時間內多筆「車輛故障」通報，直接把該站的故障信心拉高。三個訊號都是免費的，不需要跟 YouBike 要新資料。</p>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">§08</span><h2>誠實邊界：簡報一定要主動講的數字</h2></div>
+  <p class="lede">這一節請隊友務必看完再做投影片。有一組數字已經作廢，如果還放上台，被評審追問會很難看。</p>
+
+  <div class="note">
+    <span class="lab">⚠️ 已作廢的數字：不要再用</span>
+    <p>舊簡報素材寫的「<strong>MAE 1.51，比 baseline 4.29 改善 64.7%</strong>」<strong>不可再對外宣稱</strong>。原因：那個 baseline 定義不明且過弱（疑為「預測 Δ＝0」），且未確認防資料洩漏。用嚴格的 seasonal naive baseline（站 × 平假日 × 時段的歷史中位數）重跑後，改善幅度蒸發。</p>
+  </div>
+
+  <h3>目前的真實數字（全量 1,583 站 × 6 個月，時間切分驗證）</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>視野</th><th class="num">模型 MAE</th><th class="num">seasonal naive</th><th class="num">整體</th><th class="num">決策區召回</th><th class="num">baseline 召回</th></tr></thead>
+      <tbody>
+        <tr><td>30 分</td><td class="num">1.425</td><td class="num">1.379</td><td class="num no">小輸</td><td class="num yes">91.6%</td><td class="num">76.5%</td></tr>
+        <tr><td>60 分</td><td class="num">2.053</td><td class="num">2.015</td><td class="num no">小輸</td><td class="num yes">87.1%</td><td class="num">67.3%</td></tr>
+        <tr><td>90 分</td><td class="num">2.478</td><td class="num">2.456</td><td class="num part">打平</td><td class="num yes">81.3%</td><td class="num">61.5%</td></tr>
+        <tr><td>120 分</td><td class="num">2.802</td><td class="num">2.800</td><td class="num part">打平</td><td class="num yes">81.5%</td><td class="num">57.4%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note ok">
+    <span class="lab">正確的說法（建議照抄上台）</span>
+    <p>「在<strong>平均誤差</strong>上，我們的模型跟一個很強的歷史查表 baseline 幾乎打平——因為 78% 的時候站點根本沒動靜，平均誤差這個指標被大量的 0 稀釋了。</p>
+    <p style="margin-top:10px">但調度不是要預測平均，是要<strong>抓出真的會出事的站</strong>。在這個指標上，模型的召回率是 <b>81–92%</b>，baseline 只有 <b>57–77%</b>——而且視野拉得越長（90／120 分，也就是調度員實際趕得到的時間窗），差距越大。短期查表就夠，長期才需要模型，這正好對應實務需求。」</p>
+    <p style="margin-top:10px">再補一句對準官方痛點：交通局要求業者「<strong>尖峰後 2 小時內</strong>恢復平衡」——我們的長視野預測 + 高召回，做的正是這件事。</p>
+  </div>
+
+  <h3>其他要主動揭露的限制</h3>
+  <ul>
+    <li><strong>模擬重放有內生性。</strong>系統介入會改變使用者行為，重放模擬捕捉不到這個效應。Before／After 數字適合看方向，不宜精讀小數點。</li>
+    <li><strong>調度介入辨識是機率性推估</strong>（帶信心分數），不是確定性標記。官方 41 輛是 2025 年的數字，我們資料是 2026 年 1–6 月。</li>
+    <li><strong>沒有做 VRP 路線最佳化求解器</strong>，用的是啟發式（最近鄰 + 載量切趟）。這是刻意取捨——兩週要做完 16 個模組，最後會變成 16 個半成品。<em>「刻意不做並講得出為什麼」本身就是工程判斷力的展現。</em></li>
+    <li><strong>預測區間覆蓋率約 78%</strong>，名目 80%，略低但已在可接受範圍；分位數交叉率 ≈ 0。</li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">§09</span><h2>缺口清單：你漏掉的與該補的</h2></div>
+  <p class="lede">把你口述的六段跟 repo 現況逐條比對後，以下是需要動作的項目，依急迫度排序。</p>
+
+  <div class="gap">
+    <div class="gap-h"><span class="n">G1</span><span class="ttl">全自動出單 vs 人在迴圈，兩套說法並存</span><span class="tag c">今天要決定</span></div>
+    <p>你的第 5 點描述的是全自動派工，但架構決策已經定案為「系統出草稿、後台確認才成立」。隊友做簡報時若各講各的，上台會自相矛盾。</p>
+    <p class="fix"><b>建議：</b>對外統一講「系統自動組單 + 一鍵確認」。演算法完全是你那套，只是在最後加一個人類閘門——而這個閘門是面對「模型錯了怎麼辦」這題的最佳答案。</p>
+  </div>
+
+  <div class="gap">
+    <div class="gap-h"><span class="n">G2</span><span class="ttl">簡報素材裡的模型數字已作廢</span><span class="tag c">今天要改</span></div>
+    <p>簡報素材文件仍寫著「MAE 1.51／改善 64.7%」，但那組數字已被判定虛胖並正式作廢。任何人拿舊檔去做投影片都會踩雷。</p>
+    <p class="fix"><b>建議：</b>把 §08 的表與「正確說法」整段換進去，主打<b>決策區召回 81–92% vs baseline 57–77%</b>，不要主打 MAE。</p>
+  </div>
+
+  <div class="gap">
+    <div class="gap-h"><span class="n">G3</span><span class="ttl">故障偵測完全沒有落地</span><span class="tag c">缺口</span></div>
+    <p>你的第 6 點在 repo 裡沒有對應的決策紀錄或實作。現有的只是騎士通報收集端（累加數量、不觸發任何動作）。</p>
+    <p class="fix"><b>建議：</b>照 §07 的雙訊號判準寫一份決策紀錄。好消息是兩個訊號的資料都現成（車柱缺口欄位 + 熱點站 P75 門檻），實作成本不高，而且這是一個評審沒看過的亮點。</p>
+  </div>
+
+  <div class="gap g-mid">
+    <div class="gap-h"><span class="n">G4</span><span class="ttl">「連續 30 分鐘」在 30 分快照上判不出來</span><span class="tag a">定義問題</span></div>
+    <p>歷史資料是 30 分鐘一筆，30 分鐘內只有 1–2 個觀測點，無法支撐「連續不動」的判斷。</p>
+    <p class="fix"><b>建議：</b>先確認官方即時 API 的實際更新頻率，再把門檻改寫成「連續 N 次觀測」而非固定分鐘數，並放進 <code>config.yaml</code> 讓現場可調。</p>
+  </div>
+
+  <div class="gap g-mid">
+    <div class="gap-h"><span class="n">G5</span><span class="ttl">缺一個對外的 SLA 指標</span><span class="tag a">簡報加分</span></div>
+    <p>你設計了兩個時鐘，但沒有定義「多久算達標」。官方新聞稿明文要求業者「尖峰後 2 小時內恢復平衡」——這是現成的、官方認證的 KPI。</p>
+    <p class="fix"><b>建議：</b>把「2 小時」設成系統 SLA，儀表板直接顯示「本日達標率 XX%」。用主管機關自己的標準當計分板，說服力最強。</p>
+  </div>
+
+  <div class="gap g-low">
+    <div class="gap-h"><span class="n">G6</span><span class="ttl">異常點成因歸類尚未做</span><span class="tag">加分項</span></div>
+    <p>你想把異常點分成補車／天氣／活動造成，目前只有二元判定（是不是調度）。</p>
+    <p class="fix"><b>建議：</b>時間不夠就不做。若要做，用已有的天氣欄位 + 活動日期做交叉表即可，不需要新模型，半天內能出一張圖。</p>
+  </div>
+
+  <div class="gap g-low">
+    <div class="gap-h"><span class="n">G7</span><span class="ttl">尖峰折返組的選法目前是啟發式</span><span class="tag">已知取捨</span></div>
+    <p>折返組用「歷史尖峰流向 + 地理鄰近」組成，沒有最佳化求解。</p>
+    <p class="fix"><b>建議：</b>不要迴避，主動講。搭配 §08 的取捨表一起呈現，把它講成工程判斷而不是能力不足。</p>
+  </div>
+</section>
+
+<section style="border-bottom:none">
+  <div class="sec-head"><span class="sec-num">§10</span><h2>建議的簡報骨架</h2></div>
+  <p class="lede">給做投影片的隊友：十頁，每頁對應本文的一節。</p>
+  <div class="tw">
+    <table>
+      <thead><tr><th style="width:52px">頁</th><th>標題</th><th>核心畫面</th><th>對應</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">1</td><td>現況痛點</td><td>調度員被動反應的時間軸：使用者投訴 → 才知道 → 30–60 分鐘流程</td><td>§00</td></tr>
+        <tr><td class="mono">2</td><td>解法一句話</td><td>事後補救 → 事前預防，兩階段全景圖</td><td>§00</td></tr>
+        <tr><td class="mono">3</td><td>資料與方法</td><td>1,583 站 × 6 個月 × 1,330 萬筆；LightGBM 接力改錯示意</td><td>§01</td></tr>
+        <tr><td class="mono">4</td><td>45 個因子</td><td>六大群組圖 + 消融試驗一句話</td><td>§02</td></tr>
+        <tr><td class="mono">5</td><td><b>反推調度規模</b></td><td>45 台 vs 官方 41 輛的對照。<b>全場最有記憶點的一頁，建議放大</b></td><td>§03</td></tr>
+        <tr><td class="mono">6</td><td>從預測到派車</td><td>三層判斷 + 緊急度 0–100 分層帶狀圖</td><td>§04</td></tr>
+        <tr><td class="mono">7</td><td>三種班別策略</td><td>尖峰折返／離峰任務／大夜跨區三欄</td><td>§05</td></tr>
+        <tr><td class="mono">8</td><td>派工與追蹤</td><td>自動組單迴圈 + 30／45 分鐘升級機制</td><td>§06</td></tr>
+        <tr><td class="mono">9</td><td>成效與誠實邊界</td><td>決策區召回對照表 + 主動揭露三項限制</td><td>§08</td></tr>
+        <tr><td class="mono">10</td><td>取捨與下一步</td><td>做了什麼／沒做什麼／為什麼；故障偵測當 roadmap</td><td>§07 §09</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note ok">
+    <span class="lab">講給評審聽的三句話</span>
+    <p><b>一、</b>我們沒有任何調度紀錄，卻從六個月的存量曲線反推出「尖峰同時 45 台車」，跟官方公布的 41 輛對上了。</p>
+    <p><b>二、</b>我們不吹平均誤差，我們吹的是抓出真的會出事的站——長視野召回 81–92%，而這正是交通局要求的「尖峰後 2 小時內恢復」的時間窗。</p>
+    <p><b>三、</b>AI 只估計，規則引擎決策，人拍板。所有門檻都在一個設定檔裡，現場可調、可解釋、可歸責。</p>
+  </div>
+</section>
+
+<footer>
+  <p>本文由專案資料夾內的架構決策紀錄、分析文件與訓練評估結果整理而成，並補上口述中尚未落地的部分。數字若與 repo 內文件不一致，以 <code>docs/decisions/</code> 與 <code>docs/analysis/</code> 的最新版本為準。</p>
+</footer>
+
+</div>
