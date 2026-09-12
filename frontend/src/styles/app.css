@@ -3913,3 +3913,60 @@ body.rider-phone-preview .rider-page {
 .dts-count-idle { color: #22c55e; font-weight: 600; }
 .dts-count-busy { color: #3b82f6; font-weight: 600; }
 .dts-count-off { color: var(--ct-text-secondary); }
+
+/* ADR-331：自動配單執行視窗——資源遞減 + 逐筆流動清單 */
+.adr-run-resources {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 16px 0 10px;
+}
+.adr-run-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+  border: 1px solid var(--ct-border);
+  border-radius: 10px;
+  border-top: 3px solid var(--adr-accent, var(--ct-border));
+}
+.adr-run-stat-icon { color: var(--adr-accent, var(--ct-text)); }
+.adr-run-stat-val { font-size: 20px; font-weight: 700; }
+.adr-run-stat-label { font-size: 11px; color: var(--ct-text-secondary); }
+.adr-run-list {
+  margin-top: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.adr-run-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--ct-border);
+  border-radius: 8px;
+  background: var(--ct-panel);
+  animation: adr-run-in 0.25s ease;
+}
+@keyframes adr-run-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.adr-run-item-ok { color: #22c55e; }
+.adr-run-item-seq { color: var(--ct-text-secondary); font-size: 12px; }
+.adr-run-item-main { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.adr-run-item-dist { font-size: 11px; color: var(--ct-text-secondary); margin-left: 6px; }
+.adr-run-item-res { font-size: 12px; color: var(--ct-text-secondary); }
+.adr-run-item-id { font-size: 11px; color: var(--ct-text-secondary); }
+.adr-run-stop {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--ct-bg-soft);
+  font-size: 13px;
+  color: var(--ct-text-secondary);
+}

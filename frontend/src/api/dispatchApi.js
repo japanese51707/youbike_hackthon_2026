@@ -74,9 +74,14 @@ export function setAutoDispatchState(enabled) {
   return request("/dispatch/auto-dispatch", { method: "POST", body: { enabled } });
 }
 
-// ADR-320：後台手動立即執行一輪自動配單（看得到結果），並重設下一輪倒數。需 dispatcher/maintainer。
+// ADR-331：手動觸發一輪自動配單（非同步啟動，立刻回 {started, progress}，不逾時）。需 dispatcher/maintainer。
 export function runAutoDispatchNow() {
   return request("/dispatch/auto-dispatch/run-now", { method: "POST" });
+}
+
+// ADR-331：自動配單即時進度（供執行視窗流動圖 + 逐筆清單）。免權限。
+export function getAutoDispatchProgress() {
+  return request("/dispatch/auto-dispatch/progress");
 }
 
 export function acknowledgeAlert(alertId) {

@@ -25,10 +25,12 @@ import {
   buildFromStation as apiBuildFromStation,
   buildFromVehicle as apiBuildFromVehicle,
   confirmRecommendation,
+  getAutoDispatchProgress,
   getAutoDispatchState,
   runAutoDispatchNow,
   setAutoDispatchState,
 } from "../api/dispatchApi.js";
+import AutoDispatchRunModal from "../components/dashboard/dispatch/AutoDispatchRunModal.jsx";
 import { getRoadRoute } from "../api/routingApi.js";
 import { isApiMode } from "../api/httpClient.js";
 import { parseStationTime } from "../utils/formatters.js";
@@ -119,6 +121,10 @@ export default function DashboardPage() {
   const [autoDispatch, setAutoDispatch] = useState(null);
   const [autoDispatchBusy, setAutoDispatchBusy] = useState(false);
   const [runNowBusy, setRunNowBusy] = useState(false);
+  // ADR-331：自動配單執行視窗
+  const [runModalOpen, setRunModalOpen] = useState(false);
+  const [runProgress, setRunProgress] = useState(null);
+  const seenRunIdRef = useRef(0); // 已見過的 run_id，用來偵測「背景新一輪」自動開窗
   const [nowTick, setNowTick] = useState(() => Date.now()); // 每秒推進，驅動倒數重繪
   // 定期刷新自動配單狀態（含 next_run_at），讓倒數與上次結果保持新鮮。
   useEffect(() => {
@@ -126,10 +132,23 @@ export default function DashboardPage() {
     let cancelled = false;
     const pull = () =>
       getAutoDispatchState()
-        .then((s) => !cancelled && setAutoDispatch(s))
+        .then((s) => {
+          if (cancelled) return;
+          setAutoDispatch(s);
+          // ADR-331：偵測到「背景輪」開了新一輪（run_id 變大且還在跑）→ 自動跳出執行視窗。
+          const prog = s?.progress;
+          if (prog && prog.run_id > seenRunIdRef.current) {
+            seenRunIdRef.current = prog.run_id;
+            if (["selecting", "dispatching"].includes(prog.phase)) {
+              setRunProgress(prog);
+              setRunModalOpen(true);
+            }
+          }
+        })
         .catch(() => !cancelled && setAutoDispatch(null));
     pull();
-    const id = setInterval(pull, 15000);
+    // 背景輪偵測要夠靈敏（5 分一輪、幾秒內跑完），15 秒太慢會錯過；改 4 秒輪詢狀態。
+    const id = setInterval(pull, 4000);
     return () => {
       cancelled = true;
       clearInterval(id);
@@ -140,6 +159,32 @@ export default function DashboardPage() {
     const id = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+  // ADR-331：執行視窗開啟時，每秒輪詢自動配單進度；跑完（done）後刷新狀態、重載儀表板，稍候自動關窗。
+  useEffect(() => {
+    if (!runModalOpen || !isApiMode) return undefined;
+    let cancelled = false;
+    let closeTimer = null;
+    const pull = () =>
+      getAutoDispatchProgress()
+        .then((prog) => {
+          if (cancelled) return;
+          setRunProgress(prog);
+          if (prog?.phase === "done") {
+            // 跑完：更新開關狀態與倒數、重載儀表板讓新任務顯示，1.8 秒後自動關窗。
+            getAutoDispatchState().then(setAutoDispatch).catch(() => {});
+            dashboard.reload({ silent: true }).catch(() => {});
+            if (!closeTimer) closeTimer = setTimeout(() => !cancelled && setRunModalOpen(false), 1800);
+          }
+        })
+        .catch(() => {});
+    pull();
+    const id = setInterval(pull, 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      if (closeTimer) clearTimeout(closeTimer);
+    };
+  }, [runModalOpen]);
   const toggleAutoDispatch = async (next) => {
     setAutoDispatchBusy(true);
     try {
@@ -152,38 +197,13 @@ export default function DashboardPage() {
       setAutoDispatchBusy(false);
     }
   };
+  // ADR-331：立即配單改「開執行視窗 + 輪詢進度」。後端非同步啟動一輪立刻回，不逾時。
   const runAutoDispatch = async () => {
     setRunNowBusy(true);
     try {
       const res = await runAutoDispatchNow();
-      if (res.placed_count > 0) {
-        message.success(`已立即執行自動配單：本輪配出 ${res.placed_count} 張派工單`);
-      } else {
-        // ADR-322：配不出來有六種完全不同的原因，要講清楚是哪一種，
-        // 否則調度員只會看到「無可配」然後對著一整排需調度的站發呆。
-        const d = res.diagnostics || {};
-        const parts = [];
-        if (d.stopped_because) parts.push(d.stopped_because);
-        if (d.dispatch_total !== undefined) {
-          parts.push(`需調度 ${d.dispatch_total} 站`
-            + `｜符合級別 ${d.eligible ?? 0} 站`
-            + `｜已被認領 ${d.skipped_claimed ?? 0}`
-            + `｜人工草稿佔用 ${d.skipped_draft ?? 0}`);
-          parts.push(`可用車 ${d.vehicles_available ?? 0}（總部待命 ${d.vehicles_depot_standby ?? 0}）`
-            + `｜可派人員 ${d.operators_assignable ?? 0}（總部待命 ${d.operators_depot_standby ?? 0}）`);
-        }
-        const reasons = Object.entries(d.reasons || {});
-        if (reasons.length) {
-          parts.push("逐站被擋原因：" + reasons.map(([k, v]) => `${k}×${v}`).join("；"));
-        }
-        message.warning({
-          content: `本輪沒有配出派工單。${parts.join("　")}`,
-          duration: 12,
-        });
-      }
-      // 執行後刷新狀態（更新倒數與上次結果），並重載儀表板讓新任務顯示。
-      getAutoDispatchState().then(setAutoDispatch).catch(() => {});
-      dashboard.reload({ silent: true }).catch(() => {});
+      setRunProgress(res.progress || null);
+      setRunModalOpen(true);
     } catch (err) {
       message.error(err?.message || "立即執行失敗（需 dispatcher 權限）");
     } finally {
@@ -903,6 +923,11 @@ export default function DashboardPage() {
             detail={dashboard.detail}
             loading={dashboard.detailLoading}
             error={dashboard.detailError}
+          />
+          <AutoDispatchRunModal
+            open={runModalOpen}
+            progress={runProgress}
+            onClose={() => setRunModalOpen(false)}
           />
         </div>
       ) : null}

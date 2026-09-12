@@ -160,22 +160,37 @@ def test_auto_dispatch_toggle_endpoint(client):
     auto_dispatch.reset_runtime_enabled()
 
 
+def _wait_progress_done(ad, timeout=5.0):
+    """輪詢等 run_now 的非同步一輪跑完（progress.phase == done）。"""
+    import time as _t
+    deadline = _t.monotonic() + timeout
+    while _t.monotonic() < deadline:
+        if ad.get_progress().get("phase") == "done":
+            return True
+        _t.sleep(0.02)
+    return False
+
+
 def test_run_now_executes_immediately_and_reports(monkeypatch):
-    """ADR-320：run_now 立即跑一輪並回報結果，更新上次執行狀態。"""
+    """ADR-331：run_now 非同步啟動一輪並回進度；跑完後 progress 有結果、更新上次執行狀態。"""
     _setup()
     _patch_list(monkeypatch, DL)
     from core import auto_dispatch as ad
 
     res = ad.run_now()
-    assert res["placed_count"] >= 1
-    assert res["enabled"] is True
+    assert res["started"] is True
+    assert "progress" in res
+    assert _wait_progress_done(ad), "非同步一輪應在時限內跑完"
+    prog = ad.get_progress()
+    assert prog["phase"] == "done"
+    assert len(prog["placed"]) >= 1
     status = ad.run_status()
     assert status["last_run_at"] is not None
-    assert status["last_placed_count"] == res["placed_count"]
+    assert status["last_placed_count"] >= 1
 
 
 def test_run_now_endpoint_requires_dispatcher(client, monkeypatch):
-    """ADR-320：手動觸發端點需 dispatcher 權限；一般 operator 被擋。"""
+    """ADR-331：手動觸發端點需 dispatcher 權限；一般 operator 被擋；回 started+progress。"""
     from tests.conftest import OP_DISPATCHER, OP_OPERATOR
 
     r = client.post("/api/v1/dispatch/auto-dispatch/run-now", headers=OP_OPERATOR)
@@ -183,9 +198,16 @@ def test_run_now_endpoint_requires_dispatcher(client, monkeypatch):
 
     r = client.post("/api/v1/dispatch/auto-dispatch/run-now", headers=OP_DISPATCHER)
     assert r.status_code == 200
-    assert "placed_count" in r.json()
+    body = r.json()
+    assert body.get("started") is True and "progress" in body
+
+    # 進度端點免權限、回進度快照
+    p = client.get("/api/v1/dispatch/auto-dispatch/progress")
+    assert p.status_code == 200
+    assert "phase" in p.json() and "run_id" in p.json()
 
     from core import auto_dispatch
+    _wait_progress_done(auto_dispatch)
     auto_dispatch.reset_runtime_enabled()
 
 

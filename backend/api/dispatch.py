@@ -292,14 +292,21 @@ def set_auto_dispatch_state(
 def run_auto_dispatch_now(
     operator: dict = Depends(require_role("dispatcher", "maintainer")),
 ):
-    """後台手動立即執行一輪自動配單（看得到結果），並重設下一輪倒數。需 dispatcher/maintainer。
+    """後台手動觸發一輪自動配單（ADR-331：非同步啟動、立刻回，避免逾時）。需 dispatcher/maintainer。
 
-    回 {placed_count, placed[], enabled}。若開關為關則回 placed_count=0（不強制配單）。
+    回 {started, progress}。前端據 progress.run_id/phase 開執行視窗並輪詢 /progress。
     """
     from core import auto_dispatch
     from core.audit import get_audit_service
     result = auto_dispatch.run_now()
     get_audit_service().record(
         type="param_edit", operator=operator["operator_id"],
-        action=f"手動觸發自動配單一輪（落地 {result['placed_count']} 張）")
+        action="手動觸發自動配單一輪")
     return result
+
+
+@router.get("/dispatch/auto-dispatch/progress")
+def auto_dispatch_progress():
+    """ADR-331：自動配單即時進度（供前端執行視窗流動圖 + 逐筆清單）。免權限（只讀）。"""
+    from core import auto_dispatch
+    return auto_dispatch.get_progress()
