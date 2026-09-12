@@ -182,3 +182,71 @@
 - 依審查建議補防呆（誠實性）：`analysisLayers.js` 新增 `withFiniteCoords`，在 KDE/覆蓋缺口/網路/集水區/Voronoi+Gi\*/flow 進入幾何運算前先過濾缺經緯度（NaN）的站點；避免接真實 TDX 資料時缺座標站污染 Delaunay/bounds/格點，畫出「看起來像分析、其實是壞掉的幾何」。
 - 其餘為非阻斷建議（flow 笛卡兒積、滑桿全圖層重算、真實規模效能、predict 用點估計著色、時間機器為三態非時間軸、缺 spatialStats 單元測試），留待後續視需要處理。
 - `npm run build` 於修正後再次通過。
+
+---
+
+## 頁1 再造 · 調度面板決策流（ADR-206）
+
+- 狀態：已實作、build 通過；待 owner 瀏覽器確認後 commit。
+- 依據：ADR-206（本頁資訊架構）、對齊 ADR-119（三入口組單）、ADR-114（資源模型）、ADR-118（死結警報）、ADR-004（AI 只估計、規則引擎決策）。
+
+### 目的
+把原本「工具列＋KPI＋地圖＋右側三分頁（建議/警示/缺口榜）」的發散版面，改成**服務調派員決策流的聚焦架構**：
+一張地圖（舞台）＋右欄狀態機（待命態／組單態），對齊後端 ADR-119 的三入口與預覽確認，並加入執行追蹤。
+
+### 動作
+
+| # | 項目 | 目的 | 動作 | 結果 |
+|---|---|---|---|---|
+| 1 | mock 車輛 | 三入口與載運量成立 | `mock_data.json` 加 `vehicles`（對齊 ADR-114：max_capacity 15／status／current_district／is_reserve／current_location），`mockAdapter.getDashboard` 暴露 | 6 台示意車（含 1 台總站待命預備車、1 台維修中） |
+| 2 | 組單演算 | 先載後放示意草稿 | 新增 `utils/tripPlanner.js`：`buildFromVehicle/buildFromStation/buildEmergency`；先載（滿站取車至載運上限）後放（缺車站補車）；候選車序（該區→鄰近→總站待命）；預估（距離/交通+作業時間/載運量/緊急度加總）。參數externalise 到 `fleetMock.js` `tripPlannerConfig` | 純函式、確定性、標示意 |
+| 3 | 地圖擴充 | 車入口＋畫路線 | `StationMap` 加 `vehicles`（可點→車找站）、`draftRoute`（先載後放路線，復用 `planLayers`）、車輛/停靠點 tooltip；向後相容 | 點車組單、草稿路線上圖 |
+| 4 | 待命態 | 發現＋追蹤 | 新增 `dispatch/DispatchSidePanel.jsx`：警報區（critical 可「緊急出車」）／需調度清單（緊急站排行，**缺口榜併入**，點站→站找車）／執行追蹤（狀態生命週期 pill＋逐站進度） | 平常只看「該做什麼／在做什麼」 |
+| 5 | 組單態 | 右欄接管精靈 | 新增 `dispatch/OrderBuilder.jsx`：選資源（改車/改區重算）→ 路線（先載後放）→ 預估卡 → 預覽→確認；跨區示意警告 | 三入口共用一條預覽確認流 |
+| 6 | 頁面狀態機 | 串起決策流 | 重寫 `DashboardPage.jsx`：三入口觸發、送出後進追蹤清單、狀態示意推進（assigned→accepted→in_progress 逐站→completed）、移除三分頁、KPI 站數改動態（`地圖顯示 N 筆`） | 一頁走完 發現→組單→預覽→送出→追蹤 |
+| 7 | 樣式 | 聚焦深色 | `app.css` 加 dispatch-deck／需調度列／追蹤 pill／組單步驟／預估卡樣式 | 右欄內捲、頁面不捲 |
+| 8 | 清理 | 去冗餘 | 刪除已無引用的 `RecommendationPanel.jsx`／`AlertPanel.jsx`／`DeficitRankingPanel.jsx`（功能併入 DispatchSidePanel） | 減少發散 |
+| 9 | 驗證 | 確保未壞 | `npm run build`＋診斷 | 通過、0 錯誤 |
+
+### 誠實邊界（守專案原則）
+- 調度車位置、執行進度皆 mock **示意**；狀態推進是前端示意，不做假 GPS。
+- 「先載後放」為前端**示意排序**，真正最優組單在後端 `dispatch_builder`（守 ADR-004）。
+- 確認送出真環境需 dispatcher 權限；mock 僅本機展示，不進 payload、不寫 DB。
+- **站數完全動態**：後端給幾站畫幾站（地圖／清單／KPI 皆不寫死），不提供站點增刪 UI。
+- 本分支只做調度面板；跨頁「司機接走」與後端串接不在此範圍。
+
+---
+
+## 後端接線探索 · 調度面板站點接真實 API（spike）
+
+- 狀態：站點已接後端並可用；其餘資料因外部依賴未接。探索性 spike，尚未立正式前端資料層 ADR。
+- 目的：讓調度面板站點改吃後端 `GET /stations`，實測「不串 mock、走真後端」現在能到什麼地步。
+
+### 做了什麼
+
+| # | 項目 | 動作 | 結果 |
+|---|---|---|---|
+| 1 | 本機跑後端 | `.venv` 裝後端依賴（fastapi/uvicorn/pydantic/pyyaml/bcrypt/httpx，後續加 lightgbm/numpy/pandas/pyarrow/boto3）；`uvicorn main:app --app-dir backend :8000` | 後端可啟動 |
+| 2 | 資料源切換 | `config.yaml` `data_source.mode` 由 `mock` 改 `youbike_official`（新北開放資料，公開、無金鑰、無個資） | `GET /stations` 回**全新北 ~1600 站即時** |
+| 3 | 前端 gated 接線 | 新增 `api/apiConfig.js`（baseUrl＋`useBackendStations` 開關，可用 `VITE_API_BASE`/`VITE_BACKEND_STATIONS` 覆寫）、`api/backendStations.js`（fetch＋容錯正規化，缺欄位站點過濾不假造）；改寫 `api/stationsApi.js`：站點抓後端、**失敗安全退回 mock 並標明原因**，其餘（建議/警示/車輛/KPI/天氣）仍 mock | 站點走真後端、其餘 mock；工具列顯示「站點來源：後端 API/Mock」 |
+| 4 | 每站資料時間 | `formatters.js` 加 `parseStationTime`/`formatStationTime`（支援 ISO 與 `YYYYMMDDThhmmss` 緊湊格式）；地圖 tooltip 底部＋單站抽屜顯示**該站自己的** source_timestamp（資料源更新）與 timestamp（系統取得）；工具列另顯示整批最新時間 | 每站各自時間，非統一值 |
+| 5 | 修模型檔換行 bug | 見下方「LightGBM 模型檔 CRLF 修正」 | 12 模型可正常載入 |
+
+### LightGBM 模型檔 CRLF 修正（真 bug，對團隊有效）
+- 現象：`GET /dispatch/recommendations` / `/alerts` 一律 500，log 為 `[LightGBM] [Fatal] Model format error, expect a tree here`。
+- 根因：repo `core.autocrlf=true` 且模型檔無 `.gitattributes` 規範；`backend/prediction/_models/*.txt`（LightGBM 序列化樹）在 Windows 檢出時 LF 被轉 CRLF，破壞數值樹結構，lightgbm 解析失敗。
+- 修正：新增 `.gitattributes` 將模型檔標為 `-text`（二進位，Git 不做換行正規化），另標 `*.parquet/*.pkl/*.joblib` 為 binary。`git checkout` 重新以純 LF 檢出後，12 個模型（4 視野 × P10/P50/P90）全部載入正常（各 300 樹、45 特徵）。
+
+### 現在的真假狀態（誠實）
+- ✅ **真的**：調度面板**站點**（`GET /stations`，~1600 站即時，含每站資料時間）。
+- ⛔ **想接但被外部依賴擋住**：
+  - `GET /dispatch/recommendations`（需調度清單的**緊急度/排序**）、`GET /alerts`（**警示**）：模型已可載入，但真預測要算 lag 特徵 → 需 **S3 歷史資料**（`youbike-hackathon-2026`），本機**無 AWS 憑證**，1600 站逐站打 S3 會卡死。
+  - `GET /stations/{id}`（單站**歷史曲線/預測**）：現行資料源 `youbike_official` 為即時源，**不提供歷史查詢**（後端明示歷史請用 historical 源），故詳情端點 500。
+  - 共同根因：真預測/警示綁 S3 歷史資料，缺 S3 憑證。屬後端/資料面，非前端可解。
+- 🟡 **接了也還是假**（後端本身回 mock）：`GET /kpi`、`GET /weather`、`GET /operators`、`/stations/heatmap`、`/simulation/replay`；車輛無端點。
+- 前端現況：站點真實；**緊急度分數、警示、車輛、KPI、天氣仍為前端 mock/heuristic**。
+
+### 尚未決定 / 下一步
+- 若取得 AWS 憑證（放 `.env`、環境變數、不進版控）→ 資料源可切 `historical` 或讓預測讀 S3，規則引擎即可跑真緊急度/警示。
+- 本前端接線目前為 gated spike；若確定保留為正式方案，需補一支前端資料層（mock/http 切換、身分來源、失敗降級）的 proposed ADR（2xx 號段）。
+- 注意：`config.yaml` 的 `data_source.mode` 改為 `youbike_official` 是**全系統預設資料源切換**（影響團隊）；本次為展示切換，是否維持為預設待團隊決定。

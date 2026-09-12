@@ -29,13 +29,44 @@ export function formatDateTime(value) {
   }).format(date);
 }
 
+// 解析站點時間戳，支援兩種格式：
+//   ISO（系統 timestamp，如 2026-09-10T23:20:57+08:00）
+//   官方/CWA 緊湊格式（source_timestamp，如 20260910T231902，視為台北時間）
+export function parseStationTime(value) {
+  if (!value || typeof value !== "string") return null;
+  const compact = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/);
+  if (compact) {
+    const [, y, mo, d, h, mi, s] = compact;
+    const dt = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}+08:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const dt = new Date(value);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+// 站點資料時間（含秒），優先用資料源更新時間 source_timestamp，退回系統 timestamp。
+export function formatStationTime(station, { withSeconds = true } = {}) {
+  const date =
+    parseStationTime(station?.source_timestamp) ||
+    parseStationTime(station?.timestamp);
+  if (!date) return "—";
+  return date.toLocaleString("zh-TW", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    ...(withSeconds ? { second: "2-digit" } : {}),
+    hour12: false,
+  });
+}
+
 export const stationStatusLabels = {
-  offline: "停用／離線",
-  empty: "空站",
+  offline: "暫停營運",
+  empty: "無車可借",
   low: "偏低",
   normal: "正常",
   high: "偏高",
-  full: "滿站",
+  full: "車位滿載",
 };
 
 export const terrainLabels = {

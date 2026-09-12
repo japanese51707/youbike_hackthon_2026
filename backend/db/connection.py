@@ -28,6 +28,10 @@ _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 # 記憶體 DB 需共用同一連線（否則每次連線是不同的空 DB）
 _memory_conn: Optional[sqlite3.Connection] = None
+# 檔案 DB 也共用單一連線：避免多連線各自持有讀交易 snapshot，造成
+# 「A 連線寫入 commit、B 連線 SELECT 卻讀到舊資料」的可見性不一致
+# （警報清理後仍讀到已刪警報即此問題）。黑客松規模流量小，單連線 + GIL 足夠。
+_shared_conn: Optional[sqlite3.Connection] = None
 _transaction_conn = ContextVar("dispatch_transaction_connection", default=None)
 _transaction_lock = RLock()
 
@@ -51,7 +55,8 @@ def transaction():
             raise
         finally:
             _transaction_conn.reset(token)
-            if conn is not _memory_conn:
+            # 共用連線（記憶體 / 檔案）不關閉，維持單例避免 snapshot 不一致。
+            if conn is not _memory_conn and conn is not _shared_conn:
                 conn.close()
 
 
@@ -109,12 +114,19 @@ def get_connection() -> sqlite3.Connection:
             _init_schema(_memory_conn)
         return _memory_conn
 
-    # 檔案模式：確保目錄存在
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    # 檔案模式：共用單一連線（避免多連線 snapshot 不一致，見上方說明）。
+    global _shared_conn
+    if _shared_conn is None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        # isolation_level=None（autocommit）：SELECT 不會開啟並 pin 住持久讀交易，
+        # 每個語句自動提交，避免單一長命連線一直讀到啟動當下的舊 snapshot
+        # （警報已刪卻仍讀到即此問題）。明確的多步寫入交易由 transaction() 用 BEGIN 管理。
+        conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")
+        _shared_conn = conn
+    return _shared_conn
 
 
 def _init_schema(conn: sqlite3.Connection) -> None:
@@ -139,6 +151,7 @@ _MIGRATIONS = [
     ("vehicles", "onboard_observed_at", "TEXT"),     # ADR-123 載量觀測時間
     ("tasks", "onboard_start", "INTEGER"),           # ADR-123 出車載量
     ("tasks", "onboard_planned_end", "INTEGER"),     # ADR-123 計畫收車載量
+    ("tasks", "assigned_escort", "TEXT"),            # ADR-308 隨車人員（第二名，可選）
 ]
 
 
@@ -155,16 +168,16 @@ def init_db() -> None:
     if path == ":memory:":
         get_connection()   # 記憶體模式在建連線時已初始化
         return
-    conn = get_connection()
-    try:
-        _init_schema(conn)
-    finally:
-        conn.close()
+    # 共用單一連線：初始化後不關閉（後續請求沿用同一連線，確保 snapshot 一致）。
+    _init_schema(get_connection())
 
 
 def reset_memory_db() -> None:
-    """測試用：清掉記憶體 DB 單例（下次 get_connection 會重建空 DB）。"""
-    global _memory_conn
+    """測試用：清掉記憶體/檔案 DB 單例（下次 get_connection 會重建）。"""
+    global _memory_conn, _shared_conn
     if _memory_conn is not None:
         _memory_conn.close()
         _memory_conn = None
+    if _shared_conn is not None:
+        _shared_conn.close()
+        _shared_conn = None

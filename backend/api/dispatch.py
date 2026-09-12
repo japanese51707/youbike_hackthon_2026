@@ -50,7 +50,9 @@ def recommendations(limit: int = 15, priority: str | None = None):
     """
     stations = get_stations_with_degradation()
     overrides = get_override_service().active_station_ids()
-    recs = build_dispatch_list(stations, override_station_ids=overrides)
+    # 顯示用清單：不套用派工量能上限，回全部需調度站的完整排序（前端用 limit 控制顯示筆數），
+    # 避免空/滿站因車隊時段量能被截掉而看不到。
+    recs = build_dispatch_list(stations, override_station_ids=overrides, apply_capacity=False)
     if priority:
         recs = [r for r in recs if r["priority_level"] == priority]
     return recs[:limit]
@@ -163,7 +165,8 @@ def build_from_vehicle(body: BuildVehicleRequest,
     from core import dispatch_builder as db
     return _call(db.build_from_vehicle,
         body.vehicle_id, body.operator_id, _current_dispatch_list(),
-        district=body.district, created_by=operator["operator_id"])
+        district=body.district, escort_id=body.escort_id,
+        created_by=operator["operator_id"])
 
 
 @router.post("/dispatch/build/from-station")
@@ -174,7 +177,7 @@ def build_from_station(body: BuildStationRequest,
     return _call(db.build_from_station,
         body.station_id, _current_dispatch_list(),
         operator_id=body.operator_id, vehicle_id=body.vehicle_id,
-        created_by=operator["operator_id"])
+        escort_id=body.escort_id, created_by=operator["operator_id"])
 
 
 @router.post("/dispatch/build/emergency")
@@ -185,7 +188,7 @@ def build_emergency(body: BuildEmergencyRequest,
     return _call(db.build_emergency,
         body.station_ids, _current_dispatch_list(),
         vehicle_id=body.vehicle_id, operator_id=body.operator_id,
-        created_by=operator["operator_id"])
+        escort_id=body.escort_id, created_by=operator["operator_id"])
 
 
 @router.get("/dispatch/next-trip")

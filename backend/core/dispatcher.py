@@ -54,10 +54,13 @@ def build_dispatch_list(
     predictor=None,
     urgency_calc=None,
     override_station_ids: Optional[set[str]] = None,
+    apply_capacity: bool = True,
 ) -> list[dict]:
-    """產出最終排序 + 資源受限的調度建議清單。
+    """產出最終排序（+ 可選資源受限）的調度建議清單。
 
     override_station_ids：③即時覆寫的站，排序時強制置頂（最前綴）。
+    apply_capacity：True＝截到「一個時段車隊實際能處理的站數」（派工量能語意，預設）；
+      False＝回全部需調度站的完整排序清單（供前端『需調度清單』顯示，不因量能截掉空/滿站）。
     """
     cfg = config or get_config()
     pred = predictor or get_predictor()
@@ -93,7 +96,9 @@ def build_dispatch_list(
     recs.sort(key=lambda r: (not r["override_active"], -r["priority_score"],
                              _tier_rank.get(r.get("confidence_tier", "mid"), 1)))
 
-    # 4. 資源限制：時段上限
+    # 4. 資源限制：時段上限（僅在派工量能語意下套用；顯示用清單不截斷）
+    if not apply_capacity:
+        return recs
     fleet = cfg["fleet"]
     cap = min(int(fleet["每時段最大調度站數"]),
               int(fleet["調度車數量"]) * int(fleet["每趟最大站數"]))
@@ -444,7 +449,7 @@ def _persist_trip_atomic(trip: dict) -> None:
     task_id = trip["trip_id"]
     if tasks_repo.exists(task_id):
         raise DispatchConflict("任務 ID 已存在，請使用草稿確認收據重送")
-    vehicle, operator = validate_resources(trip)
+    vehicle, operator, escort = validate_resources(trip)
     validate_stations(trip["stations"], vehicle["max_capacity"])
     # ADR-123/304：確認時以當下資源重跑與預覽相同的可行性評估（載量守恆／逐站視野／班別工時／重疊）
     from core.dispatch_feasibility import evaluate_feasibility, first_blocking_message
@@ -471,6 +476,8 @@ def _persist_trip_atomic(trip: dict) -> None:
                 "quantity", s.get("quantity")),
             "station_status": "pending",
             "total_docks": s.get("total_docks"),
+            # ADR-310 自動偵測基準：組單當下該站可借車數（判斷變化方向/量的 baseline）
+            "current_available": s.get("current_available"),
             "claimed_by": trip["assigned_operator"],   # 認領標註（ADR-117）
             "lat": s.get("lat"), "lng": s.get("lng"),
             # ADR-123：逐站到達偏移／所用預測視野／到站後車上載量（確認時算定，供執行端對照）
@@ -487,6 +494,7 @@ def _persist_trip_atomic(trip: dict) -> None:
         "resources_released": 0,
         "task_status": "assigned",
         "assigned_operator": trip["assigned_operator"],
+        "assigned_escort": trip.get("assigned_escort"),   # ADR-308 隨車（可選）
         "district": trip["district"],
         "assigned_vehicle": trip["assigned_vehicle"],
         "route": route,
@@ -499,6 +507,9 @@ def _persist_trip_atomic(trip: dict) -> None:
     # 回寫車/人的 current_district（動態，ADR-114）
     vehicles_repo.assign_district(trip["assigned_vehicle"], trip["district"], task_id)
     operators_repo.assign_district(trip["assigned_operator"], trip["district"], task_id)
+    # ADR-308 隨車人員：一併轉 busy + 綁同一任務/行政區（釋放時對稱下工）
+    if trip.get("assigned_escort"):
+        operators_repo.assign_district(trip["assigned_escort"], trip["district"], task_id)
 
 
 def suggest_next_trip(

@@ -1,0 +1,445 @@
+{
+  "meta": {
+    "source": "s3://youbike-hackathon-2026-use1/youbike_data/",
+    "months": [
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06"
+    ],
+    "n_records": 13324945,
+    "n_stations": 1583,
+    "n_districts": 29,
+    "n_drivers": 350,
+    "n_stationed": 30,
+    "method": "工作量=周轉量(權重2,主導)+空站絕對次數+滿站絕對次數(皆標準化) → 最大餘數法整數分配(調度員每區至少1)；駐點員依高周轉站(≥全市P75)數分配，候選站取各區周轉量前列。改用周轉量主導+絕對次數,避免偏遠山區空/滿站率高但無車流被誤配人力",
+    "turnover_p75": 79.6
+  },
+  "districts": [
+    {
+      "district": "板橋區",
+      "empty_freq_pct": 6.43,
+      "full_freq_pct": 0.71,
+      "empty_events": 120743,
+      "full_events": 13261,
+      "turnover_sum": 17796.3,
+      "workload_score": 3.616,
+      "drivers": 41,
+      "stationed": 7
+    },
+    {
+      "district": "新莊區",
+      "empty_freq_pct": 4.51,
+      "full_freq_pct": 0.65,
+      "empty_events": 52671,
+      "full_events": 7571,
+      "turnover_sum": 10601.3,
+      "workload_score": 1.9761,
+      "drivers": 23,
+      "stationed": 3
+    },
+    {
+      "district": "中和區",
+      "empty_freq_pct": 4.56,
+      "full_freq_pct": 1.14,
+      "empty_events": 45141,
+      "full_events": 11289,
+      "turnover_sum": 8905.5,
+      "workload_score": 1.8968,
+      "drivers": 22,
+      "stationed": 3
+    },
+    {
+      "district": "土城區",
+      "empty_freq_pct": 5.79,
+      "full_freq_pct": 1.38,
+      "empty_events": 48333,
+      "full_events": 11501,
+      "turnover_sum": 7163.9,
+      "workload_score": 1.7372,
+      "drivers": 20,
+      "stationed": 2
+    },
+    {
+      "district": "新店區",
+      "empty_freq_pct": 4.28,
+      "full_freq_pct": 1.02,
+      "empty_events": 46093,
+      "full_events": 10989,
+      "turnover_sum": 7526.2,
+      "workload_score": 1.7354,
+      "drivers": 20,
+      "stationed": 3
+    },
+    {
+      "district": "永和區",
+      "empty_freq_pct": 9.24,
+      "full_freq_pct": 3.85,
+      "empty_events": 44150,
+      "full_events": 18411,
+      "turnover_sum": 4510.3,
+      "workload_score": 1.7271,
+      "drivers": 20,
+      "stationed": 2
+    },
+    {
+      "district": "三重區",
+      "empty_freq_pct": 4.83,
+      "full_freq_pct": 0.26,
+      "empty_events": 56951,
+      "full_events": 3045,
+      "turnover_sum": 9611.9,
+      "workload_score": 1.6886,
+      "drivers": 20,
+      "stationed": 3
+    },
+    {
+      "district": "汐止區",
+      "empty_freq_pct": 6.75,
+      "full_freq_pct": 1.58,
+      "empty_events": 46398,
+      "full_events": 10858,
+      "turnover_sum": 4384.0,
+      "workload_score": 1.3783,
+      "drivers": 16,
+      "stationed": 1
+    },
+    {
+      "district": "平溪區",
+      "empty_freq_pct": 53.69,
+      "full_freq_pct": 49.35,
+      "empty_events": 23317,
+      "full_events": 21429,
+      "turnover_sum": 82.0,
+      "workload_score": 1.1973,
+      "drivers": 14,
+      "stationed": 0
+    },
+    {
+      "district": "石門區",
+      "empty_freq_pct": 49.75,
+      "full_freq_pct": 49.45,
+      "empty_events": 21603,
+      "full_events": 21473,
+      "turnover_sum": 88.5,
+      "workload_score": 1.1859,
+      "drivers": 14,
+      "stationed": 0
+    },
+    {
+      "district": "淡水區",
+      "empty_freq_pct": 2.67,
+      "full_freq_pct": 1.04,
+      "empty_events": 19682,
+      "full_events": 7633,
+      "turnover_sum": 4686.5,
+      "workload_score": 1.0401,
+      "drivers": 12,
+      "stationed": 1
+    },
+    {
+      "district": "瑞芳區",
+      "empty_freq_pct": 23.48,
+      "full_freq_pct": 22.45,
+      "empty_events": 18350,
+      "full_events": 17545,
+      "turnover_sum": 265.8,
+      "workload_score": 0.9952,
+      "drivers": 12,
+      "stationed": 0
+    },
+    {
+      "district": "萬里區",
+      "empty_freq_pct": 30.01,
+      "full_freq_pct": 29.39,
+      "empty_events": 18243,
+      "full_events": 17869,
+      "turnover_sum": 118.0,
+      "workload_score": 0.9928,
+      "drivers": 12,
+      "stationed": 0
+    },
+    {
+      "district": "蘆洲區",
+      "empty_freq_pct": 5.51,
+      "full_freq_pct": 1.17,
+      "empty_events": 26614,
+      "full_events": 5642,
+      "turnover_sum": 4385.0,
+      "workload_score": 0.9705,
+      "drivers": 12,
+      "stationed": 2
+    },
+    {
+      "district": "林口區",
+      "empty_freq_pct": 2.7,
+      "full_freq_pct": 0.47,
+      "empty_events": 21854,
+      "full_events": 3795,
+      "turnover_sum": 5343.2,
+      "workload_score": 0.9525,
+      "drivers": 11,
+      "stationed": 1
+    },
+    {
+      "district": "坪林區",
+      "empty_freq_pct": 50.41,
+      "full_freq_pct": 49.42,
+      "empty_events": 16473,
+      "full_events": 16150,
+      "turnover_sum": 90.0,
+      "workload_score": 0.8946,
+      "drivers": 11,
+      "stationed": 0
+    },
+    {
+      "district": "三峽區",
+      "empty_freq_pct": 3.93,
+      "full_freq_pct": 0.47,
+      "empty_events": 23960,
+      "full_events": 2862,
+      "turnover_sum": 3507.8,
+      "workload_score": 0.7198,
+      "drivers": 9,
+      "stationed": 1
+    },
+    {
+      "district": "石碇區",
+      "empty_freq_pct": 49.81,
+      "full_freq_pct": 49.11,
+      "empty_events": 13098,
+      "full_events": 12912,
+      "turnover_sum": 54.7,
+      "workload_score": 0.7112,
+      "drivers": 9,
+      "stationed": 0
+    },
+    {
+      "district": "樹林區",
+      "empty_freq_pct": 2.9,
+      "full_freq_pct": 0.39,
+      "empty_events": 18922,
+      "full_events": 2521,
+      "turnover_sum": 3531.5,
+      "workload_score": 0.6648,
+      "drivers": 8,
+      "stationed": 0
+    },
+    {
+      "district": "三芝區",
+      "empty_freq_pct": 12.2,
+      "full_freq_pct": 11.63,
+      "empty_events": 9539,
+      "full_events": 9088,
+      "turnover_sum": 137.8,
+      "workload_score": 0.5123,
+      "drivers": 7,
+      "stationed": 0
+    },
+    {
+      "district": "雙溪區",
+      "empty_freq_pct": 50.61,
+      "full_freq_pct": 49.35,
+      "empty_events": 8791,
+      "full_events": 8572,
+      "turnover_sum": 134.3,
+      "workload_score": 0.4815,
+      "drivers": 6,
+      "stationed": 0
+    },
+    {
+      "district": "烏來區",
+      "empty_freq_pct": 49.78,
+      "full_freq_pct": 49.44,
+      "empty_events": 8647,
+      "full_events": 8588,
+      "turnover_sum": 33.6,
+      "workload_score": 0.4698,
+      "drivers": 6,
+      "stationed": 0
+    },
+    {
+      "district": "五股區",
+      "empty_freq_pct": 5.22,
+      "full_freq_pct": 1.81,
+      "empty_events": 14288,
+      "full_events": 4939,
+      "turnover_sum": 1021.0,
+      "workload_score": 0.457,
+      "drivers": 6,
+      "stationed": 0
+    },
+    {
+      "district": "鶯歌區",
+      "empty_freq_pct": 2.68,
+      "full_freq_pct": 0.3,
+      "empty_events": 12358,
+      "full_events": 1366,
+      "turnover_sum": 2273.8,
+      "workload_score": 0.4148,
+      "drivers": 5,
+      "stationed": 0
+    },
+    {
+      "district": "泰山區",
+      "empty_freq_pct": 2.98,
+      "full_freq_pct": 0.63,
+      "empty_events": 6537,
+      "full_events": 1385,
+      "turnover_sum": 1495.1,
+      "workload_score": 0.2799,
+      "drivers": 4,
+      "stationed": 1
+    },
+    {
+      "district": "金山區",
+      "empty_freq_pct": 10.71,
+      "full_freq_pct": 7.32,
+      "empty_events": 6510,
+      "full_events": 4449,
+      "turnover_sum": 90.1,
+      "workload_score": 0.2648,
+      "drivers": 4,
+      "stationed": 0
+    },
+    {
+      "district": "八里區",
+      "empty_freq_pct": 1.89,
+      "full_freq_pct": 0.32,
+      "empty_events": 4748,
+      "full_events": 808,
+      "turnover_sum": 827.3,
+      "workload_score": 0.1629,
+      "drivers": 3,
+      "stationed": 0
+    },
+    {
+      "district": "深坑區",
+      "empty_freq_pct": 1.2,
+      "full_freq_pct": 1.83,
+      "empty_events": 623,
+      "full_events": 955,
+      "turnover_sum": 120.2,
+      "workload_score": 0.056,
+      "drivers": 2,
+      "stationed": 0
+    },
+    {
+      "district": "貢寮區",
+      "empty_freq_pct": 0.3,
+      "full_freq_pct": 0.35,
+      "empty_events": 78,
+      "full_events": 90,
+      "turnover_sum": 21.8,
+      "workload_score": 0.0,
+      "drivers": 1,
+      "stationed": 0
+    }
+  ],
+  "driver_allocation": {
+    "板橋區": 41,
+    "新莊區": 23,
+    "中和區": 22,
+    "土城區": 20,
+    "新店區": 20,
+    "永和區": 20,
+    "三重區": 20,
+    "汐止區": 16,
+    "平溪區": 14,
+    "石門區": 14,
+    "淡水區": 12,
+    "瑞芳區": 12,
+    "萬里區": 12,
+    "蘆洲區": 12,
+    "林口區": 11,
+    "坪林區": 11,
+    "三峽區": 9,
+    "石碇區": 9,
+    "樹林區": 8,
+    "三芝區": 7,
+    "雙溪區": 6,
+    "烏來區": 6,
+    "五股區": 6,
+    "鶯歌區": 5,
+    "泰山區": 4,
+    "金山區": 4,
+    "八里區": 3,
+    "深坑區": 2,
+    "貢寮區": 1
+  },
+  "stationed_allocation": {
+    "板橋區": 7,
+    "新莊區": 3,
+    "中和區": 3,
+    "土城區": 2,
+    "新店區": 3,
+    "永和區": 2,
+    "三重區": 3,
+    "汐止區": 1,
+    "淡水區": 1,
+    "蘆洲區": 2,
+    "林口區": 1,
+    "三峽區": 1,
+    "泰山區": 1
+  },
+  "stationed_candidates": {
+    "板橋區": [
+      "捷運新埔站(1號出口)",
+      "捷運府中站(3號出口)",
+      "板橋車站",
+      "新北市政府(新站路)",
+      "捷運府中站(1號出口)",
+      "新北市政府(新府路)",
+      "捷運板橋站(1號出口)"
+    ],
+    "新莊區": [
+      "捷運新莊站(1號出口)",
+      "捷運迴龍站(3號出口)",
+      "捷運新莊站(2號出口)"
+    ],
+    "中和區": [
+      "捷運南勢角站(4號出口)",
+      "捷運永安市場站",
+      "捷運景安站"
+    ],
+    "土城區": [
+      "捷運海山站(3號出口)轉乘停車場",
+      "捷運海山站(2號出口)"
+    ],
+    "新店區": [
+      "中正民權路口",
+      "捷運十四張站",
+      "捷運大坪林站(5號出口)"
+    ],
+    "永和區": [
+      "捷運頂溪站(中興街)",
+      "永福橋"
+    ],
+    "三重區": [
+      "捷運三重國小站",
+      "捷運菜寮站(3號出口)",
+      "捷運三和國中站(1號出口)"
+    ],
+    "汐止區": [
+      "汐止火車站停車場"
+    ],
+    "淡水區": [
+      "捷運淡水站"
+    ],
+    "蘆洲區": [
+      "捷運蘆洲站",
+      "捷運三民高中站(2號出口)"
+    ],
+    "林口區": [
+      "捷運林口站(1號出口)"
+    ],
+    "三峽區": [
+      "恩主公醫院"
+    ],
+    "泰山區": [
+      "捷運泰山貴和站"
+    ]
+  }
+}

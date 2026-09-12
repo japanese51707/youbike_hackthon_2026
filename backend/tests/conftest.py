@@ -36,6 +36,15 @@ def _reset_state(monkeypatch):
     from core.dispatch_drafts import reset_drafts
     from api.optimization import reset_reviews
     from core import interfaces, dispatcher, rule_engine
+    from config_loader import get_config
+
+    # 測試一律用 mock 資料源，與 config.yaml 的正式 mode 解耦：
+    # config.yaml 可設成 youbike_official（正式接真實 API），但測試不打外部 API、
+    # 用可控 mock 站況驗證派工/確認/生命週期邏輯。就地覆寫記憶體中的 mode，
+    # 不動設定檔；monkeypatch 於測試結束自動還原。
+    _cfg = get_config()
+    monkeypatch.setitem(_cfg.setdefault("data_source", {}), "mode", "mock")
+
     # 後端契約／派工測試不驗證模型準確度；隔離外部 S3 歷史讀取。
     monkeypatch.setattr(interfaces, "get_predictor", interfaces.MockPredictor)
     monkeypatch.setattr(dispatcher, "get_predictor", interfaces.MockPredictor)

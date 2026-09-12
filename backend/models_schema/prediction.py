@@ -38,6 +38,8 @@ class Prediction(BaseModel):
     source: str = "unavailable"
     model_version: str | None = None
     missing_features: list[str] = Field(default_factory=list)
+    # ADR-306：lag 特徵來源。historical_proxy＝用同時段歷史代理補 lag（近似）；live＝即時真值；None＝無。
+    lag_source: str | None = None
     reason: str | None = None
     horizon_source: HorizonSource
     horizons: list[HorizonPrediction] = Field(default_factory=list)

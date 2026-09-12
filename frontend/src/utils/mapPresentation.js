@@ -1,8 +1,10 @@
+import { getRentalStatus } from "./stationAppearance.js";
 import presentationConfig from "../config/presentation.json";
 
 export const stationStatusColors = presentationConfig.statusColors;
 
 export function getStationColor(station, dimension = "status") {
+  if (getRentalStatus(station) === "offline") return stationStatusColors.offline;
   if (dimension === "usage") {
     const band = presentationConfig.usageBands.find(
       (item) => station.usage_rate <= item.max,
@@ -10,7 +12,7 @@ export function getStationColor(station, dimension = "status") {
     return band?.color ?? presentationConfig.fallbackColor;
   }
   return (
-    stationStatusColors[station.status] ?? presentationConfig.fallbackColor
+    stationStatusColors[getRentalStatus(station)] ?? presentationConfig.fallbackColor
   );
 }
 

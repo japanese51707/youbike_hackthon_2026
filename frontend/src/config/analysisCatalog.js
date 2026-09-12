@@ -9,11 +9,11 @@
 export const ANALYSIS_CATALOG = [
   {
     key: "gauge",
-    name: "站點狀態環",
+    name: "站點標記",
     discipline: "即時狀態",
     dataMode: "real",
     purpose: "各站可借比例與狀態",
-    info: "每個站點畫成一個環：環長代表目前可借車比例，顏色代表站點狀態（空/低/正常/高/滿）。用來一眼看各站當下壓力。",
+    info: "YouBike 風格水滴標記：綠色正常租借、橘色無車可借、紅色車位滿載、灰色暫停營運。弧線數量代表可借比例；電輔車有確定資料時才加閃電。調度緊急度另行呈現。",
   },
   {
     key: "kde",

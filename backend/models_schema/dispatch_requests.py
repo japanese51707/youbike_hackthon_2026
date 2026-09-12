@@ -14,18 +14,21 @@ class BuildVehicleRequest(DispatchRequest):
     vehicle_id: Identifier
     operator_id: Identifier
     district: Identifier | None = None
+    escort_id: Identifier | None = None   # ADR-308 隨車人員（可選第二名）
 
 
 class BuildStationRequest(DispatchRequest):
     station_id: Identifier
     vehicle_id: Identifier | None = None
     operator_id: Identifier | None = None
+    escort_id: Identifier | None = None   # ADR-308 隨車人員（可選第二名）
 
 
 class BuildEmergencyRequest(DispatchRequest):
     station_ids: list[Identifier] = Field(min_length=1)
     vehicle_id: Identifier | None = None
     operator_id: Identifier | None = None
+    escort_id: Identifier | None = None   # ADR-308 隨車人員（可選第二名）
 
 
 class ConfirmReference(DispatchRequest):

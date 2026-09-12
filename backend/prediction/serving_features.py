@@ -37,6 +37,55 @@ def station_key(station):
     return f"{round(float(station['lat']), 4)}_{round(float(station['lng']), 4)}"
 
 
+# ADR-306：lag 特徵的分鐘位移（與 transform 的 lag 迴圈一致）。
+_LAG_MINUTES = (("lag_30min", 30), ("lag_1hr", 60), ("lag_2hr", 120),
+                ("lag_1day", 1440), ("lag_1week", 10080))
+
+
+def resolve_asof(station):
+    """解析站點觀測時間（Taipei tz）。與 transform 內部一致，供代理 lag 對齊使用。"""
+    return parse_time(
+        station.get("observed_at") or station.get("source_timestamp") or station.get("timestamp")
+    ).astimezone(TAIPEI)
+
+
+def recent_observations(station):
+    """即時 buffer 累積的該站觀測點 list[(ts, available_bikes)]（可能為空）。"""
+    return list(recent(station))
+
+
+def build_proxy_lag_observations(station, asof):
+    """ADR-306：用「同站 × 同 weekday × 同 time_slot」的歷史中位數，
+    為每個 lag 目標時刻造一個代理觀測點 (target 時間戳, available_bikes)。
+
+    模型 lag 是「絕對往前推」，但比賽階段即時是 9 月、歷史只到 6 月，日期對不上取不到真值；
+    用週期性代理（同星期幾同時段）補。這些點的時間戳設為 target（asof−lag），
+    好讓 transform 既有的時間窗匹配到；純代理、僅供預測特徵，不改站況、不進派工。
+
+    回傳 list[(iso_timestamp, value)]；歷史源不可用或查無代理時回空 list（predict 照樣降級跑）。
+    """
+    try:
+        from core.data.historical import HistoricalDataSource
+        hist = HistoricalDataSource()
+    except Exception:
+        return []
+    sid = str(station.get("station_id", ""))
+    if not sid:
+        return []
+    points = []
+    for _name, minutes in _LAG_MINUTES:
+        target = asof - timedelta(minutes=minutes)
+        weekday = target.weekday()
+        time_slot = target.hour * 2 + int(target.minute >= 30)
+        try:
+            value = hist.slot_median(sid, weekday, time_slot)
+        except Exception:
+            value = None
+        if value is not None and math.isfinite(value):
+            points.append((target.isoformat(), float(value)))
+    return points
+
+
 def transform(station, bundle, observations=None):
     """No fitting, no archive lookups, no network; lags never select future data."""
     from config_loader import get_config

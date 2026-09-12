@@ -2,6 +2,7 @@ import { QuestionCircleOutlined } from "@ant-design/icons";
 import { Checkbox, Popover, Segmented, Slider, Tag, Typography } from "antd";
 import { useCallback, useMemo, useState } from "react";
 import StationDrawer from "../components/dashboard/StationDrawer.jsx";
+import StationLegend from "../components/map/StationLegend.jsx";
 import SharedMap from "../components/map/SharedMap.jsx";
 import {
   createCatchmentLayer,
@@ -170,6 +171,7 @@ export default function TwinPage() {
           </div>
         ) : null}
 
+        <StationLegend />
         <Popover
           trigger="click"
           title="待接真實資料源"

@@ -13,7 +13,11 @@
 
 # ── 資料源（NFR-7 可抽換）──
 data_source:
-  mode: "mock"              # mock / historical / tdx / youbike_official（現場改這裡切換）
+  mode: "youbike_official"  # mock / historical / tdx / youbike_official（現場改這裡切換）
+  # ADR-305：開發模式資料源降級。正式模式(youbike_official)永遠維持 ADR-303（失敗→同源 stale→503，不碰 mock）。
+  # 只有把 mode 設成非正式源做本機開發、且此開關為 true 時，真實源完全取不到快照才降級到 mock；
+  # 降級 mock 一律標 data_freshness=mock、dispatch_eligible=false，不進調度決策。預設 false。
+  dev_fallback_to_mock: false
   tdx_api_key: ""           # 若用 TDX，正式環境填（勿寫進版控，用環境變數）
   youbike_official_url: ""  # 留空使用新北官方 HTTPS；其他來源需新增 adapter
   historical_local_dir: output/youbike_parquet  # 相對 repo；空字串才使用 S3，可用 YOUBIKE_HISTORY_DIR 覆寫
@@ -26,10 +30,22 @@ data_source:
   retry_backoff_sec: 30
   observation_max_stations: 3000
   observation_max_points: 2100  # 約一週五分鐘觀測；有界記憶體，重啟需重新累積
-  # 歷史資料源（S3 Parquet，A1）
-  s3_bucket: "youbike-hackathon-2026"
+  # 歷史資料源（S3 Parquet）。ADR-307：競賽現場遷至 us-east-1 帳號的 bucket
+  # （原 youbike-hackathon-2026 在原帳號東京區；現場為全新帳號 us-east-1）。
+  s3_bucket: "youbike-hackathon-2026-use1"
   s3_prefix: "youbike_data"           # 分區：youbike_data/year_month=YYYY-MM/data.parquet
   historical_default_month: "2026-06" # 未指定月份時的預設分區
+
+# ── 自動偵測調度完成（ADR-310）──
+# 調度員執行任務不必人工回報搬運量：背景輪詢官方即時站況，偵測進行中任務的待處理站
+# 是否已達派工目標（補車→可借數上升逼近 target；取車→下降逼近 target），達標即自動
+# 標記該站完成並推進任務。不論車是誰移動的，只要達目標水位，該站調度需求即消化。
+# 僅在真實資料源（非 mock）且 enabled=true 時運作。
+auto_detect:
+  enabled: true             # 是否啟用自動偵測（mock 模式一律不啟）
+  輪詢間隔_秒: 60            # 多久掃一次進行中任務（官方源約 5 分更新，60~300 合理）
+  逼近容差_台數: 2          # 現值落在目標 ± 此容差內視為「已達標」
+  最小變化比例: 0.5         # 車數變化需至少達派工量的此比例，才算是真的被調度（濾自然波動）
 
 # ── 資料保留（FR-12 熱溫冷）──
 retention:
@@ -267,3 +283,12 @@ serving:
   weather_max_age_minutes: 30
   prediction_cache_entries: 3000
   model_retry_sec: 30
+
+# ── 緊急調度案件升級（ADR-309）──
+# 階段＝從開案算起幾分鐘要再提示。必須遞增；L1 跳常駐橫幅，L2 跳強制彈窗並電話聯絡。
+# 關案只認「有未結案任務涵蓋該站」或「站況恢復」，按「已讀」只靜音、不關案、不重置時鐘。
+escalation:
+  階段: [30, 45]            # 分鐘。第一個＝再提示，第二個＝電話聯絡
+  靜音分鐘: 10              # 已讀／已聯絡／延後後暫時不打擾；時鐘照走
+  值班聯絡:                 # 依行政區；找不到就用「預設」
+    預設: { 姓名: "調度中心值班", 電話: "02-2960-3456" }

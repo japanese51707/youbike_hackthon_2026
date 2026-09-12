@@ -23,7 +23,7 @@
 | [ADR-002](ADR-002-LightGBM選型.md) | 預測模型採 LightGBM | accepted | prediction | 官方模式已接 LightGBM；明確 Mock 模式使用 MockPredictor |
 | [ADR-003](ADR-003-運算層EC2資料層Serverless.md) | 運算層 EC2、資料層 Serverless | accepted | infra, data | S3／Athena 已規劃；Git 歷史尚無 EC2 部署證據 |
 | [ADR-004](ADR-004-AI只估計規則引擎決策.md) | AI 只估計、規則引擎決策 | accepted | core, prediction | 規則與人工閘門為不可違反約束 |
-| [ADR-005](ADR-005-契約先行與Mock並行開發.md) | 契約先行＋符合 Schema 的 Mock 解鎖並行 | accepted（追溯） | api, schemas, collaboration | 後端契約與 Mock 已建立；FastAPI 派工整合已實作，見 ADR-206／302／303 |
+| [ADR-005](ADR-005-契約先行與Mock並行開發.md) | 契約先行＋符合 Schema 的 Mock 解鎖並行 | accepted（追溯） | api, schemas, collaboration | 後端契約與 Mock 已建立；FastAPI 派工整合已實作，見 ADR-207／302／303 |
 | [ADR-006](ADR-006-可抽換資料源與明確降級.md) | 可抽換資料源＋明確 freshness／降級 | accepted（追溯） | data, reliability | 官方 adapter／同源最後快照／503 已實作，見 ADR-303 |
 | [ADR-007](ADR-007-API雙向邊界防護.md) | API 入向與出向都視為信任邊界 | accepted（追溯） | api, security | 應用層防護已建；官方與 CWA 即時資料驗證 TLS；正式 webhook 部署仍待後續 |
 | [ADR-008](ADR-008-依賴釘選與關鍵行為測試.md) | 精確釘選依賴＋優先測決策關鍵行為 | accepted（追溯） | backend, testing, dependencies | Python 3.12 為容器基線；CI 尚未建立 |
@@ -43,13 +43,15 @@
 | [ADR-118](ADR-118-駐點預備車與緊急救火警報.md) | 駐點預備車／緊急警報／即時天氣 | superseded（由 ADR-303） | dispatch, weather | 資源決策由 ADR-303 承接，修訂 TLS／快取及時間處理 |
 | [ADR-201](ADR-201-React-Vite-Mock-first前端架構.md) | React／Vite Mock-first 前端＋Leaflet 歷史基線 | superseded（由 ADR-202） | frontend, dependencies, data-adapter | `98d3e8e` 已完成 Mock-only 三頁與 Leaflet 基線；保留歷史，不再作為現行地圖選型 |
 | [ADR-202](ADR-202-MapLibre-DeckGL-OpenFreeMap地圖架構.md) | MapLibre／Deck.gl／OpenFreeMap 三頁地圖架構 | superseded（由 ADR-204） | frontend, map-architecture, outbound-security | 地圖遷移、OpenFreeMap 與 no-basemap 已於 `d1fdb16` 實作；底圖 style 來源條款由 ADR-204 取代，其餘決策由 ADR-204 承接 |
-| [ADR-203](ADR-203-Past-Live-Predict時序契約.md) | Past／Live／Predict 前端呈現與 Mock-first | accepted | frontend, temporal-presentation, mock-data | 保留孿生 Mock 時序展示；實際站況／預測及派工 API 契約由 ADR-121／206／303 補齊 |
+| [ADR-203](ADR-203-Past-Live-Predict時序契約.md) | Past／Live／Predict 前端呈現與 Mock-first | accepted | frontend, temporal-presentation, mock-data | 保留孿生 Mock 時序展示；實際站況／預測及派工 API 契約由 ADR-121／207／303 補齊 |
 | [ADR-204](ADR-204-數位孿生戰情室設計語言與暗色底圖.md) | 數位孿生戰情室設計語言＋自帶暗色底圖 | superseded（由 ADR-205） | frontend, map-architecture, design-language, dependencies | 暗色主題與地圖視覺已實作；資訊架構（三頁）由 ADR-205 取代為四頁，設計語言/地圖決策由 ADR-205 承接 |
-| [ADR-205](ADR-205-四頁角色導向資訊架構與無捲動版面.md) | 四頁角色導向資訊架構＋無捲動固定視窗版面 | accepted | frontend, information-architecture, ux | 調度/司機手機端/長官/戰情室；預設落地調度面板、炫技集中戰情室；2026-09-05 修訂：移除桌機司機頁（與調度面板重疊），司機僅手機端 |
+| [ADR-205](ADR-205-四頁角色導向資訊架構與無捲動版面.md) | 四頁角色導向資訊架構＋無捲動固定視窗版面 | superseded（由 ADR-208 承接） | frontend, information-architecture, ux | 調度/司機手機端/長官/戰情室；預設落地調度面板、炫技集中戰情室；2026-09-05 修訂：移除桌機司機頁（與調度面板重疊），司機僅手機端；調度面板資訊架構由 ADR-206 細化 |
+| [ADR-206](ADR-206-調度面板決策流資訊架構.md) | 調度面板決策流資訊架構（三入口組單＋執行追蹤） | accepted | frontend, information-architecture, ux | 地圖舞台＋右欄狀態機（待命態/組單態）；對齊 ADR-119 三入口與預覽確認；缺口榜併入緊急站排行；執行追蹤含狀態生命週期；站數動態；owner 2026-09-11 核准，實作中 |
+| [ADR-208](ADR-208-YouBike品牌識別與日夜主題.md) | YouBike 品牌識別＋日式柔和日夜主題 | accepted | frontend, design-language, map-presentation | owner 核准；承接 ADR-205 頁面架構，電輔車數未接入時不顯示站點閃電 |
 | [ADR-301](ADR-301-AI營運助理定位與LLM接入決策.md) | AI 營運助理定位與 LLM 接入決策（advisory-only） | proposed | platform, ai-advisory, security, api-contract | 助理僅輔助理解與建議、不自行決策（守 ADR-004）；是否接 LLM 及接法留給後端/owner 決定，尚不可作為實作依據 |
 | [ADR-302](ADR-302-派工確認與任務結案一致性.md) | 後端草稿、原子派工、授權回報與結案釋放 | accepted | api, security, database, dispatch | 第一批派工安全修正；沿用 SQLite／Demo 身分限制 |
 | [ADR-121](ADR-121-模型與特徵成套載入.md) | 模型與特徵成套載入 | accepted | prediction, data | 第二批整合 |
-| [ADR-206](ADR-206-前端實際派工服務整合.md) | 前端實際派工服務整合 | accepted | frontend, api | 第二批整合 |
+| [ADR-207](ADR-207-前端實際派工服務整合.md) | 前端實際派工服務整合 | accepted | frontend, api | 第二批整合；原編 ADR-206，2026-08-19 與前端 ADR-206 撞號讓號至 207 |
 | [ADR-303](ADR-303-觀測時間與資料可用性契約.md) | 觀測時間與資料可用性契約 | accepted | api, data, security, deployment | 第二批整合 |
 | [ADR-122](ADR-122-時序評估協議與標籤完整性.md) | 時序評估協議與標籤完整性 | accepted | prediction, evaluation, data | 第三批A；supersedes ADR-106；逐fold擬合／依目標時間切分／補值與整段介入遮罩／輸出語意為淨變化非需求；不覆蓋現行上線模型 |
 | [ADR-123](ADR-123-路線載量守恆與逐站到達可行性.md) | 路線載量守恆與逐站到達可行性 | accepted | dispatch, database, prediction | 第三批B；車輛初始載量可追溯（未知擋確認）／逐站載量守恆／各站對應預測視野／班別工時與任務重疊；預覽與確認共用驗證 |
@@ -58,6 +60,12 @@
 | [ADR-125](ADR-125-預測區間的conformal校準.md) | 預測區間的 conformal 校準 | superseded（由 ADR-127） | prediction, dispatch | 第四批；實測反證：偏移全為 0，原判斷「條件覆蓋率不足」係以標籤選子集造成；保留歷史，不得作為現行依據 |
 | [ADR-126](ADR-126-未受供給限制的需求估計.md) | 未受供給限制的需求估計 | accepted | prediction, data | 第四批；站內自比（不跨站外推）；獨立欄位輸出、不進觸發與派工量；凍結統計進模型包；預設關 |
 | [ADR-127](ADR-127-不採用conformal校準與覆蓋率判讀規則.md) | 不採用 conformal 校準，並訂定覆蓋率判讀規則 | accepted | prediction, evaluation | 第四批；supersedes ADR-125；430 萬列實測偏移全為 0、七種可觀測分組覆蓋率皆 79.5~83.0%；訂定「不得以標籤本身選出的子集判斷校準」；conformal.py 僅留為離線量測庫、無開關 |
+| [ADR-305](ADR-305-開發模式資料源降級與逐筆新鮮度標記.md) | 開發模式資料源降級與逐筆新鮮度標記 | accepted | data, api, reliability | 正式模式維持 ADR-303（失敗→同源 stale→503，不碰 mock）；新增開發專用開關 dev_fallback_to_mock（預設 false，正式模式不生效）；降級 mock 標記 data_freshness=mock、dispatch_eligible=false，不進調度；逐筆新鮮度標記明文化 |
+| [ADR-306](ADR-306-即時預測以同時段歷史代理lag特徵.md) | 即時預測以同時段歷史代理 lag 特徵 | accepted | prediction, data | 比賽階段只有 1–6 月歷史、即時是 9 月，lag 絕對往前推取不到值；改用同站同星期同時段歷史中位數代理，讓即時預測不再 degraded；lag_source=historical_proxy 前端誠實標示；只餵預測特徵不進派工；取得真序列後可切回 |
+| [ADR-307](ADR-307-競賽現場雲端部署與S3遷移.md) | 競賽現場雲端部署與 S3 遷移 | accepted | platform, deployment, data, security | us-east-1 建專屬 bucket 遷歷史資料；後端 ECS Fargate（App Runner 被 SCP 擋）；金鑰環境變數注入雲端、讀 S3 走最小權限 task role；前端走 Vite proxy 免改 CORS；SageMaker 批次推論示範+未來每日重訓管線；public IP 臨時、賽後關閉 |
+| [ADR-308](ADR-308-人力依歷史分派與雙人派工.md) | 人力依歷史分派與雙人派工（司機＋隨車） | proposed | dispatch, data, database, frontend | 離線分析 S3 1–6 月（周轉量主導+空/滿站絕對次數，最大餘數法）算各行政區人力配額，啟動時 seed 預設分派；派工單保留單一司機、新增可選隨車 assigned_escort（不動既有單人全鏈路）；待 owner 核准 |
+| [ADR-309](ADR-309-緊急調度案件的升級追蹤與關案條件.md) | 緊急調度案件的升級追蹤與關案條件 | accepted | dispatch, database, api, frontend | 升級時鐘掛在案件不掛警示（警示會重建、按已讀會重算 triggered_at）；關案只認「未結案任務涵蓋該站」或「站況恢復」，已讀只靜音不關案、不重置；階段 30/45 分可設定；L1 常駐橫幅、L2 強制彈窗且三個出口皆留稽核；不接外部推播 |
+| [ADR-310](ADR-310-自動偵測調度完成.md) | 自動偵測調度完成（免人工回報，達標即結） | accepted | dispatch, data, backend | 背景輪詢即時站況，進行中任務待處理站達派工目標（補車升/取車降逼近 target+最小變化量濾波動）即自動標記完成、推進、結案，複用 report_station(auto=True)；不論車誰移動達目標即需求消化；config 開關+僅真實源啟用；待 owner 核准 |
 
 ## 新決策流程
 

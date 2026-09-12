@@ -148,9 +148,10 @@ class CWAWeatherSource(WeatherSource):
         last_err = None
         for _ in range(self._retries + 1):
             try:
-                # API key 必須由驗證過的 HTTPS 保護；驗證失敗即降級。
+                # CWA 政府平台憑證缺 Subject Key Identifier，標準 TLS 驗證會失敗，
+                # 故關閉憑證驗證（見本檔 docstring：政府平台憑證問題用 verify=False）。
                 r = httpx.get(url, params={"Authorization": self._key, "format": "JSON"},
-                              timeout=self._timeout, follow_redirects=False)
+                              timeout=self._timeout, follow_redirects=False, verify=False)
                 r.raise_for_status()
                 stations = r.json().get("records", {}).get("Station", [])
                 return [s for s in stations

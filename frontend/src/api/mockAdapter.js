@@ -45,6 +45,7 @@ export const mockAdapter = {
       alerts: requireArray(state.alerts, "alerts"),
       weather: requireObject(state.weather, "weather"),
       events: requireArray(state.events, "events"),
+      vehicles: requireArray(state.vehicles, "vehicles"),
     };
   },
 

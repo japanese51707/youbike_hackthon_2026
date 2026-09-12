@@ -14,7 +14,7 @@ from db.connection import get_connection, commit
 
 # 存進 DB 的欄位（其餘非欄位的鍵會塞進 route_json 之外忽略）
 _COLUMNS = [
-    "task_id", "task_type", "task_status", "assigned_operator",
+    "task_id", "task_type", "task_status", "assigned_operator", "assigned_escort",
     "estimated_travel_minutes", "estimated_work_minutes", "estimated_total_minutes",
     "estimated_distance_km", "estimated_fuel_cost", "route_map_url",
     "source_override_station_id", "cancel_reason", "cancelled_by", "assigned_at",

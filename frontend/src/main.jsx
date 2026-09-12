@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import "antd/dist/reset.css";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./styles/app.css";
+import "./styles/brand.css";
 import App from "./App.jsx";
 import { configureMapLibreWorker } from "./config/mapLibreWorker.js";
 

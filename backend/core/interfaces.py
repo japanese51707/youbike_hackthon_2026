@@ -64,6 +64,9 @@ class MultiHorizonPrediction:
     missing_features: list = field(default_factory=list)
     predict_from: Optional[str] = None
     model_version: Optional[str] = None
+    # ADR-306：lag 特徵來源標記。"historical_proxy"＝有用「同時段歷史代理」補 lag（近似值）；
+    # "live"＝全部來自即時 buffer 真值；None＝未使用外部觀測。
+    lag_source: Optional[str] = None
 
     def for_horizon(self, target_minutes: int) -> "PredictionInterval":
         """挑最接近 target_minutes 的視野（規則引擎依到達時間選）。"""
@@ -177,9 +180,19 @@ class LightGBMPredictor:
     def predict_multi(self, station):
         from copy import deepcopy
         import math
-        from prediction.serving_features import transform, PredictionUnavailable, observed_weather
+        from prediction.serving_features import (
+            transform, PredictionUnavailable, observed_weather,
+            build_proxy_lag_observations, recent_observations, resolve_asof,
+        )
         station = {**station, "weather_features": observed_weather(station)}
-        features, quality = transform(station, self._BUNDLE)
+        # ADR-306：即時 buffer 補短周期 lag、同時段歷史代理補長周期（1天/1週）。
+        # 兩者合併餵給 transform（真實點時間戳更接近 target 時會優先，代理只補真實取不到的）。
+        asof = resolve_asof(station)
+        live_obs = recent_observations(station)
+        proxy_obs = build_proxy_lag_observations(station, asof)
+        observations = live_obs + proxy_obs
+        lag_source = "historical_proxy" if proxy_obs else ("live" if live_obs else None)
+        features, quality = transform(station, self._BUNDLE, observations=observations or None)
         key = (station.get("source"), station["station_id"], quality["predict_from"], features.tobytes())
         with self._LOCK:
             if key in self._CACHE:
@@ -197,7 +210,8 @@ class LightGBMPredictor:
                 predicted_available=clip(mid), lower_bound=clip(lo), upper_bound=clip(hi),
                 horizon_minutes=mins, source="lightgbm",
                 raw_lower_bound=round(lo, 1), raw_upper_bound=round(hi, 1), raw_predicted=round(mid, 1)))
-        result = MultiHorizonPrediction(station_id=station["station_id"], intervals=intervals, **quality)
+        result = MultiHorizonPrediction(station_id=station["station_id"], intervals=intervals,
+                                        lag_source=lag_source, **quality)
         from config_loader import get_config
         with self._LOCK:
             if len(self._CACHE) >= get_config().get("serving", {}).get("prediction_cache_entries", 3000):
