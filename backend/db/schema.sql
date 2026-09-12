@@ -196,6 +196,23 @@ CREATE INDEX IF NOT EXISTS idx_service_problems_closed
 CREATE INDEX IF NOT EXISTS idx_service_problems_district
     ON service_problems(district, closed_at);
 
+-- ADR-328：近 24 小時站況快照（背景收集；與時計同庫）
+CREATE TABLE IF NOT EXISTS station_snapshots (
+    observed_at      TEXT NOT NULL,
+    station_id       TEXT NOT NULL,
+    station_name     TEXT,
+    district         TEXT,
+    status           TEXT,
+    available_bikes  INTEGER,
+    available_docks  INTEGER,
+    total_docks      INTEGER,
+    PRIMARY KEY (observed_at, station_id)
+);
+CREATE INDEX IF NOT EXISTS idx_station_snapshots_station
+    ON station_snapshots(station_id, observed_at);
+CREATE INDEX IF NOT EXISTS idx_station_snapshots_observed
+    ON station_snapshots(observed_at);
+
 -- ADR-302：只有確認後才保存收據，草稿本身仍在記憶體。
 CREATE TABLE IF NOT EXISTS dispatch_confirmations (
     draft_id TEXT PRIMARY KEY,

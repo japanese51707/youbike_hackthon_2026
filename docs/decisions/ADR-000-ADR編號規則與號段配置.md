@@ -125,6 +125,7 @@ superseded-by:
 | ADR-325 | 空滿時計背景輪詢與 24 小時保留（不依賴前端；逾窗已結案刪除；原編 319 讓號） | accepted |
 | ADR-326 | 空滿時計獨立行程與專用庫（service_clock.db + 非 reload worker；原編 320 讓號） | accepted |
 | ADR-327 | 雲端空滿時計獨立收集與 EFS 共用庫（第二個 ECS + 網站只讀；原編 321 讓號） | accepted |
+| ADR-328 | 近 24 小時站況快照背景收集（完整站況入庫，逾窗刪） | accepted |
 | ADR-311 | 戰情室 Bedrock 顧問代理（advisory-only，後端代理） | accepted |
 
 ### 取號流程（新增 ADR 前必做）

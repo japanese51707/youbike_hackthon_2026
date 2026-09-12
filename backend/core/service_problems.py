@@ -140,17 +140,40 @@ def prune_older_than(now: Optional[_dt.datetime] = None, hours: Optional[int] = 
     return service_problems_repo.delete_closed_before(_iso(_window_start(moment, hours)))
 
 
+def record_station_history(stations: list, now: Optional[_dt.datetime] = None) -> dict:
+    """把本輪新鮮站況寫進 24 小時快照，並刪掉窗口外舊列。"""
+    from db import station_snapshots_repo
+
+    moment = _aware(now or _now())
+    fresh = [
+        station for station in stations
+        if station.get("data_freshness") == "live"
+        or (station.get("data_freshness") is None and station.get("station_id"))
+    ]
+    if not fresh:
+        return {"recorded": 0, "pruned": 0}
+    recorded = station_snapshots_repo.record_snapshots(fresh, _iso(moment))
+    pruned = station_snapshots_repo.delete_before(_iso(_window_start(moment)))
+    return {"recorded": recorded, "pruned": pruned}
+
+
 def poll_once(now: Optional[_dt.datetime] = None) -> dict:
-    """拉一次完整站況、同步時計、清掉窗口外結案。不經前端。"""
+    """拉一次完整站況、留下 24 小時快照、同步時計。不經前端。"""
     from core.data.degradation import get_stations_with_degradation
 
     moment = _aware(now or _now())
     try:
-        get_stations_with_degradation()
+        rows = get_stations_with_degradation()
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": str(exc), "pruned": 0}
+        return {"ok": False, "error": str(exc), "pruned": 0, "recorded": 0}
+    history = record_station_history(rows, moment)
     pruned = prune_older_than(moment)
-    return {"ok": True, "pruned": pruned}
+    return {
+        "ok": True,
+        "pruned": pruned,
+        "recorded": history.get("recorded", 0),
+        "history_pruned": history.get("pruned", 0),
+    }
 
 
 def snapshot(now: Optional[_dt.datetime] = None) -> dict:
@@ -215,6 +238,33 @@ def snapshot(now: Optional[_dt.datetime] = None) -> dict:
         },
         "open": open_items,
         "districts": districts,
+        "history": _history_coverage(window_start),
+    }
+
+
+def _history_coverage(window_start: _dt.datetime) -> dict:
+    from db import station_snapshots_repo
+
+    cover = station_snapshots_repo.coverage(_iso(window_start))
+    cover["latest_status"] = station_snapshots_repo.latest_status_counts()
+    return cover
+
+
+def station_history(station_id: str, now: Optional[_dt.datetime] = None) -> dict:
+    """單一站近 24 小時快照序列。"""
+    from db import station_snapshots_repo
+
+    moment = _aware(now or _now())
+    hours = _keep_hours()
+    window_start = _window_start(moment, hours)
+    points = station_snapshots_repo.list_for_station(station_id, _iso(window_start))
+    return {
+        "as_of": _iso(moment),
+        "window_hours": hours,
+        "window_start": _iso(window_start),
+        "station_id": station_id,
+        "count": len(points),
+        "points": points,
     }
 
 

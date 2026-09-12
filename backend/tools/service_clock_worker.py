@@ -47,9 +47,11 @@ def main() -> None:
                     f"[service_clock_worker] 本輪站況失敗（略過）：{result.get('error')}",
                     flush=True,
                 )
-            elif result.get("pruned"):
+            else:
                 print(
-                    f"[service_clock_worker] 清掉窗口外結案 {result['pruned']} 筆",
+                    f"[service_clock_worker] 寫入站況 {result.get('recorded', 0)} 筆"
+                    f"，清時計 {result.get('pruned', 0)}"
+                    f"，清舊快照 {result.get('history_pruned', 0)}",
                     flush=True,
                 )
         except Exception as exc:  # noqa: BLE001

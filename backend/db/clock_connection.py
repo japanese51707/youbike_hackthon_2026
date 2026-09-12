@@ -32,6 +32,22 @@ CREATE INDEX IF NOT EXISTS idx_service_problems_closed
     ON service_problems(closed_at);
 CREATE INDEX IF NOT EXISTS idx_service_problems_district
     ON service_problems(district, closed_at);
+
+CREATE TABLE IF NOT EXISTS station_snapshots (
+    observed_at      TEXT NOT NULL,
+    station_id       TEXT NOT NULL,
+    station_name     TEXT,
+    district         TEXT,
+    status           TEXT,
+    available_bikes  INTEGER,
+    available_docks  INTEGER,
+    total_docks      INTEGER,
+    PRIMARY KEY (observed_at, station_id)
+);
+CREATE INDEX IF NOT EXISTS idx_station_snapshots_station
+    ON station_snapshots(station_id, observed_at);
+CREATE INDEX IF NOT EXISTS idx_station_snapshots_observed
+    ON station_snapshots(observed_at);
 """
 
 _clock_conn: Optional[sqlite3.Connection] = None

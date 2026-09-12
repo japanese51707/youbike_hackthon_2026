@@ -139,6 +139,36 @@ def test_clock_writes_dedicated_file_not_memory_main(tmp_path, monkeypatch):
     assert main_count == 0
 
 
+def test_record_station_history_keeps_rolling_24h():
+    from db import station_snapshots_repo
+
+    old = T0 - _dt.timedelta(hours=25)
+    sp.record_station_history([
+        {**_station("OLD"), "available_bikes": 0, "available_docks": 10, "total_docks": 10},
+    ], now=old)
+    sp.record_station_history([
+        {**_station("NEW"), "status": "normal", "available_bikes": 5,
+         "available_docks": 5, "total_docks": 10},
+    ], now=T0)
+    cover = station_snapshots_repo.coverage(T0.isoformat(timespec="seconds"))
+    assert cover["station_count"] == 1
+    assert cover["poll_count"] == 1
+    points = station_snapshots_repo.list_for_station("NEW")
+    assert len(points) == 1
+    assert points[0]["available_bikes"] == 5
+
+
+def test_stale_snapshot_is_not_stored():
+    from db import station_snapshots_repo
+
+    result = sp.record_station_history([
+        {**_station(), "data_freshness": "stale", "available_bikes": 0,
+         "available_docks": 10, "total_docks": 10},
+    ], now=T0)
+    assert result["recorded"] == 0
+    assert station_snapshots_repo.coverage()["poll_count"] == 0
+
+
 def test_prune_deletes_closed_outside_window_but_keeps_open():
     old = T0 - _dt.timedelta(hours=25)
     sp.sync_service_problems([_station("OLD", "empty")], now=old)

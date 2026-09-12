@@ -80,6 +80,7 @@
 | [ADR-325](ADR-325-空滿時計背景輪詢與24小時保留.md) | 空滿時計背景輪詢與 24 小時保留 | accepted | backend, database, api | 後端自己輪詢站況寫時計；只留近 24h 已結案；平均改看窗口而非日曆日 |
 | [ADR-326](ADR-326-空滿時計獨立行程與專用庫.md) | 空滿時計獨立行程與專用庫 | accepted | backend, database, deployment | 時計寫 service_clock.db；本機獨立 worker 不受 --reload 殺掉 |
 | [ADR-327](ADR-327-雲端空滿時計獨立收集與EFS共用庫.md) | 雲端空滿時計獨立收集與 EFS 共用庫 | accepted | deployment, database, backend | 雲端第二個 ECS 寫 EFS 上的 service_clock.db；網站只讀同一份 |
+| [ADR-328](ADR-328-近24小時站況快照背景收集.md) | 近 24 小時站況快照背景收集 | accepted | backend, database, api | worker 每輪寫完整站況；只留 24h；只讀 API 不進派工 |
 | [ADR-310](ADR-310-自動偵測調度完成.md) | 自動偵測調度完成（免人工回報，達標即結） | accepted | dispatch, data, backend | 背景輪詢即時站況，進行中任務待處理站達派工目標（補車升/取車降逼近 target+最小變化量濾波動）即自動標記完成、推進、結案，複用 report_station(auto=True)；不論車誰移動達目標即需求消化；config 開關+僅真實源啟用；待 owner 核准 |
 
 ## 新決策流程
