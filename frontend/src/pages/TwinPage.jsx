@@ -1,6 +1,6 @@
 import { QuestionCircleOutlined } from "@ant-design/icons";
 import { Checkbox, Popover, Segmented, Slider, Tag, Typography } from "antd";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import StationDrawer from "../components/dashboard/StationDrawer.jsx";
 import StationLegend from "../components/map/StationLegend.jsx";
 import SharedMap from "../components/map/SharedMap.jsx";
@@ -14,13 +14,17 @@ import {
 } from "../components/map/layers/analysisLayers.js";
 import { createDensityLayer } from "../components/map/layers/densityLayer.js";
 import { createStationGaugeLayer } from "../components/map/layers/stationGaugeLayer.js";
+import { isApiMode, request } from "../api/httpClient.js";
 import { loadTemporalPresentation } from "../api/temporalMockAdapter.js";
+import TwinInsightPanel from "../components/twin/TwinInsightPanel.jsx";
 import { ANALYSIS_CATALOG, PENDING_ANALYSES } from "../config/analysisCatalog.js";
 import presentationConfig from "../config/presentation.json";
 import useDashboardData from "../hooks/useDashboardData.js";
 import { stationStatusLabels } from "../utils/formatters.js";
 import { getStationColor } from "../utils/mapPresentation.js";
 import { giStarClass } from "../utils/spatialStats.js";
+import { buildTwinInsights, pickObservedAt } from "../utils/twinInsights.js";
+import { buildTwinView, pickTimelineFrame } from "../utils/twinSnapshot.js";
 
 const MODE_OPTIONS = [
   { value: "past", label: "歷史" },
@@ -36,42 +40,14 @@ const DATA_MODE_TAG = {
 
 const GI_LEGEND = [2.58, 1.96, 0, -1.96, -2.58].map((z) => giStarClass(z));
 
-function statusFromUsage(bikes, docks, usage) {
-  if (bikes <= 0) return "empty";
-  if (docks <= 0) return "full";
-  if (usage < 30) return "low";
-  if (usage > 70) return "high";
-  return "normal";
-}
-
-// 依 Past/Live/Predict 產生站點快照（僅有 temporal mock 的站會改變，其餘維持即時）
-function applyTemporal(stations, temporalStations, mode) {
-  if (mode === "live" || !temporalStations) return stations;
-  const byId = new Map(temporalStations.map((t) => [t.stationId, t]));
-  return stations.map((s) => {
-    const t = byId.get(s.station_id);
-    if (!t) return s;
-    let bikes = s.available_bikes;
-    if (mode === "past") bikes = t.past.at(-1)?.availableBikes ?? bikes;
-    if (mode === "predict") {
-      const f =
-        t.forecasts.find((x) => x.offsetMinutes === 60 && x.isAvailable) ||
-        t.forecasts.find((x) => x.isAvailable);
-      bikes = f?.availableBikes ?? bikes;
-    }
-    const cap = Number(s.total_docks) || 0;
-    const docks = Math.max(0, cap - bikes);
-    const usage = cap ? Math.round((bikes / cap) * 1000) / 10 : s.usage_rate;
-    return { ...s, available_bikes: bikes, available_docks: docks, usage_rate: usage, status: statusFromUsage(bikes, docks, usage) };
-  });
-}
-
 export default function TwinPage() {
   const dashboard = useDashboardData();
   const [active, setActive] = useState(["gauge", "voronoi"]);
   const [mode, setMode] = useState("live");
   const [catchmentKm, setCatchmentKm] = useState(0.6);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [timeline, setTimeline] = useState(null);
+  const [timelineNote, setTimelineNote] = useState("");
 
   const temporal = useMemo(() => {
     try {
@@ -81,10 +57,65 @@ export default function TwinPage() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!isApiMode || mode !== "past") {
+      setTimelineNote("");
+      return undefined;
+    }
+    let activeRequest = true;
+    request("/stations/timeline?district=全市&date=2026-06-02")
+      .then((payload) => {
+        if (activeRequest) {
+          setTimeline(payload);
+          setTimelineNote(payload?.note || "");
+        }
+      })
+      .catch((error) => {
+        if (activeRequest) {
+          setTimeline(null);
+          setTimelineNote(error.message || "全市歷史快照尚未提供");
+        }
+      });
+    return () => {
+      activeRequest = false;
+    };
+  }, [mode]);
+
   const stations = dashboard.data?.stations ?? [];
-  const snapshot = useMemo(
-    () => applyTemporal(stations, temporal?.stations, mode),
-    [stations, temporal, mode],
+  const historyFrame = mode === "past" ? pickTimelineFrame(timeline) : null;
+  const temporalView = useMemo(
+    () =>
+      buildTwinView({
+        stations,
+        mode,
+        temporalStations: temporal?.stations,
+        historyFrame,
+        recommendations: dashboard.data?.recommendations,
+      }),
+    [stations, mode, temporal, historyFrame, dashboard.data?.recommendations],
+  );
+  const snapshot = temporalView.stations;
+
+  const insightReport = useMemo(
+    () =>
+      buildTwinInsights({
+        stations: snapshot,
+        liveStations: stations,
+        recommendations: dashboard.data?.recommendations,
+        activeLayers: active,
+        mode,
+        catchmentKm,
+        temporalCovered: temporalView.covered,
+        temporalAvailable: temporalView.available,
+        stationsSource: dashboard.data?.stationsSource || (dashboard.loading ? "loading" : "unknown"),
+        observedAt: pickObservedAt(snapshot),
+      }),
+    [snapshot, stations, active, mode, catchmentKm, temporalView, dashboard.data, dashboard.loading],
+  );
+
+  const layerModeByKey = useMemo(
+    () => new Map(insightReport.layers.map((layer) => [layer.key, layer.dataMode])),
+    [insightReport],
   );
 
   const openStation = useCallback(
@@ -130,7 +161,7 @@ export default function TwinPage() {
         <div className="twin-control-title">分析圖層</div>
         <div className="twin-layer-list">
           {ANALYSIS_CATALOG.map((item) => {
-            const tag = DATA_MODE_TAG[item.dataMode];
+            const tag = DATA_MODE_TAG[layerModeByKey.get(item.key) ?? item.dataMode];
             return (
               <div key={item.key} className="twin-layer-row">
                 <Checkbox checked={active.includes(item.key)} onChange={() => toggle(item.key)}>
@@ -185,9 +216,20 @@ export default function TwinPage() {
         <span className="twin-timebar-label">時間機器</span>
         <Segmented value={mode} options={MODE_OPTIONS} onChange={setMode} />
         <Typography.Text type="secondary" className="twin-timebar-note">
-          {mode === "live" ? "即時站況" : "僅少數站有歷史/預測 Mock，其餘顯示即時"}
+          {mode === "live"
+            ? "即時站況可做全市解讀"
+            : insightReport.cityWideOk
+              ? `${mode === "past" ? "歷史" : "預測"}覆蓋 ${temporalView.covered}/${snapshot.length} 站，已開全市解讀`
+              : `${timelineNote || `僅 ${temporalView.covered}/${snapshot.length || temporalView.available} 站有樣本`}，全市結論已關閉`}
         </Typography.Text>
       </div>
+
+      <TwinInsightPanel
+        report={insightReport}
+        loading={dashboard.loading}
+        error={dashboard.error}
+        onSelectStation={openStation}
+      />
     </>
   );
 

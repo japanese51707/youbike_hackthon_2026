@@ -29,7 +29,7 @@ export const ANALYSIS_CATALOG = [
     discipline: "空間統計",
     dataMode: "method",
     purpose: "每站服務領域＋是否為顯著熱點",
-    info: "Voronoi（泰森多邊形）把地圖切成每個站點負責的「勢力範圍」。再用 Getis-Ord Gi* 熱點統計，判斷某站及其鄰近是否形成統計上顯著的高壓熱點或低壓冷點，並用顏色標示。（目前 mock 站數少，僅方法展示）",
+    info: "Voronoi（泰森多邊形）把地圖切成每個站點負責的「勢力範圍」。再用 Getis-Ord Gi* 熱點統計，判斷某站及其鄰近是否形成統計上顯著的高壓熱點或低壓冷點。站數達 50 以上改標實算；少於 50 仍只是方法展示。",
   },
   {
     key: "density",
@@ -67,9 +67,9 @@ export const ANALYSIS_CATALOG = [
     key: "flow",
     name: "調度/流向弧線",
     discipline: "網路科學",
-    dataMode: "pending",
+    dataMode: "method",
     purpose: "站間流動/調度航段",
-    info: "站間的借還流向（Origin-Destination）。目前沒有真實 trip OD 資料，只用調度建議/任務航段示意；接上真實 OD 後才是實際流向。",
+    info: "沒有真實 trip OD。現在用調度建議做「同區最近、一對一」的取→補示意配對，可讀距離與同區占比，但不能當成真實車流或派車路線。",
   },
 ];
 

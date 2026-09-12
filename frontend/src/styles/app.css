@@ -1473,6 +1473,152 @@ body {
   cursor: pointer;
 }
 
+/* 右上：當前解讀（指標＋結論＋邊界） */
+.twin-insight {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  right: 12px;
+  width: 340px;
+  max-height: calc(100% - 92px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--ct-border);
+  border-radius: 12px;
+  background: var(--ct-overlay);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 28px var(--ct-shadow);
+}
+
+.twin-insight-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+  color: var(--ct-text-dim);
+  font-size: 11px;
+}
+
+.twin-insight-headline {
+  margin: 0 0 10px;
+  color: var(--ct-text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.twin-insight-gate {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--ct-border);
+  border-radius: 8px;
+  background: var(--ct-info-soft, color-mix(in srgb, var(--ct-primary) 10%, transparent));
+  color: var(--ct-text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.twin-insight-card {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ct-border);
+}
+
+.twin-insight-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ct-text);
+  text-align: left;
+  cursor: default;
+}
+
+.twin-insight-card-head strong {
+  font-size: 13px;
+}
+
+.twin-insight-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+  margin: 8px 0;
+}
+
+.twin-insight-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--ct-text-dim);
+  font-size: 11px;
+}
+
+.twin-insight-metric b {
+  color: var(--ct-text);
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.twin-insight-finding {
+  margin: 0 0 6px;
+  color: var(--ct-text);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.twin-insight-evidence {
+  margin: 4px 0 8px;
+  padding-left: 16px;
+}
+
+.twin-insight-evidence li + li {
+  margin-top: 4px;
+}
+
+.twin-insight-evidence button,
+.twin-insight-evidence span {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ct-text);
+  font-size: 12px;
+  text-align: left;
+}
+
+.twin-insight-evidence button {
+  cursor: pointer;
+}
+
+.twin-insight-evidence button:hover {
+  color: var(--ct-primary);
+}
+
+.twin-insight-evidence button span,
+.twin-insight-evidence > li > span span {
+  color: var(--ct-text-dim);
+  font-size: 11px;
+}
+
+.twin-insight-caveat,
+.twin-insight-footnote {
+  margin: 0;
+  color: var(--ct-text-dim);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.twin-insight-footnote {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ct-border);
+}
+
 /* 底部置中：時間機器 */
 .twin-timebar {
   position: absolute;
@@ -1507,7 +1653,14 @@ body {
 @media (max-width: 760px) {
   .twin-control {
     width: min(288px, calc(100% - 24px));
-    max-height: calc(100% - 120px);
+    max-height: 38%;
+  }
+
+  .twin-insight {
+    top: auto;
+    bottom: 72px;
+    width: min(340px, calc(100% - 24px));
+    max-height: 36%;
   }
 
   .twin-timebar {

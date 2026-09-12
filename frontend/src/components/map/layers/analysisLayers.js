@@ -2,14 +2,17 @@ import { HeatmapLayer } from "@deck.gl/aggregation-layers";
 import { ArcLayer, LineLayer, PolygonLayer, ScatterplotLayer } from "@deck.gl/layers";
 import { Delaunay } from "d3-delaunay";
 import presentationConfig from "../../../config/presentation.json";
-import { haversineKm } from "../../../utils/geo.js";
 import {
   buildKnnNetwork,
+  buildSpatialIndex,
   degreeCentrality,
   getisOrdGiStar,
   giStarClass,
+  nearestStationKm,
   stationPressure,
+  stationsWithCoords,
 } from "../../../utils/spatialStats.js";
+import { pairDispatchFlows } from "../../../utils/twinFlow.js";
 
 const HEAT_RANGE = [
   [13, 30, 54],
@@ -30,12 +33,8 @@ const GAP_RANGE = [
 
 // 只保留座標為有限數的站點，避免缺經緯度（NaN）污染 Voronoi/格點幾何，
 // 畫出「看起來像分析、其實是壞掉的幾何」——與專案「不捏造」原則相衝。
-function hasFiniteCoords(s) {
-  return Number.isFinite(Number(s?.lng)) && Number.isFinite(Number(s?.lat));
-}
-
 function withFiniteCoords(data) {
-  return (data ?? []).filter(hasFiniteCoords);
+  return stationsWithCoords(data);
 }
 
 function bounds(data, pad = presentationConfig.layers.voronoiPaddingDeg) {
@@ -70,18 +69,14 @@ export function createKdeHeatmapLayer({ data, id = "kde" }) {
 export function createCoverageGapLayer({ data, id = "coverage", steps = 26 }) {
   const pts = withFiniteCoords(data);
   if (!pts.length) return null;
+  const index = buildSpatialIndex(pts, 2);
   const [minLng, minLat, maxLng, maxLat] = bounds(pts, 0.04);
   const grid = [];
   for (let i = 0; i <= steps; i += 1) {
     for (let j = 0; j <= steps; j += 1) {
       const lng = minLng + ((maxLng - minLng) * i) / steps;
       const lat = minLat + ((maxLat - minLat) * j) / steps;
-      let nearest = Infinity;
-      for (const s of pts) {
-        const d = haversineKm({ lat, lng }, { lat: Number(s.lat), lng: Number(s.lng) });
-        if (d < nearest) nearest = d;
-      }
-      grid.push({ lng, lat, gap: Math.min(nearest, 4) });
+      grid.push({ lng, lat, gap: nearestStationKm(index, lat, lng, 4) });
     }
   }
   return new HeatmapLayer({
@@ -160,37 +155,17 @@ export function createCatchmentLayer({ data, radiusKm = 0.6, id = "catchment" })
 // 調度/流向弧線（示意 OD）：取車站 → 補車站，粗細依需求數量。
 // 無真實 trip OD，以調度建議示意；接上真實 OD 才是實際流向。
 export function createFlowArcLayer({ recommendations, id = "flow" }) {
-  if (!recommendations?.length) return null;
-  const pickups = recommendations.filter(
-    (r) => r.action === "取車" && hasFiniteCoords(r),
-  );
-  const dropoffs = recommendations.filter(
-    (r) => r.action === "補車" && hasFiniteCoords(r),
-  );
-  if (!dropoffs.length) return null;
-
-  const sources = pickups.length ? pickups : dropoffs.slice(0, 1);
-  const arcs = [];
-  for (const s of sources) {
-    for (const d of dropoffs) {
-      if (s.station_id === d.station_id) continue;
-      arcs.push({
-        from: [Number(s.lng), Number(s.lat)],
-        to: [Number(d.lng), Number(d.lat)],
-        q: Number(d.quantity) || 0,
-      });
-    }
-  }
-  if (!arcs.length) return null;
+  const pairs = pairDispatchFlows(recommendations);
+  if (!pairs.length) return null;
 
   return new ArcLayer({
     id,
-    data: arcs,
-    getSourcePosition: (a) => a.from,
-    getTargetPosition: (a) => a.to,
+    data: pairs,
+    getSourcePosition: (pair) => [Number(pair.from.lng), Number(pair.from.lat)],
+    getTargetPosition: (pair) => [Number(pair.to.lng), Number(pair.to.lat)],
     getSourceColor: [255, 169, 77, 190],
     getTargetColor: [56, 217, 169, 190],
-    getWidth: (a) => Math.max(2, a.q * 0.4),
+    getWidth: (pair) => Math.max(2, (pair.quantity || 0) * 0.4),
     widthUnits: "pixels",
     getHeight: 0.4,
     pickable: false,
