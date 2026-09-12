@@ -2,32 +2,69 @@ import { mockAdapter } from "./mockAdapter.js";
 import { apiConfig } from "./apiConfig.js";
 import { isApiMode, request } from "./httpClient.js";
 import { fetchBackendStations } from "./backendStations.js";
-import { getBackendDashboard } from "./backendDashboard.js";
+import { getBackendDashboard, getTwinDashboard } from "./backendDashboard.js";
+
+const dashboardCache = { full: null, twin: null };
+const MOCK_SWAP_MAX_STATIONS = 50;
+
+export function peekDashboardData(lite = false) {
+  return lite ? dashboardCache.twin : dashboardCache.full;
+}
+
+function keepPreviousStations(key, reason) {
+  const previous = dashboardCache[key];
+  if (!previous?.stations?.length) return null;
+  const stale = {
+    ...previous,
+    stationsSource: `stale（${reason}）`,
+  };
+  dashboardCache[key] = stale;
+  return stale;
+}
 
 // 調度面板資料。
 // - API 模式：站點/建議/警示/KPI/車輛/天氣全部走後端真實端點（backendDashboard），
 //   後端整體不可用時才降級到 mock 並標明原因。
 // - mock 模式：全用 mock；若只是想預覽後端站點，useBackendStations 開關可只覆蓋站點。
-export async function getDashboardData() {
+export async function getDashboardData({ lite = false } = {}) {
+  const key = lite ? "twin" : "full";
+  const remember = (payload) => {
+    const previous = dashboardCache[key];
+    const incoming = payload?.stations?.length ?? 0;
+    if (
+      (previous?.stations?.length ?? 0) >= MOCK_SWAP_MAX_STATIONS &&
+      incoming < MOCK_SWAP_MAX_STATIONS &&
+      String(payload?.stationsSource || "").includes("mock")
+    ) {
+      return keepPreviousStations(key, `未改用示範站：${payload.stationsSource}`) ?? payload;
+    }
+    dashboardCache[key] = payload;
+    return payload;
+  };
+
   if (isApiMode) {
     try {
-      return await getBackendDashboard();
+      return remember(lite ? await getTwinDashboard() : await getBackendDashboard());
     } catch (err) {
+      const kept = keepPreviousStations(key, `後端暫時無法更新：${err.message}`);
+      if (kept) return kept;
       const base = await mockAdapter.getDashboard();
-      return { ...base, stationsSource: `mock（後端連線失敗：${err.message}）` };
+      return remember({ ...base, stationsSource: `mock（後端連線失敗：${err.message}）` });
     }
   }
 
   // mock 模式：預設全 mock；useBackendStations 開時只把站點覆蓋成後端（其餘仍 mock）。
   const base = await mockAdapter.getDashboard();
   if (!apiConfig.useBackendStations) {
-    return { ...base, stationsSource: "mock" };
+    return remember({ ...base, stationsSource: "mock" });
   }
   try {
     const stations = await fetchBackendStations();
-    return { ...base, stations, stationsSource: "backend" };
+    return remember({ ...base, stations, stationsSource: "backend" });
   } catch (err) {
-    return { ...base, stationsSource: `mock（後端連線失敗：${err.message}）` };
+    const kept = keepPreviousStations(key, `後端暫時無法更新：${err.message}`);
+    if (kept) return kept;
+    return remember({ ...base, stationsSource: `mock（後端連線失敗：${err.message}）` });
   }
 }
 

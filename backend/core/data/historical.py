@@ -171,6 +171,79 @@ class HistoricalDataSource(DataSource):
             return None
         return self._row_to_standard(sub.iloc[-1])
 
+    def _row_to_history_point(self, row) -> dict:
+        std = self._row_to_standard(row)
+        return {
+            "station_id": std["station_id"],
+            "station_name": std["station_name"],
+            "district": std["district"],
+            "lat": std["lat"],
+            "lng": std["lng"],
+            "total_docks": std["total_docks"],
+            "available_bikes": std["available_bikes"],
+            "available_docks": std["available_docks"],
+            "usage_rate": std["usage_rate"],
+            "status": std["status"],
+            "urgency_score": None,
+            "timestamp": std["timestamp"],
+        }
+
+    def get_timeline(
+        self,
+        district: str = "中和區",
+        date: str = "2026-06-02",
+        interval: int = 30,
+    ) -> dict:
+        """既有 API 3.10：回傳某日、可選行政區的歷史快照序列。全市用 district=全市。"""
+        import pandas as pd
+
+        interval = max(int(interval or 30), 1)
+        month = date[:7] if date and len(date) >= 7 else self._default_month
+        df = self._df(month)
+        times = pd.to_datetime(df["timestamp"])
+        day = pd.to_datetime(date)
+        day_df = df.loc[(times >= day) & (times < day + pd.Timedelta(days=1))].copy()
+        note = None
+        actual_date = date
+        if day_df.empty:
+            last = times.max()
+            actual_date = pd.Timestamp(last).strftime("%Y-%m-%d")
+            if actual_date[:7] != month:
+                df = self._df(actual_date[:7])
+                times = pd.to_datetime(df["timestamp"])
+            day = pd.to_datetime(actual_date)
+            day_df = df.loc[(times >= day) & (times < day + pd.Timedelta(days=1))].copy()
+            note = f"請求日期無資料，改用歷史最後一日 {actual_date}"
+        citywide = district in (None, "", "全市", "all", "全部", "*")
+        if not citywide:
+            day_df = day_df[day_df["district"] == district]
+        if day_df.empty:
+            raise ValueError("此範圍沒有歷史時間軸")
+
+        stamp = pd.to_datetime(day_df["timestamp"])
+        minutes = stamp.dt.hour * 60 + stamp.dt.minute
+        slot = (minutes // interval) * interval
+        day_df = day_df.assign(
+            _time=(slot // 60).astype(int).map(lambda h: f"{h:02d}")
+            + ":"
+            + (slot % 60).astype(int).map(lambda m: f"{m:02d}")
+        )
+        frames = []
+        for time_label, group in day_df.groupby("_time", sort=True):
+            latest = group.sort_values("timestamp").groupby("station_id", as_index=False).last()
+            frames.append({
+                "time": time_label,
+                "stations": [self._row_to_history_point(r) for _, r in latest.iterrows()],
+            })
+        return {
+            "district": "全市" if citywide else district,
+            "date": actual_date,
+            "interval": interval,
+            "source": "historical",
+            "note": note,
+            "frames": frames,
+        }
+
     def get_history(
         self,
         station_id: str,

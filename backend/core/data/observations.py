@@ -3,6 +3,7 @@ from collections import OrderedDict, deque
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import math
+import re
 from threading import RLock
 
 TAIPEI = timezone(timedelta(hours=8))
@@ -12,11 +13,42 @@ class DataUnavailable(RuntimeError):
     """No trustworthy snapshot is available; exposed as a safe HTTP 503."""
 
 
+# 緊湊基本式 ISO 8601（YYYYMMDDTHHMMSS）→ 拆出各欄位以改寫成擴充式。
+_COMPACT_ISO = re.compile(r"^(\d{4})(\d{2})(\d{2})[T ](\d{2})(\d{2})(\d{2})(.*)$")
+# 無冒號時區位移（+0800）→ 補冒號。尾端四位必須全為數字，因此不誤中 +08:00。
+_BARE_OFFSET = re.compile(r"^(.*[+-])(\d{2})(\d{2})$")
+
+
+def _relax_iso(text):
+    """把實際來源會出現、但 Python 3.10 fromisoformat 不收的 ISO 8601 變體正規化。
+
+    3.11 起 fromisoformat 已全面支援 ISO 8601；3.10 只吃 isoformat() 自己的輸出。
+    因此官方即時源的 mday（20260912T093402）與歷史查詢邊界的 Z 結尾
+    （2026-05-31T15:00:00Z）在 3.10 都會 ValueError。只做等價改寫，不推測時區。
+    """
+    match = _COMPACT_ISO.match(text)
+    if match:
+        year, month, day, hour, minute, second, rest = match.groups()
+        text = f"{year}-{month}-{day}T{hour}:{minute}:{second}{rest}"
+    if text[-1:] in ("Z", "z"):
+        text = text[:-1] + "+00:00"
+    match = _BARE_OFFSET.match(text)
+    if match:
+        text = f"{match.group(1)}{match.group(2)}:{match.group(3)}"
+    return text
+
+
 def parse_time(value):
     if isinstance(value, datetime):
         dt = value
     else:
-        dt = datetime.fromisoformat(str(value))
+        text = str(value).strip()
+        try:
+            dt = datetime.fromisoformat(text)
+        except ValueError:
+            # 只在標準解析失敗後才正規化，保證原本已可解析的輸入行為完全不變；
+            # 正規化後仍不合法則由 fromisoformat 拋出原有的 ValueError。
+            dt = datetime.fromisoformat(_relax_iso(text))
     return dt.replace(tzinfo=TAIPEI) if dt.tzinfo is None else dt
 
 

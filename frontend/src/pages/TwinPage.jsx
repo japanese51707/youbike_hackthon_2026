@@ -1,6 +1,7 @@
 import { QuestionCircleOutlined } from "@ant-design/icons";
 import { Checkbox, Popover, Segmented, Slider, Tag, Typography } from "antd";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import StationDrawer from "../components/dashboard/StationDrawer.jsx";
 import StationLegend from "../components/map/StationLegend.jsx";
 import SharedMap from "../components/map/SharedMap.jsx";
@@ -14,13 +15,22 @@ import {
 } from "../components/map/layers/analysisLayers.js";
 import { createDensityLayer } from "../components/map/layers/densityLayer.js";
 import { createStationGaugeLayer } from "../components/map/layers/stationGaugeLayer.js";
+import { isApiMode, request } from "../api/httpClient.js";
 import { loadTemporalPresentation } from "../api/temporalMockAdapter.js";
+import TwinAgentPane from "../components/twin/TwinAgentPane.jsx";
+import TwinAssistant from "../components/twin/TwinAssistant.jsx";
+import TwinInsightPanel from "../components/twin/TwinInsightPanel.jsx";
+import TwinOptimizationPane from "../components/twin/TwinOptimizationPane.jsx";
 import { ANALYSIS_CATALOG, PENDING_ANALYSES } from "../config/analysisCatalog.js";
 import presentationConfig from "../config/presentation.json";
 import useDashboardData from "../hooks/useDashboardData.js";
 import { stationStatusLabels } from "../utils/formatters.js";
 import { getStationColor } from "../utils/mapPresentation.js";
-import { giStarClass } from "../utils/spatialStats.js";
+import { GI_STAR_RAMP } from "../utils/spatialStats.js";
+import { buildHeadline, buildTwinInsights, pickObservedAt } from "../utils/twinInsights.js";
+import { buildTwinView, pickTimelineFrame } from "../utils/twinSnapshot.js";
+
+const ALL_LAYER_KEYS = ANALYSIS_CATALOG.map((item) => item.key);
 
 const MODE_OPTIONS = [
   { value: "past", label: "歷史" },
@@ -34,44 +44,32 @@ const DATA_MODE_TAG = {
   pending: { color: "default", text: "待接資料" },
 };
 
-const GI_LEGEND = [2.58, 1.96, 0, -1.96, -2.58].map((z) => giStarClass(z));
-
-function statusFromUsage(bikes, docks, usage) {
-  if (bikes <= 0) return "empty";
-  if (docks <= 0) return "full";
-  if (usage < 30) return "low";
-  if (usage > 70) return "high";
-  return "normal";
-}
-
-// 依 Past/Live/Predict 產生站點快照（僅有 temporal mock 的站會改變，其餘維持即時）
-function applyTemporal(stations, temporalStations, mode) {
-  if (mode === "live" || !temporalStations) return stations;
-  const byId = new Map(temporalStations.map((t) => [t.stationId, t]));
-  return stations.map((s) => {
-    const t = byId.get(s.station_id);
-    if (!t) return s;
-    let bikes = s.available_bikes;
-    if (mode === "past") bikes = t.past.at(-1)?.availableBikes ?? bikes;
-    if (mode === "predict") {
-      const f =
-        t.forecasts.find((x) => x.offsetMinutes === 60 && x.isAvailable) ||
-        t.forecasts.find((x) => x.isAvailable);
-      bikes = f?.availableBikes ?? bikes;
-    }
-    const cap = Number(s.total_docks) || 0;
-    const docks = Math.max(0, cap - bikes);
-    const usage = cap ? Math.round((bikes / cap) * 1000) / 10 : s.usage_rate;
-    return { ...s, available_bikes: bikes, available_docks: docks, usage_rate: usage, status: statusFromUsage(bikes, docks, usage) };
-  });
-}
+const GI_RAMP_CSS = GI_STAR_RAMP.map(([, color]) => `rgb(${color.join(",")})`).join(", ");
 
 export default function TwinPage() {
-  const dashboard = useDashboardData();
+  const dashboard = useDashboardData({ lite: true });
+  const [searchParams, setSearchParams] = useSearchParams();
   const [active, setActive] = useState(["gauge", "voronoi"]);
   const [mode, setMode] = useState("live");
   const [catchmentKm, setCatchmentKm] = useState(0.6);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [timeline, setTimeline] = useState(null);
+  const [timelineNote, setTimelineNote] = useState("");
+  const [agentOpen, setAgentOpen] = useState(true);
+  const [reviewStationIds, setReviewStationIds] = useState([]);
+  const agentTab = searchParams.get("tab") === "optimization" ? "optimization" : "assistant";
+  const setAgentTab = useCallback(
+    (tab) => {
+      setSearchParams(tab === "optimization" ? { tab: "optimization" } : {}, { replace: true });
+    },
+    [setSearchParams],
+  );
+  const highlightReview = useCallback((ids) => setReviewStationIds(ids ?? []), []);
+  const reviewIdSet = useMemo(() => new Set(reviewStationIds), [reviewStationIds]);
+  const pinSize = useCallback(
+    (station) => (reviewIdSet.has(station.station_id) ? 48 : 36),
+    [reviewIdSet],
+  );
 
   const temporal = useMemo(() => {
     try {
@@ -81,10 +79,73 @@ export default function TwinPage() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!isApiMode || mode !== "past") {
+      setTimelineNote("");
+      return undefined;
+    }
+    let activeRequest = true;
+    request("/stations/timeline?district=全市&date=2026-06-02")
+      .then((payload) => {
+        if (activeRequest) {
+          setTimeline(payload);
+          setTimelineNote(payload?.note || "");
+        }
+      })
+      .catch((error) => {
+        if (activeRequest) {
+          setTimeline(null);
+          setTimelineNote(error.message || "全市歷史快照尚未提供");
+        }
+      });
+    return () => {
+      activeRequest = false;
+    };
+  }, [mode]);
+
   const stations = dashboard.data?.stations ?? [];
-  const snapshot = useMemo(
-    () => applyTemporal(stations, temporal?.stations, mode),
-    [stations, temporal, mode],
+  const historyFrame = mode === "past" ? pickTimelineFrame(timeline) : null;
+  const temporalView = useMemo(
+    () =>
+      buildTwinView({
+        stations,
+        mode,
+        temporalStations: temporal?.stations,
+        historyFrame,
+        recommendations: dashboard.data?.recommendations,
+      }),
+    [stations, mode, temporal, historyFrame, dashboard.data?.recommendations],
+  );
+  const snapshot = temporalView.stations;
+
+  const fullInsightReport = useMemo(
+    () =>
+      buildTwinInsights({
+        stations: snapshot,
+        liveStations: stations,
+        recommendations: dashboard.data?.recommendations,
+        activeLayers: ALL_LAYER_KEYS,
+        mode,
+        catchmentKm,
+        temporalCovered: temporalView.covered,
+        temporalAvailable: temporalView.available,
+        stationsSource: dashboard.data?.stationsSource || (dashboard.loading ? "loading" : "unknown"),
+        observedAt: pickObservedAt(snapshot),
+      }),
+    [snapshot, stations, mode, catchmentKm, temporalView, dashboard.data, dashboard.loading],
+  );
+  const insightReport = useMemo(() => {
+    const layers = fullInsightReport.layers.filter((layer) => active.includes(layer.key));
+    return {
+      ...fullInsightReport,
+      layers,
+      headline: fullInsightReport.cityWideOk ? buildHeadline(layers, fullInsightReport.comparison) : null,
+    };
+  }, [fullInsightReport, active]);
+
+  const layerModeByKey = useMemo(
+    () => new Map(fullInsightReport.layers.map((layer) => [layer.key, layer.dataMode])),
+    [fullInsightReport],
   );
 
   const openStation = useCallback(
@@ -108,11 +169,18 @@ export default function TwinPage() {
     if (on("network")) composed.push(...createNetworkLayers({ data: snapshot, onSelectStation: openStation }));
     if (on("gauge")) {
       composed.push(
-        createStationGaugeLayer({ id: "twin-gauge", data: snapshot, dimension: "status", getColor, onSelectStation: openStation }),
+        createStationGaugeLayer({
+          id: "twin-gauge",
+          data: snapshot,
+          dimension: "status",
+          getColor,
+          onSelectStation: openStation,
+          sizePixels: pinSize,
+        }),
       );
     }
     return composed.filter(Boolean);
-  }, [active, snapshot, catchmentKm, dashboard.data, openStation]);
+  }, [active, snapshot, catchmentKm, dashboard.data, openStation, pinSize]);
 
   const getTooltip = useCallback(({ object }) => {
     if (!object?.station_name) return null;
@@ -130,7 +198,7 @@ export default function TwinPage() {
         <div className="twin-control-title">分析圖層</div>
         <div className="twin-layer-list">
           {ANALYSIS_CATALOG.map((item) => {
-            const tag = DATA_MODE_TAG[item.dataMode];
+            const tag = DATA_MODE_TAG[layerModeByKey.get(item.key) ?? item.dataMode];
             return (
               <div key={item.key} className="twin-layer-row">
                 <Checkbox checked={active.includes(item.key)} onChange={() => toggle(item.key)}>
@@ -161,13 +229,14 @@ export default function TwinPage() {
 
         {active.includes("voronoi") ? (
           <div className="twin-legend">
-            <div className="twin-legend-title">Gi* 熱點顯著性</div>
-            {GI_LEGEND.map((c) => (
-              <span key={c.key} className="twin-legend-item">
-                <span className="twin-legend-dot" style={{ background: `rgb(${c.color.join(",")})` }} />
-                {c.label}
-              </span>
-            ))}
+            <div className="twin-legend-title">Gi* z 值（鄰近壓力）</div>
+            <div className="twin-legend-ramp" style={{ background: `linear-gradient(90deg, ${GI_RAMP_CSS})` }} />
+            <div className="twin-legend-ramp-labels">
+              <span>冷點</span>
+              <span>接近平均</span>
+              <span>熱點</span>
+            </div>
+            <div className="twin-legend-note">顏色依 z 連續漸層；|z|≥1.96 才算顯著，見右側解讀。</div>
           </div>
         ) : null}
 
@@ -185,30 +254,61 @@ export default function TwinPage() {
         <span className="twin-timebar-label">時間機器</span>
         <Segmented value={mode} options={MODE_OPTIONS} onChange={setMode} />
         <Typography.Text type="secondary" className="twin-timebar-note">
-          {mode === "live" ? "即時站況" : "僅少數站有歷史/預測 Mock，其餘顯示即時"}
+          {mode === "live"
+            ? "即時站況可做全市解讀"
+            : insightReport.cityWideOk
+              ? `${mode === "past" ? "歷史" : "預測"}覆蓋 ${temporalView.covered}/${snapshot.length} 站，已開全市解讀`
+              : `${timelineNote || `僅 ${temporalView.covered}/${snapshot.length || temporalView.available} 站有樣本`}，全市結論已關閉`}
         </Typography.Text>
       </div>
+
+      <TwinInsightPanel
+        report={insightReport}
+        loading={dashboard.loading}
+        error={dashboard.error}
+        onSelectStation={openStation}
+      />
     </>
   );
 
   return (
     <div className="fixed-page twin-page">
-      <SharedMap
-        ariaLabel="數位孿生戰情室分析地圖"
-        className="map-fill"
-        initialViewState={presentationConfig.maps.dashboard}
-        layers={layers}
-        getTooltip={getTooltip}
-        overlay={overlay}
-      />
-      <StationDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        detail={dashboard.detail}
-        loading={dashboard.detailLoading}
-        error={dashboard.detailError}
-        weather={dashboard.data?.weather}
-      />
+      <div className="twin-stage">
+        <SharedMap
+          ariaLabel="數位孿生戰情室分析地圖"
+          className="map-fill"
+          initialViewState={presentationConfig.maps.dashboard}
+          layers={layers}
+          getTooltip={getTooltip}
+          overlay={overlay}
+        />
+        <StationDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          detail={dashboard.detail}
+          loading={dashboard.detailLoading}
+          error={dashboard.detailError}
+          weather={dashboard.data?.weather}
+        />
+      </div>
+      <TwinAgentPane
+        open={agentOpen}
+        onOpenChange={setAgentOpen}
+        tab={agentTab}
+        onTabChange={setAgentTab}
+      >
+        <div className="twin-agent-panel" hidden={agentTab !== "assistant"}>
+          <TwinAssistant
+            report={fullInsightReport}
+            snapshot={snapshot}
+            visibleLayers={active}
+            dataReady={!dashboard.loading && Boolean(dashboard.data || dashboard.error)}
+          />
+        </div>
+        <div className="twin-agent-panel" hidden={agentTab !== "optimization"}>
+          <TwinOptimizationPane onSelectStation={openStation} onHighlightStations={highlightReview} />
+        </div>
+      </TwinAgentPane>
     </div>
   );
 }

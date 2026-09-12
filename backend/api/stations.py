@@ -60,9 +60,18 @@ def heatmap(dimension: str = "district"):
 
 @router.get("/stations/timeline")
 def timeline(district: str = "中和區", date: str = "2026-06-02", interval: int = 30):
-    """3.10 時間軸序列（讀預存歷史）"""
-    _require_mock("歷史時間軸")
-    return get_mock()["timeline"]
+    """3.10 時間軸序列。Mock 回預存示範；正式模式讀歷史 Parquet，缺資料回 503。"""
+    from config_loader import get_config
+    mode = get_config().get("data_source", {}).get("mode", "mock")
+    if mode == "mock":
+        return get_mock()["timeline"]
+    try:
+        from core.data.historical import HistoricalDataSource
+        return HistoricalDataSource().get_timeline(
+            district=district, date=date, interval=interval,
+        )
+    except Exception:
+        raise HTTPException(status_code=503, detail="歷史時間軸資料尚未提供")
 
 
 def _current_station(station_id):

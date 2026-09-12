@@ -264,6 +264,21 @@ security:
   rate_limit_per_min: 120         # 每 IP 每分鐘請求上限（入向 DoS 防護）
   rate_limit_exempt_paths: ["/health"]  # 健康檢查不限流
 
+# ── 戰情室顧問（ADR-311）──
+# 金鑰只走環境變數（AWS_*）；這裡只放非機密預設。模型 ID 可用 BEDROCK_MODEL_ID 覆寫。
+assistant:
+  enabled: true
+  provider: bedrock
+  bedrock_region: ""                 # 空則用 AWS_REGION / ap-northeast-1
+  bedrock_model_id: "amazon.nova-lite-v1:0"
+  timeout_sec: 20
+  max_tokens: 1200
+  temperature: 0.2
+  history_turns: 8
+  question_max_chars: 500
+  context_max_chars: 20000
+  rate_limit_per_min: 10             # 每操作者每分鐘（成本護欄）
+
 # ADR-302：未確認草稿只在單程序記憶體，重啟後需重新預覽。
 dispatch_drafts:
   ttl_seconds: 300

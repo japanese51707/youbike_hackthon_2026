@@ -5,6 +5,7 @@ import ssl
 import pytest
 from config_loader import get_config
 from core.data import observations, degradation
+from core.data.observations import TAIPEI
 from core.data.youbike_official import YouBikeOfficialDataSource
 from core import dispatch_builder
 from db import operators_repo, vehicles_repo, tasks_repo
@@ -68,6 +69,29 @@ def test_aware_naive_future_and_missing_times():
     future = {**row, "observed_at": (now + timedelta(hours=1)).isoformat()}
     assert "future_observation" in observations.normalize(future, "youbike_official", now=now)["quality_reasons"]
     assert degradation._is_stale(None, 600)
+
+
+def test_parse_time_accepts_real_source_iso_variants():
+    """ADR-303 regression: every timestamp shape the real sources emit must parse.
+
+    Python 3.11+ fromisoformat swallows all of these, so a 3.10 runtime used to fail
+    the official feed's compact mday and the Z-suffixed history bounds — surfacing as
+    a blanket 503 on every station endpoint. Pin the shapes, not the interpreter.
+    """
+    expected = datetime(2026, 9, 12, 9, 34, 2, tzinfo=TAIPEI)
+    for text in ("2026-09-12T09:34:02",            # 擴充式、naive（補 +08:00）
+                 "2026-09-12 09:34:02",            # 空白分隔
+                 "2026-09-12T09:34:02+08:00",      # 帶冒號位移
+                 "2026-09-12T09:34:02+0800",       # 無冒號位移
+                 "20260912T093402",                # 官方源 mday 緊湊式
+                 "20260912T093402+08:00"):
+        assert observations.parse_time(text) == expected, text
+    # Z / z 是 UTC 指示字，不可當成本地時間。
+    for text in ("2026-09-12T01:34:02Z", "2026-09-12T01:34:02z", "20260912T013402Z"):
+        assert observations.parse_time(text) == expected, text
+    assert observations.parse_time(expected) is expected
+    with pytest.raises(ValueError):
+        observations.parse_time("not-a-timestamp")
 
 
 def test_failed_live_snapshot_stays_same_source_and_does_not_mutate(monkeypatch):

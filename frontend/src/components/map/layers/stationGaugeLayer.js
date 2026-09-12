@@ -23,10 +23,11 @@ export function createStationGaugeLayer({
     pickable: true,
     getPosition: (station) => [Number(station.lng), Number(station.lat)],
     getIcon: (station) => getStationPinIcon(availableRatio(station), getColor(station), hasAvailableElectricBike(station)),
-    getSize: sizePixels,
+    getSize: typeof sizePixels === "function" ? sizePixels : () => sizePixels,
     sizeUnits: "pixels",
     updateTriggers: {
       getIcon: [dimension, getColor],
+      getSize: [sizePixels],
     },
     onClick: ({ object }) => {
       if (object?.station_id && onSelectStation) {

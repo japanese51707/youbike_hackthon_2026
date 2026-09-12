@@ -95,24 +95,46 @@ async function settle(promise) {
   }
 }
 
-export async function getBackendDashboard() {
-  // 站點先抓（天氣要靠站點座標），其餘並行。
-  const stations = await fetchBackendStations();
-  const point = pickWeatherPoint(stations);
+export async function getTwinDashboard() {
+  const [stationsResult, recs] = await Promise.all([
+    settle(fetchBackendStations()),
+    settle(request("/dispatch/recommendations?limit=50")),
+  ]);
+  if (stationsResult.error) throw stationsResult.error;
+  return {
+    stations: stationsResult.value,
+    recommendations: recs.value ?? [],
+    alerts: [],
+    kpi: null,
+    vehicles: [],
+    weather: FALLBACK_WEATHER,
+    orders: [],
+    stationsSource: "backend",
+    sources: {
+      stations: "backend",
+      recommendations: recs.error ? `mock（${recs.error.message}）` : "backend",
+    },
+  };
+}
 
-  const [recs, alerts, kpi, vehicles, weather, tasks] = await Promise.all([
+export async function getBackendDashboard() {
+  const fallbackPoint = pickWeatherPoint([]);
+  const [stationsResult, recs, alerts, kpi, vehicles, weather, tasks] = await Promise.all([
+    settle(fetchBackendStations()),
+    // 需調度清單抓 200（空/滿站緊急度 100 的站不漏；main 側口徑）
     settle(request("/dispatch/recommendations?limit=200")),
     settle(request("/alerts")),
     settle(request("/kpi")),
     settle(request("/vehicles")),
     settle(
-      request(
-        `/weather/by-location?lat=${point.lat}&lng=${point.lng}`,
-      ),
+      request(`/weather/by-location?lat=${fallbackPoint.lat}&lng=${fallbackPoint.lng}`, {
+        timeoutMs: 3000,
+      }),
     ),
-    // 進行中任務追蹤：只取未結案的（assigned/in_progress），對映成追蹤卡結構。
     settle(request("/dispatch/tasks")),
   ]);
+  if (stationsResult.error) throw stationsResult.error;
+  const stations = stationsResult.value;
 
   const sources = {
     stations: "backend",
@@ -129,7 +151,7 @@ export async function getBackendDashboard() {
     alerts: alerts.value ?? [],
     kpi: kpi.value ? mapKpi(kpi.value) : null,
     vehicles: vehicles.value ?? [],
-    weather: weather.value ? mapWeather(weather.value, point.district) : FALLBACK_WEATHER,
+    weather: weather.value ? mapWeather(weather.value, fallbackPoint.district) : FALLBACK_WEATHER,
     orders: mapTasksToOrders(tasks.value),
     stationsSource: "backend",
     sources: { ...sources, tasks: tasks.error ? `mock（${tasks.error.message}）` : "backend" },

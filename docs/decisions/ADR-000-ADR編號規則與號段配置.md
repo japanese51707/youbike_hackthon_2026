@@ -110,6 +110,7 @@ superseded-by:
 | ADR-307 | 競賽現場雲端部署與 S3 遷移（us-east-1 / ECS Fargate / 金鑰雲端化 / SageMaker 批次推論示範） | accepted |
 | ADR-309 | 緊急調度案件的升級追蹤與關案條件（30/45 分升級；關案只認派工或站況恢復，已讀只靜音） | accepted |
 | ADR-310 | 自動偵測調度完成（免人工回報，達目標水位即自動標記完成/結案；config 開關+僅真實源） | accepted |
+| ADR-311 | 戰情室 Bedrock 顧問代理（advisory-only，後端代理） | accepted |
 
 ### 取號流程（新增 ADR 前必做）
 

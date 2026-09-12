@@ -11,6 +11,10 @@ A0 階段所有端點回 mock，之後 A1~A5 逐步接真實邏輯。
 
 from contextlib import asynccontextmanager
 
+from core.aws_local import load_local_aws_credentials
+
+load_local_aws_credentials()
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -23,6 +27,7 @@ from middleware import RateLimitMiddleware
 from api import (
     stations, dispatch, operators, alerts,
     optimization, overrides, kpi, events, audit, weather, accounts,
+    assistant, rider,
 )
 
 cfg = get_config()
@@ -68,7 +73,15 @@ async def lifespan(app: FastAPI):
             except Exception:
                 pass  # 預熱失敗不影響啟動；真正請求時會再建一次
 
+        def _warm_stations():
+            try:
+                from core.data.degradation import get_stations_with_degradation
+                get_stations_with_degradation()
+            except Exception:
+                pass  # 預熱失敗不影響啟動；第一個 /stations 會再打一次官方源
+
         threading.Thread(target=_warm_slot_table, daemon=True).start()
+        threading.Thread(target=_warm_stations, daemon=True).start()
 
     # ADR-310：自動偵測調度完成。背景輪詢即時站況，進行中任務的待處理站達派工目標即
     # 自動標記完成、推進任務（免人工回報）。僅真實源 + config 開關開啟時啟動。
@@ -143,7 +156,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 # 掛載所有路由
 for module in (stations, dispatch, operators, alerts,
-               optimization, overrides, kpi, events, audit, weather, accounts):
+               optimization, overrides, kpi, events, audit, weather, accounts,
+               assistant, rider):
     app.include_router(module.router)
 
 

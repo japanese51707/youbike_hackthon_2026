@@ -87,12 +87,13 @@ superseded-by:
 - 若接 LLM，需投入後端代理、護欄與成本控管。
 
 ### 尚未解決
-- 是否接 LLM、用哪家、成本上限、RAG 知識庫來源與更新，待後端/owner 決定。
+- 長官頁（`/overview`）是否接 LLM、成本上限、RAG 知識庫來源與更新，仍待後端/owner 決定。
+- 戰情室（`/twin`）已由 ADR-311 定案：Bedrock 後端代理＋失敗降級。
 
 ## 介面與相容性
 
-- 目前助理只讀既有前端營運資料，不改後端、API、Schema、dispatch payload。
-- 若採選項 B，需新增「後端 LLM 代理」端點與 API 契約（屆時另立 3xx ADR 定案）。
+- 長官頁助理目前只讀既有前端營運資料，不改後端、API、Schema、dispatch payload。
+- 戰情室後端代理與契約見 ADR-311／API 3.21。
 
 ## 資安與隱私
 

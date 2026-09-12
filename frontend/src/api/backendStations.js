@@ -40,7 +40,7 @@ function isValid(s) {
 }
 
 export async function fetchBackendStations() {
-  const data = await request("/stations");
+  const data = await request("/stations", { timeoutMs: 40000 });
   if (!Array.isArray(data)) throw new Error("後端 /stations 格式非陣列");
   const stations = data.filter(isValid).map(normalize);
   if (!stations.length) throw new Error("後端 /stations 無有效站點");
