@@ -1,6 +1,7 @@
 import {
   CheckCircleOutlined,
   CompassOutlined,
+  DesktopOutlined,
   EnvironmentOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
@@ -287,6 +288,13 @@ export default function BackendDriverPage() {
     }
   }, [view]);
 
+  // 手機預覽＝沉浸式：比照找車（RiderPage）在 body 掛 class，隱藏 App 頂部導覽列與
+  // page padding，讓司機端手機版變成「深底置中一支全螢幕手機」，而非頁面裡縮小的卡片。
+  useEffect(() => {
+    document.body.classList.toggle("driver-phone-preview", view === "phone");
+    return () => document.body.classList.remove("driver-phone-preview");
+  }, [view]);
+
   const operator = resource.data?.operator ?? null;
   const vehicles = resource.data?.vehicles ?? {};
   const people = resource.data?.people ?? {};
@@ -420,9 +428,22 @@ export default function BackendDriverPage() {
     }
   };
 
+  const isPhone = view === "phone";
+
   return (
-    <div className="dw" data-view={view}>
+    <div className={`dw${isPhone ? " is-phone" : ""}`} data-view={view}>
       {contextHolder}
+
+      {/* 手機沉浸預覽時，右上角浮出返回鈕（比照找車端「桌面 UI」）：切回網頁版面、離開手機外框 */}
+      {isPhone ? (
+        <Button
+          className="dw-phone-exit"
+          icon={<DesktopOutlined />}
+          onClick={() => setView("web")}
+        >
+          返回桌面
+        </Button>
+      ) : null}
 
       <div className="dw-toolbar">
         <Segmented
@@ -436,6 +457,7 @@ export default function BackendDriverPage() {
       </div>
 
       <div className="dw-stage">
+      {isPhone ? <div className="dw-phone-notch" aria-hidden="true" /> : null}
       <AsyncState {...resource} onRetry={resource.reload}>
         {!operator ? (
           <Alert type="info" showIcon title="請在頁首先選擇司機身分" />
@@ -676,6 +698,7 @@ export default function BackendDriverPage() {
         <Typography.Text className="dw-hint">
           司機工作台｜執行中會盡量保持螢幕不熄滅
         </Typography.Text>
+      {isPhone ? <div className="dw-phone-home" aria-hidden="true" /> : null}
       </div>
 
       <Modal
