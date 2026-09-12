@@ -28,7 +28,7 @@ from middleware import RateLimitMiddleware
 from api import (
     stations, dispatch, operators, alerts,
     optimization, overrides, kpi, events, audit, weather, accounts,
-    assistant, rider, routing,
+    assistant, rider, routing, service_problems,
 )
 
 cfg = get_config()
@@ -107,6 +107,11 @@ async def lifespan(app: FastAPI):
     from core import dispatch_cache
     if dispatch_cache.start_background(cfg.get("data_source", {}).get("mode")):
         print("[dispatch_cache] 需調度清單背景預算已啟動")
+
+    # ADR-325／326：空滿時計自己輪詢。獨立 worker 時略過 in-app thread。
+    from core import service_problems as _sp
+    if _sp.start_background(cfg.get("data_source", {}).get("mode")):
+        print("[service_problems] 空滿時計背景輪詢已啟動")
     yield
     # 關機時停背景 thread（daemon 本會隨程序結束，這裡明確停止避免測試殘留）
     from core import auto_detect as _ad
@@ -115,6 +120,8 @@ async def lifespan(app: FastAPI):
     _adp.stop_background()
     from core import dispatch_cache as _dc
     _dc.stop_background()
+    from core import service_problems as _sp_stop
+    _sp_stop.stop_background()
 
 
 app = FastAPI(
@@ -180,7 +187,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # 掛載所有路由
 for module in (stations, dispatch, operators, alerts,
                optimization, overrides, kpi, events, audit, weather, accounts,
-               assistant, rider, routing):
+               assistant, rider, routing, service_problems):
     app.include_router(module.router)
 
 

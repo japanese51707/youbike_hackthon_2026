@@ -177,6 +177,8 @@ def init_db() -> None:
 def reset_memory_db() -> None:
     """測試用：清掉記憶體/檔案 DB 單例（下次 get_connection 會重建）。"""
     global _memory_conn, _shared_conn
+    from db.clock_connection import reset_clock_connection
+    reset_clock_connection()
     if _memory_conn is not None:
         _memory_conn.close()
         _memory_conn = None
