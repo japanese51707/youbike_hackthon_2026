@@ -144,7 +144,10 @@ def validate_stations(stations, capacity, exclude=None):
             raise ValueError("站點動作必須為補車或取車")
         total += inventory(s.get("quantity", s.get("est_quantity")))
         if s.get("target_available") is not None:
-            inventory(s["target_available"], s.get("total_docks"))
+            # ADR-333：target_available 是「目標水位」計算值，規則引擎可能產浮點（如 21.8 台）。
+            # 台數語意上是整數，這裡四捨五入後再驗（非負、不超過站容量），不要求嚴格整數，
+            # 否則自動配單帶入的浮點 target 會全被「實際存量必須為非負整數」擋掉。
+            inventory(round(float(s["target_available"])), s.get("total_docks"))
         if s.get("service_available") is False or s.get("status") == "offline":
             raise DispatchConflict("停用站點不可派遣")
     if total > capacity:
