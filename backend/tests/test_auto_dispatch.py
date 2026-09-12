@@ -104,6 +104,62 @@ def test_respects_max_orders_per_round(monkeypatch):
     assert len(placed) <= 1, "單輪配單數不應超過上限"
 
 
+def test_stops_round_when_no_available_vehicle(monkeypatch):
+    """ADR-319：沒有閒置車可出勤時，本輪停止自動配單（不繼續掃其他站）。"""
+    # 只 seed 人力，不 seed 任何車（無一般閒置車、無總部待命車）
+    orp.seed_dispatch_operators(20)
+    orp.seed_depot_standby_operators(5)
+    put_drivers_on_duty()
+    reset_providers()
+    _patch_list(monkeypatch, DL)
+
+    placed = auto_dispatch.scan_once()
+    assert placed == [], "無車可派時本輪不應配出任何單"
+
+
+def test_runtime_switch_disables_dispatch(monkeypatch):
+    """ADR-319：後台關閉開關後，本輪不配單；重新開啟後恢復。"""
+    _setup()
+    _patch_list(monkeypatch, DL)
+    from core import auto_dispatch as ad
+
+    ad.set_enabled(False)
+    assert ad.scan_once() == [], "關閉自動配單後不應配出任何單"
+    ad.set_enabled(True)
+    assert ad.scan_once(), "重新開啟後應恢復配單"
+    ad.reset_runtime_enabled()
+
+
+def test_auto_dispatch_toggle_endpoint(client):
+    """ADR-319：後台開關端點——GET 讀狀態、POST 需 dispatcher 權限、即時生效。"""
+    from tests.conftest import OP_DISPATCHER, OP_OPERATOR
+
+    # GET 讀狀態（免權限，供儀表板顯示）
+    r = client.get("/api/v1/dispatch/auto-dispatch")
+    assert r.status_code == 200
+    assert "enabled" in r.json() and "interval_sec" in r.json()
+
+    # 一般 operator 不可切換
+    r = client.post("/api/v1/dispatch/auto-dispatch", json={"enabled": False}, headers=OP_OPERATOR)
+    assert r.status_code == 403
+
+    # dispatcher 可關閉
+    r = client.post("/api/v1/dispatch/auto-dispatch", json={"enabled": False}, headers=OP_DISPATCHER)
+    assert r.status_code == 200 and r.json()["enabled"] is False
+    assert client.get("/api/v1/dispatch/auto-dispatch").json()["enabled"] is False
+
+    # 缺 enabled 欄位 → 422
+    r = client.post("/api/v1/dispatch/auto-dispatch", json={"x": 1}, headers=OP_DISPATCHER)
+    assert r.status_code == 422
+
+    # dispatcher 可重新開啟
+    r = client.post("/api/v1/dispatch/auto-dispatch", json={"enabled": True}, headers=OP_DISPATCHER)
+    assert r.status_code == 200 and r.json()["enabled"] is True
+
+    from core import auto_dispatch
+    auto_dispatch.reset_runtime_enabled()
+
+
 def test_only_configured_levels_are_dispatched(monkeypatch):
     _setup()
     mixed = [

@@ -95,7 +95,8 @@ async def lifespan(app: FastAPI):
     # 共用一把鎖序列化。僅真實源 + config 開關開啟時啟動。
     from core import auto_dispatch
     if auto_dispatch.start_background(cfg.get("data_source", {}).get("mode")):
-        print("[auto_dispatch] 自動配單：背景輪詢已啟動")
+        print(f"[auto_dispatch] 自動配單：背景輪詢已啟動（目前開關："
+              f"{'開啟' if auto_dispatch.is_enabled() else '關閉'}，後台可即時切換）")
 
     # ADR-313：需調度清單背景預算快取。顯示端點讀快取秒回，避免每次重跑全站預測。
     from core import dispatch_cache

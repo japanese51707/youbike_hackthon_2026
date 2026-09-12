@@ -29,10 +29,34 @@ from typing import Optional
 # auto_detect.scan_once 也會取用同一把（見該模組）。
 COORDINATION_LOCK = threading.Lock()
 
+# ADR-319：後台可即時開關自動配單（不必重啟服務）。None＝依 config 預設；
+# True/False＝管理員 runtime 覆寫。背景 thread 恆在跑，每輪先看這個開關決定要不要配。
+_runtime_enabled: Optional[bool] = None
+
 
 def _cfg() -> dict:
     from config_loader import get_config
     return get_config().get("auto_dispatch", {}) or {}
+
+
+def is_enabled() -> bool:
+    """自動配單目前是否啟用（runtime 覆寫優先於 config 預設）。"""
+    if _runtime_enabled is not None:
+        return _runtime_enabled
+    return bool(_cfg().get("enabled", False))
+
+
+def set_enabled(enabled: bool) -> bool:
+    """後台開關自動配單（runtime 覆寫，即時生效）。回傳設定後的啟用狀態。"""
+    global _runtime_enabled
+    _runtime_enabled = bool(enabled)
+    return _runtime_enabled
+
+
+def reset_runtime_enabled() -> None:
+    """清掉 runtime 覆寫，回到 config 預設（測試/重置用）。"""
+    global _runtime_enabled
+    _runtime_enabled = None
 
 
 def _current_dispatch_list() -> list[dict]:
@@ -83,12 +107,22 @@ def scan_once() -> list[dict]:
     from core.dispatch_confirmation import confirm
     from core.dispatch_drafts import active_draft_station_ids
     from core.dispatch_errors import DispatchConflict, DispatchForbidden
+    from core.providers import get_fleet_provider
     from core.task_execution import station_claim_map
+
+    # ADR-319：後台開關關閉時，本輪不配（背景 thread 仍在跑，開關可即時再開）。
+    if not is_enabled():
+        return []
 
     cfg = _cfg()
     operator_id = str(cfg.get("operator_id", "OP-002"))
     max_orders = int(cfg.get("每輪最大配單數", 20))
     levels = set(cfg.get("只配緊急級別", ["high"]) or [])
+
+    def _has_available_vehicle() -> bool:
+        """車隊是否還有可出勤的車（一般閒置車 + 總部待命車）。兩者皆空＝無車可派。"""
+        fp = get_fleet_provider()
+        return bool(fp.available_vehicles() or fp.depot_standby_vehicles())
 
     with COORDINATION_LOCK:
         recs = _current_dispatch_list()
@@ -102,6 +136,10 @@ def scan_once() -> list[dict]:
         consumed: set[str] = set(skip_ids)
         for rec in queue:
             if len(placed) >= max_orders:
+                break
+            # ADR-319：沒有閒置車可出勤就「停止本輪」自動配單，等下一輪（5 分鐘後）再偵測。
+            # 車隊已無可派車時，繼續掃其他站也配不出來，直接結束本輪最省。
+            if not _has_available_vehicle():
                 break
             seed_id = str(rec.get("station_id"))
             if seed_id in consumed:
@@ -164,12 +202,11 @@ def _loop(interval_sec: float, stop_event: threading.Event) -> None:
 def start_background(mode: str) -> bool:
     """啟動背景自動配單（daemon thread）。回傳是否有啟動。
 
-    僅在 config auto_dispatch.enabled 為真、且資料源為真實源（非 mock/None）時啟動。
+    僅在資料源為真實源（非 mock/None）時啟動。thread 恆在跑，每輪由 is_enabled()
+    （runtime 開關優先於 config 預設）決定要不要配單——讓後台能即時開關，不必重啟服務。
     """
     global _stop_event, _thread
     cfg = _cfg()
-    if not cfg.get("enabled", False):
-        return False
     if mode in (None, "mock"):
         return False  # mock 資料不動，自動配單沒有意義
     if _thread is not None and _thread.is_alive():

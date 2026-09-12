@@ -203,3 +203,38 @@ def confirm_trip(
 ):
     """ADR-302：body 為 {draft_id, version} 或未修改的 {draft}。"""
     return _confirm_body(body, operator)
+
+
+# ── ADR-319 自動配單後台開關（dispatcher/maintainer 可開關）──
+
+@router.get("/dispatch/auto-dispatch")
+def get_auto_dispatch_state():
+    """回傳自動配單目前狀態（供調度決策儀表板顯示開關）。
+
+    enabled：目前是否啟用（runtime 開關優先於 config 預設）。
+    running：背景輪詢 thread 是否在跑（mock 源不啟）。
+    interval_sec：輪詢間隔（對齊官方約 5 分更新）。
+    """
+    from core import auto_dispatch
+    return {
+        "enabled": auto_dispatch.is_enabled(),
+        "running": auto_dispatch._thread is not None and auto_dispatch._thread.is_alive(),
+        "interval_sec": int(auto_dispatch._cfg().get("輪詢間隔_秒", 300)),
+    }
+
+
+@router.post("/dispatch/auto-dispatch")
+def set_auto_dispatch_state(
+    body: dict = Body(...),
+    operator: dict = Depends(require_role("dispatcher", "maintainer")),
+):
+    """後台開關自動配單（即時生效，不必重啟服務）。body: {enabled: bool}。需 dispatcher/maintainer。"""
+    from core import auto_dispatch
+    from core.audit import get_audit_service
+    if "enabled" not in body or not isinstance(body["enabled"], bool):
+        raise HTTPException(status_code=422, detail="需提供布林值 enabled")
+    enabled = auto_dispatch.set_enabled(body["enabled"])
+    get_audit_service().record(
+        type="param_edit", operator=operator["operator_id"],
+        action=f"{'開啟' if enabled else '關閉'}自動配單")
+    return {"enabled": enabled}

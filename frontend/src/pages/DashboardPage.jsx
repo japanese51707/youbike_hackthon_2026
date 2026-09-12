@@ -3,7 +3,7 @@ import {
   CloudOutlined,
   EnvironmentOutlined,
 } from "@ant-design/icons";
-import { Card, Checkbox, Segmented, Select, Space, Tag, Tooltip, Typography, message } from "antd";
+import { Card, Checkbox, Segmented, Select, Space, Switch, Tag, Tooltip, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import AsyncState from "../components/common/AsyncState.jsx";
@@ -24,6 +24,8 @@ import {
   buildFromStation as apiBuildFromStation,
   buildFromVehicle as apiBuildFromVehicle,
   confirmRecommendation,
+  getAutoDispatchState,
+  setAutoDispatchState,
 } from "../api/dispatchApi.js";
 import { getRoadRoute } from "../api/routingApi.js";
 import { isApiMode } from "../api/httpClient.js";
@@ -109,6 +111,26 @@ export default function DashboardPage() {
   const [builder, setBuilder] = useState(null); // null=待命態；物件=組單態
   const [orders, setOrders] = useState([]); // 送出的調度單（本機追蹤）
   const orderSeq = useRef(0);
+
+  // ADR-319：自動配單後台開關（狀態由後端提供，dispatcher/maintainer 可切換）。
+  const [autoDispatch, setAutoDispatch] = useState(null); // {enabled, running, interval_sec}
+  const [autoDispatchBusy, setAutoDispatchBusy] = useState(false);
+  useEffect(() => {
+    if (!isApiMode) return;
+    getAutoDispatchState().then(setAutoDispatch).catch(() => setAutoDispatch(null));
+  }, []);
+  const toggleAutoDispatch = async (next) => {
+    setAutoDispatchBusy(true);
+    try {
+      const res = await setAutoDispatchState(next);
+      setAutoDispatch((prev) => ({ ...(prev || {}), enabled: res.enabled }));
+      message.success(next ? "已開啟自動配單" : "已關閉自動配單");
+    } catch (err) {
+      message.error(err?.message || "切換自動配單失敗（需 dispatcher 權限）");
+    } finally {
+      setAutoDispatchBusy(false);
+    }
+  };
 
   const stations = dashboard.data?.stations || [];
   const vehicles = dashboard.data?.vehicles || [];
@@ -617,6 +639,26 @@ export default function DashboardPage() {
                   <Tag icon={<ClockCircleOutlined />} color="default">
                     資料時間 {formatClock(dataTime.src ?? dataTime.fetched)}
                   </Tag>
+                </Tooltip>
+              ) : null}
+              {/* ADR-319：自動配單開關（dispatcher/maintainer 可切換；一般人切換會被後端擋） */}
+              {isApiMode && autoDispatch ? (
+                <Tooltip
+                  title={
+                    autoDispatch.enabled
+                      ? `系統每 ${autoDispatch.interval_sec ?? 300} 秒自動依緊急度配對鄰近人車配單`
+                      : "自動配單已關閉，改由人工手動組單／緊急介入"
+                  }
+                >
+                  <span className="auto-dispatch-switch">
+                    <Switch
+                      checked={!!autoDispatch.enabled}
+                      loading={autoDispatchBusy}
+                      onChange={toggleAutoDispatch}
+                      checkedChildren="自動配單 開"
+                      unCheckedChildren="自動配單 關"
+                    />
+                  </span>
                 </Tooltip>
               ) : null}
               <Tag icon={<EnvironmentOutlined />}>{dashboard.data.weather.district}</Tag>

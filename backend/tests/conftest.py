@@ -65,6 +65,8 @@ def _reset_state(monkeypatch):
         reset_reviews()
         reset_assistant_limits()
         reset_rider_faults()
+        from core.auto_dispatch import reset_runtime_enabled
+        reset_runtime_enabled()    # ADR-319：清掉自動配單 runtime 開關，測試間隔離
         reset_memory_db()          # 丟掉舊記憶體 DB
         init_db()                  # 重建空 schema
         seed_default_operators()   # 種入 3 預設帳號（auth 查表用）
