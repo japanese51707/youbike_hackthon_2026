@@ -156,11 +156,31 @@ export default function DashboardPage() {
     setRunNowBusy(true);
     try {
       const res = await runAutoDispatchNow();
-      message.success(
-        res.placed_count > 0
-          ? `已立即執行自動配單：本輪配出 ${res.placed_count} 張派工單`
-          : "已立即執行自動配單：本輪無可配的緊急站（清單為空或無可用人車）",
-      );
+      if (res.placed_count > 0) {
+        message.success(`已立即執行自動配單：本輪配出 ${res.placed_count} 張派工單`);
+      } else {
+        // ADR-322：配不出來有六種完全不同的原因，要講清楚是哪一種，
+        // 否則調度員只會看到「無可配」然後對著一整排需調度的站發呆。
+        const d = res.diagnostics || {};
+        const parts = [];
+        if (d.stopped_because) parts.push(d.stopped_because);
+        if (d.dispatch_total !== undefined) {
+          parts.push(`需調度 ${d.dispatch_total} 站`
+            + `｜符合級別 ${d.eligible ?? 0} 站`
+            + `｜已被認領 ${d.skipped_claimed ?? 0}`
+            + `｜人工草稿佔用 ${d.skipped_draft ?? 0}`);
+          parts.push(`可用車 ${d.vehicles_available ?? 0}（總部待命 ${d.vehicles_depot_standby ?? 0}）`
+            + `｜可派人員 ${d.operators_assignable ?? 0}（總部待命 ${d.operators_depot_standby ?? 0}）`);
+        }
+        const reasons = Object.entries(d.reasons || {});
+        if (reasons.length) {
+          parts.push("逐站被擋原因：" + reasons.map(([k, v]) => `${k}×${v}`).join("；"));
+        }
+        message.warning({
+          content: `本輪沒有配出派工單。${parts.join("　")}`,
+          duration: 12,
+        });
+      }
       // 執行後刷新狀態（更新倒數與上次結果），並重載儀表板讓新任務顯示。
       getAutoDispatchState().then(setAutoDispatch).catch(() => {});
       dashboard.reload({ silent: true }).catch(() => {});
