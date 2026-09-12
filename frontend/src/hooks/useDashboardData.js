@@ -6,12 +6,15 @@ import {
 import {
   getDashboardData,
   getStationDetail,
+  peekDashboardData,
 } from "../api/stationsApi.js";
 import { isApiMode } from "../api/httpClient.js";
 import useAsyncResource from "./useAsyncResource.js";
 
-export default function useDashboardData() {
-  const resource = useAsyncResource(getDashboardData);
+export default function useDashboardData({ lite = false } = {}) {
+  const loader = useCallback(() => getDashboardData({ lite }), [lite]);
+  const getCached = useCallback(() => peekDashboardData(lite), [lite]);
+  const resource = useAsyncResource(loader, { getCached });
   useEffect(() => {
     if (!isApiMode) return undefined;
     const timer = setInterval(() => resource.reload({ silent: true }).catch(() => {}), 60000);

@@ -1,26 +1,34 @@
 import { useCallback, useEffect, useState } from "react";
 
-export default function useAsyncResource(loader) {
-  const [state, setState] = useState({
-    data: null,
-    error: null,
-    loading: true,
+export default function useAsyncResource(loader, { getCached } = {}) {
+  const [state, setState] = useState(() => {
+    const cached = getCached?.() ?? null;
+    return { data: cached, error: null, loading: cached == null };
   });
 
   const reload = useCallback(async ({ silent = false } = {}) => {
-    setState((current) => ({ ...current, error: null, loading: silent ? current.loading : true }));
+    setState((current) => ({
+      ...current,
+      error: null,
+      loading: silent || current.data ? false : true,
+    }));
     try {
       const data = await loader();
       setState({ data, error: null, loading: false });
       return data;
     } catch (error) {
-      setState({ data: null, error, loading: false });
+      setState((current) => ({
+        data: current.data,
+        error,
+        loading: false,
+      }));
       throw error;
     }
   }, [loader]);
 
   useEffect(() => {
-    reload().catch(() => {
+    const hasCache = getCached?.() != null;
+    reload({ silent: hasCache }).catch(() => {
       // 錯誤已保留在 state，交由頁面明確呈現。
     });
   }, [reload]);

@@ -78,7 +78,7 @@ body { background: var(--ct-bg); font-family: "PingFang TC", "Hiragino Sans", "N
 .station-legend-note { color: var(--ct-text-dim); font-size: 10px; }
 .station-legend .electric-key { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; color: #fff; background: #ae2828; }
 .map-layer-control { top: 90px; }
-.twin-control, .twin-timebar, .twin-insight { box-shadow: 0 4px 20px var(--ct-shadow); }
+.twin-timebar { box-shadow: 0 4px 20px var(--ct-shadow); }
 .twin-control { padding: 16px; }
 .twin-control .station-legend { position: static; max-width: none; margin-top: 14px; padding: 10px 0 0; border-width: 1px 0 0; border-radius: 0; background: transparent; box-shadow: none; }
 .assistant-fab { background: var(--ct-yellow); color: var(--ct-on-accent); box-shadow: 0 4px 18px var(--ct-shadow); font-weight: 600; }

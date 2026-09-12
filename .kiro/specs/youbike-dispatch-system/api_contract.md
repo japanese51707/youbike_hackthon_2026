@@ -1105,6 +1105,71 @@ DELETE /stations/{station_id}
 
 > 動態連動：新增/刪除只重算受影響範圍內的站，不需全市重算。
 
+### 3.21 戰情室顧問（ADR-307，advisory-only）
+
+```
+POST /assistant/twin
+```
+
+戰情室 AI 總結／詢問。LLM 只解釋當前 grounded context，不派工、不改系統狀態。需有效 `X-Operator-Id`（任一 Demo 角色）。Bedrock 失敗時回規則型摘要，不回 503 冒充成功數字。
+
+```
+GET /assistant/status
+```
+
+回傳是否已載入 `secrets/aws-credentials`（不含金鑰）：`credentials_loaded` / `enabled` / `region` / `model`。
+
+請求：
+
+```json
+{
+  "question": "哪一區空站最集中？",
+  "context": {
+    "mode": "live",
+    "observed_at": "2026-09-12T08:00:00+08:00",
+    "n_stations": 1600,
+    "stations_source": "backend",
+    "city_wide_ok": true,
+    "gate_reason": null,
+    "headline": "全市空站率 8.2%。",
+    "active_layers": ["gauge", "voronoi"],
+    "layers": [
+      {
+        "key": "gauge",
+        "title": "站點標記",
+        "data_mode": "real",
+        "metrics": [{"label": "空站率", "value": 8.2, "unit": "%"}],
+        "findings": ["全市 1600 站中，空站 131（8.2%）。"],
+        "caveats": [],
+        "evidence": [{"label": "板橋區", "detail": "空站 20/80（25%）"}]
+      }
+    ],
+    "top_empty": [{"station_name": "板橋車站", "district": "板橋區", "status": "empty"}],
+    "top_full": [],
+    "top_districts": [{"district": "板橋區", "empty": 20, "count": 80, "empty_rate": 25}],
+    "analysis_notes": [{"key": "gauge", "name": "站點標記", "info": "可借比例與狀態"}]
+  },
+  "history": [{"role": "user", "text": "先總結"}, {"role": "assistant", "text": "…"}]
+}
+```
+
+`question` 可空：代表「快速總結當前情況」。context 由前端從 `twinInsights` 精簡而來，須含**全部分析圖層**的 metrics／findings／caveats 與分析方法說明，不得只送目前勾選的層，也不得帶全市站點原文。`active_layers` 只表示地圖上有打開的層。
+
+回應：
+
+```json
+{
+  "text": "目前即時全市空站率 8.2%……（我僅提供理解與建議，不派工）",
+  "source": "bedrock",
+  "model": "amazon.nova-lite-v1:0",
+  "advisory": true
+}
+```
+
+- `source`：`bedrock`（真實 LLM）或 `fallback`（規則型降級）
+- 數字必須來自請求 context；缺值回「不可用」，不得編造
+- 此端點不觸發派遣、不寫 audit 以外的系統狀態
+
 ---
 
 ## 4. B 的模型介面（給 B 的約定）

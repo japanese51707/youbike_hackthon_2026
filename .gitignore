@@ -6,6 +6,8 @@
 credentials
 aws_credentials
 .aws/
+secrets/aws-credentials
+secrets/aws-config
 
 # === Python ===
 .venv/

@@ -1,6 +1,7 @@
 import { QuestionCircleOutlined } from "@ant-design/icons";
 import { Checkbox, Popover, Segmented, Slider, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import StationDrawer from "../components/dashboard/StationDrawer.jsx";
 import StationLegend from "../components/map/StationLegend.jsx";
 import SharedMap from "../components/map/SharedMap.jsx";
@@ -16,15 +17,20 @@ import { createDensityLayer } from "../components/map/layers/densityLayer.js";
 import { createStationGaugeLayer } from "../components/map/layers/stationGaugeLayer.js";
 import { isApiMode, request } from "../api/httpClient.js";
 import { loadTemporalPresentation } from "../api/temporalMockAdapter.js";
+import TwinAgentPane from "../components/twin/TwinAgentPane.jsx";
+import TwinAssistant from "../components/twin/TwinAssistant.jsx";
 import TwinInsightPanel from "../components/twin/TwinInsightPanel.jsx";
+import TwinOptimizationPane from "../components/twin/TwinOptimizationPane.jsx";
 import { ANALYSIS_CATALOG, PENDING_ANALYSES } from "../config/analysisCatalog.js";
 import presentationConfig from "../config/presentation.json";
 import useDashboardData from "../hooks/useDashboardData.js";
 import { stationStatusLabels } from "../utils/formatters.js";
 import { getStationColor } from "../utils/mapPresentation.js";
 import { giStarClass } from "../utils/spatialStats.js";
-import { buildTwinInsights, pickObservedAt } from "../utils/twinInsights.js";
+import { buildHeadline, buildTwinInsights, pickObservedAt } from "../utils/twinInsights.js";
 import { buildTwinView, pickTimelineFrame } from "../utils/twinSnapshot.js";
+
+const ALL_LAYER_KEYS = ANALYSIS_CATALOG.map((item) => item.key);
 
 const MODE_OPTIONS = [
   { value: "past", label: "歷史" },
@@ -41,13 +47,29 @@ const DATA_MODE_TAG = {
 const GI_LEGEND = [2.58, 1.96, 0, -1.96, -2.58].map((z) => giStarClass(z));
 
 export default function TwinPage() {
-  const dashboard = useDashboardData();
+  const dashboard = useDashboardData({ lite: true });
+  const [searchParams, setSearchParams] = useSearchParams();
   const [active, setActive] = useState(["gauge", "voronoi"]);
   const [mode, setMode] = useState("live");
   const [catchmentKm, setCatchmentKm] = useState(0.6);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [timeline, setTimeline] = useState(null);
   const [timelineNote, setTimelineNote] = useState("");
+  const [agentOpen, setAgentOpen] = useState(true);
+  const [reviewStationIds, setReviewStationIds] = useState([]);
+  const agentTab = searchParams.get("tab") === "optimization" ? "optimization" : "assistant";
+  const setAgentTab = useCallback(
+    (tab) => {
+      setSearchParams(tab === "optimization" ? { tab: "optimization" } : {}, { replace: true });
+    },
+    [setSearchParams],
+  );
+  const highlightReview = useCallback((ids) => setReviewStationIds(ids ?? []), []);
+  const reviewIdSet = useMemo(() => new Set(reviewStationIds), [reviewStationIds]);
+  const pinSize = useCallback(
+    (station) => (reviewIdSet.has(station.station_id) ? 48 : 36),
+    [reviewIdSet],
+  );
 
   const temporal = useMemo(() => {
     try {
@@ -96,13 +118,13 @@ export default function TwinPage() {
   );
   const snapshot = temporalView.stations;
 
-  const insightReport = useMemo(
+  const fullInsightReport = useMemo(
     () =>
       buildTwinInsights({
         stations: snapshot,
         liveStations: stations,
         recommendations: dashboard.data?.recommendations,
-        activeLayers: active,
+        activeLayers: ALL_LAYER_KEYS,
         mode,
         catchmentKm,
         temporalCovered: temporalView.covered,
@@ -110,12 +132,20 @@ export default function TwinPage() {
         stationsSource: dashboard.data?.stationsSource || (dashboard.loading ? "loading" : "unknown"),
         observedAt: pickObservedAt(snapshot),
       }),
-    [snapshot, stations, active, mode, catchmentKm, temporalView, dashboard.data, dashboard.loading],
+    [snapshot, stations, mode, catchmentKm, temporalView, dashboard.data, dashboard.loading],
   );
+  const insightReport = useMemo(() => {
+    const layers = fullInsightReport.layers.filter((layer) => active.includes(layer.key));
+    return {
+      ...fullInsightReport,
+      layers,
+      headline: fullInsightReport.cityWideOk ? buildHeadline(layers, fullInsightReport.comparison) : null,
+    };
+  }, [fullInsightReport, active]);
 
   const layerModeByKey = useMemo(
-    () => new Map(insightReport.layers.map((layer) => [layer.key, layer.dataMode])),
-    [insightReport],
+    () => new Map(fullInsightReport.layers.map((layer) => [layer.key, layer.dataMode])),
+    [fullInsightReport],
   );
 
   const openStation = useCallback(
@@ -139,11 +169,18 @@ export default function TwinPage() {
     if (on("network")) composed.push(...createNetworkLayers({ data: snapshot, onSelectStation: openStation }));
     if (on("gauge")) {
       composed.push(
-        createStationGaugeLayer({ id: "twin-gauge", data: snapshot, dimension: "status", getColor, onSelectStation: openStation }),
+        createStationGaugeLayer({
+          id: "twin-gauge",
+          data: snapshot,
+          dimension: "status",
+          getColor,
+          onSelectStation: openStation,
+          sizePixels: pinSize,
+        }),
       );
     }
     return composed.filter(Boolean);
-  }, [active, snapshot, catchmentKm, dashboard.data, openStation]);
+  }, [active, snapshot, catchmentKm, dashboard.data, openStation, pinSize]);
 
   const getTooltip = useCallback(({ object }) => {
     if (!object?.station_name) return null;
@@ -235,22 +272,42 @@ export default function TwinPage() {
 
   return (
     <div className="fixed-page twin-page">
-      <SharedMap
-        ariaLabel="數位孿生戰情室分析地圖"
-        className="map-fill"
-        initialViewState={presentationConfig.maps.dashboard}
-        layers={layers}
-        getTooltip={getTooltip}
-        overlay={overlay}
-      />
-      <StationDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        detail={dashboard.detail}
-        loading={dashboard.detailLoading}
-        error={dashboard.detailError}
-        weather={dashboard.data?.weather}
-      />
+      <div className="twin-stage">
+        <SharedMap
+          ariaLabel="數位孿生戰情室分析地圖"
+          className="map-fill"
+          initialViewState={presentationConfig.maps.dashboard}
+          layers={layers}
+          getTooltip={getTooltip}
+          overlay={overlay}
+        />
+        <StationDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          detail={dashboard.detail}
+          loading={dashboard.detailLoading}
+          error={dashboard.detailError}
+          weather={dashboard.data?.weather}
+        />
+      </div>
+      <TwinAgentPane
+        open={agentOpen}
+        onOpenChange={setAgentOpen}
+        tab={agentTab}
+        onTabChange={setAgentTab}
+      >
+        <div className="twin-agent-panel" hidden={agentTab !== "assistant"}>
+          <TwinAssistant
+            report={fullInsightReport}
+            snapshot={snapshot}
+            visibleLayers={active}
+            dataReady={!dashboard.loading && Boolean(dashboard.data || dashboard.error)}
+          />
+        </div>
+        <div className="twin-agent-panel" hidden={agentTab !== "optimization"}>
+          <TwinOptimizationPane onSelectStation={openStation} onHighlightStations={highlightReview} />
+        </div>
+      </TwinAgentPane>
     </div>
   );
 }

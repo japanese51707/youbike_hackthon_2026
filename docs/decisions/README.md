@@ -48,7 +48,8 @@
 | [ADR-205](ADR-205-四頁角色導向資訊架構與無捲動版面.md) | 四頁角色導向資訊架構＋無捲動固定視窗版面 | superseded（由 ADR-208 承接） | frontend, information-architecture, ux | 調度/司機手機端/長官/戰情室；預設落地調度面板、炫技集中戰情室；2026-09-05 修訂：移除桌機司機頁（與調度面板重疊），司機僅手機端；調度面板資訊架構由 ADR-206 細化 |
 | [ADR-206](ADR-206-調度面板決策流資訊架構.md) | 調度面板決策流資訊架構（三入口組單＋執行追蹤） | accepted | frontend, information-architecture, ux | 地圖舞台＋右欄狀態機（待命態/組單態）；對齊 ADR-119 三入口與預覽確認；缺口榜併入緊急站排行；執行追蹤含狀態生命週期；站數動態；owner 2026-09-11 核准，實作中 |
 | [ADR-208](ADR-208-YouBike品牌識別與日夜主題.md) | YouBike 品牌識別＋日式柔和日夜主題 | accepted | frontend, design-language, map-presentation | owner 核准；承接 ADR-205 頁面架構，電輔車數未接入時不顯示站點閃電 |
-| [ADR-301](ADR-301-AI營運助理定位與LLM接入決策.md) | AI 營運助理定位與 LLM 接入決策（advisory-only） | proposed | platform, ai-advisory, security, api-contract | 助理僅輔助理解與建議、不自行決策（守 ADR-004）；是否接 LLM 及接法留給後端/owner 決定，尚不可作為實作依據 |
+| [ADR-301](ADR-301-AI營運助理定位與LLM接入決策.md) | AI 營運助理定位與 LLM 接入決策（advisory-only） | proposed | platform, ai-advisory, security, api-contract | 助理僅輔助理解與建議、不自行決策（守 ADR-004）；長官頁是否接 LLM 仍待定。戰情室接法由 ADR-307 定案 |
+| [ADR-307](ADR-307-戰情室Bedrock顧問代理.md) | 戰情室 Bedrock 顧問代理 | accepted | platform, ai-advisory, security, api-contract, frontend | owner 2026-09-12 核准；後端代理 Converse、失敗降級規則型、不派工 |
 | [ADR-302](ADR-302-派工確認與任務結案一致性.md) | 後端草稿、原子派工、授權回報與結案釋放 | accepted | api, security, database, dispatch | 第一批派工安全修正；沿用 SQLite／Demo 身分限制 |
 | [ADR-121](ADR-121-模型與特徵成套載入.md) | 模型與特徵成套載入 | accepted | prediction, data | 第二批整合 |
 | [ADR-207](ADR-207-前端實際派工服務整合.md) | 前端實際派工服務整合 | accepted | frontend, api | 第二批整合；原編 ADR-206，2026-08-19 與前端 ADR-206 撞號讓號至 207 |
