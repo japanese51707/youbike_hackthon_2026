@@ -121,6 +121,20 @@ def test_start_background_skips_when_in_app_false(monkeypatch):
     assert sp.start_background("youbike_official") is False
 
 
+def test_corrupt_clock_file_is_rebuilt(tmp_path, monkeypatch):
+    from db.clock_connection import get_clock_connection, reset_clock_connection
+
+    clock = tmp_path / "service_clock.db"
+    clock.write_text("this is not sqlite", encoding="utf-8")
+    monkeypatch.setenv("YOUBIKE_CLOCK_DB_PATH", str(clock))
+    reset_clock_connection()
+    conn = get_clock_connection()
+    conn.execute("SELECT COUNT(*) FROM service_problems").fetchone()
+    conn.execute("SELECT COUNT(*) FROM station_snapshots").fetchone()
+    assert clock.exists()
+    assert clock.read_bytes()[:15] == b"SQLite format 3"
+
+
 def test_clock_writes_dedicated_file_not_memory_main(tmp_path, monkeypatch):
     """YOUBIKE_CLOCK_DB_PATH 指向檔案時，時計不進主記憶體庫。"""
     from db.clock_connection import clock_db_path, reset_clock_connection
