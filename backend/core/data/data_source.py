@@ -129,8 +129,12 @@ def _build(mode: str) -> DataSource:
     if mode == "youbike_official":
         from .youbike_official import YouBikeOfficialDataSource
         return YouBikeOfficialDataSource()
+    if mode == "youbike_s3":
+        # ADR-332：雲端經 S3 中繼讀官方站況（雲端直連官方被封鎖時用）。
+        from .youbike_s3 import YouBikeS3DataSource
+        return YouBikeS3DataSource()
     raise ValueError(
-        f"未知的 data_source.mode：'{mode}'（可用：mock / historical / tdx / youbike_official）"
+        f"未知的 data_source.mode：'{mode}'（可用：mock / historical / tdx / youbike_official / youbike_s3）"
     )
 
 
