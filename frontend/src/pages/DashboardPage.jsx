@@ -202,8 +202,6 @@ export default function DashboardPage() {
   const vehicles = dashboard.data?.vehicles || [];
   const recommendations = dashboard.data?.recommendations || [];
   const alerts = dashboard.data?.alerts || [];
-  // 追蹤清單：API 模式用後端真實任務（/dispatch/tasks 對映），mock 模式用本機示意單。
-  const trackOrders = isApiMode ? dashboard.data?.orders || [] : orders;
 
   const districts = useMemo(
     () => [...new Set(stations.map((s) => s.district))].sort(),
@@ -294,12 +292,11 @@ export default function DashboardPage() {
 
   // 分成「緊急調度」與「次安排調度」兩桶（判定在 utils/dispatchTriage.js，只讀後端欄位）。
   const buckets = useMemo(() => splitByTriage(urgencyItems), [urgencyItems]);
-  const activeBucket = dispatchTab === "track" ? [] : buckets[dispatchTab] ?? [];
+  const activeBucket = buckets[dispatchTab] ?? [];
   const districtCounts = useMemo(() => countByDistrict(activeBucket), [activeBucket]);
 
   // 切分頁後若原本選的行政區在新分頁沒有任務，自動回到全部，避免看到空白清單。
   useEffect(() => {
-    if (dispatchTab === "track") return;
     if (districtFilter !== "all" && !districtCounts.some((d) => d.district === districtFilter)) {
       setDistrictFilter("all");
     }
@@ -312,7 +309,7 @@ export default function DashboardPage() {
 
   // 地圖預設跟著分頁走：點緊急調度就只亮緊急的站，手動可切回全部站點。
   const mappedStations = useMemo(() => {
-    if (mapScope === "all" || dispatchTab === "track") return filteredStations;
+    if (mapScope === "all") return filteredStations;
     const ids = stationIdsOf(visibleItems);
     return filteredStations.filter((s) => ids.has(s.station_id));
   }, [dispatchTab, filteredStations, mapScope, visibleItems]);
@@ -819,7 +816,6 @@ export default function DashboardPage() {
                     onDistrictChange={setDistrictFilter}
                     onPickStation={startFromStation}
                     onFocus={focusStation}
-                    orders={trackOrders}
                     apiMode={isApiMode}
                   />
                 )}
@@ -878,11 +874,10 @@ export default function DashboardPage() {
                   options={[
                     {
                       value: "tab",
-                      label: dispatchTab === "track" ? "任務相關" : TRIAGE_LABELS[dispatchTab],
+                      label: TRIAGE_LABELS[dispatchTab],
                     },
                     { value: "all", label: "全部站點" },
                   ]}
-                  disabled={dispatchTab === "track"}
                 />
                 <span className="map-scope-count mono">地圖顯示 {mappedStations.length} 站</span>
               </div>

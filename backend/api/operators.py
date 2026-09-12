@@ -9,28 +9,21 @@ router = APIRouter(prefix="/api/v1", tags=["operators"])
 
 
 def _apply_shift_duty(operators: list[dict]) -> list[dict]:
-    """ADR-312：依當前班別注入「在線狀態」（呈現層，不改 DB 真實 status）。
+    """ADR-312/330：依當前班別注入「值勤三態」（呈現層，不改 DB 真實 status）。
 
-    規則（只影響未派工的人；已派工 busy 者維持真實狀態不動）：
-      - 已派工（有 current_task_id）→ 維持原 status（任務中 busy）。
-      - 當班（shift == 現在班別）且未派工 → on_duty（上班中・閒置待命）。
-      - 總部預備（depot_standby，不綁班別）且未派工 → on_duty（隨時機動支援）。
-      - 其餘（非當班、未派工）→ off_duty（未上班）。
-    這樣「現在這個時段誰在線可調度」隨時段自動反映，不必背景改 DB。
+    三態（與可派池 core.shift.duty_status_of 同一判斷）：
+      - busy     任務中（有 current_task_id）
+      - on_duty  閒置待命（當班無任務，或總部預備 depot_standby 無任務）→ 可派單
+      - off_duty 未上班（非當班無任務）→ 不可派單
+    這樣「顯示閒置(on_duty)的人」= 「自動配單派得到的人」，不再兩套判斷不一致。
     """
-    from core.shift import current_shift
-    now_shift = current_shift()
+    from core.shift import duty_status_of
     out = []
     for o in operators:
         oo = dict(o)
-        if oo.get("current_task_id"):
-            pass  # 派工中：真實狀態（busy）不動
-        elif oo.get("role_type") == "depot_standby":
-            oo["status"] = "on_duty"
-        elif oo.get("shift") and oo.get("shift") == now_shift:
-            oo["status"] = "on_duty"
-        else:
-            oo["status"] = "off_duty"
+        # ADR-330：呈現層與可派池共用同一三態判斷（busy/on_duty/off_duty），
+        # 讓「顯示閒置的人」就是「自動配單派得到的人」。已派工者仍標 busy（任務中）。
+        oo["status"] = duty_status_of(oo)
         out.append(oo)
     return out
 

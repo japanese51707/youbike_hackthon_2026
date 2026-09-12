@@ -1,5 +1,5 @@
 import { ReloadOutlined, CarOutlined, UserOutlined, EnvironmentOutlined, HomeOutlined } from "@ant-design/icons";
-import { Button, Card, Empty, Modal, Progress, Space, Tabs, Tag, Tooltip, Typography } from "antd";
+import { Button, Card, Empty, Progress, Segmented, Space, Tabs, Tag, Tooltip, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import AsyncState from "../components/common/AsyncState.jsx";
 import SharedMap from "../components/map/SharedMap.jsx";
@@ -63,87 +63,6 @@ function StatusDot({ map, value }) {
 
 // ── 點站點卡跳出的路線地圖（ADR-329）──
 // 調度員看到某站落後時，第一個想知道的是「車現在在哪、還要跑幾站才到這裡」。
-// 用任務既有的停靠順序畫實走道路路線，並把被點的那站標成焦點。
-function RouteMapModal({ task, focusStationId, onClose }) {
-  const stops = useMemo(
-    () =>
-      (task?.route ?? [])
-        .map((s, i) => ({
-          ...s,
-          seq: i + 1,
-          lat: Number(s.lat),
-          lng: Number(s.lng),
-          quantity: s.est_quantity ?? s.quantity,
-        }))
-        .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng)),
-    [task],
-  );
-  const start = stops[0] ? { lat: stops[0].lat, lng: stops[0].lng } : null;
-  const [geometry, setGeometry] = useState(null);
-
-  useEffect(() => {
-    if (!start || !stops.length) return undefined;
-    let cancelled = false;
-    const coords = [[start.lng, start.lat], ...stops.map((s) => [s.lng, s.lat])];
-    getRoadRoute(coords)
-      .then((res) => {
-        if (!cancelled && res?.mode === "road") setGeometry(res.geometry);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [task?.task_id]);
-
-  const layers = useMemo(() => {
-    if (!start || !stops.length) return [];
-    return [
-      ...createPlanRouteLayers({ start, route: stops, geometry }),
-      createVehicleLayer({ start }),
-    ].filter(Boolean);
-  }, [start, stops, geometry]);
-
-  const focus = stops.find((s) => String(s.station_id) === String(focusStationId));
-
-  return (
-    <Modal
-      open={Boolean(task)}
-      onCancel={onClose}
-      footer={null}
-      width={820}
-      title={`${task?.task_id ?? ""} 路線${focus ? `｜第 ${focus.seq} 站 ${focus.station_name ?? ""}` : ""}`}
-    >
-      <div className="dts-route-map">
-        {start && stops.length ? (
-          <SharedMap
-            ariaLabel="任務路線地圖"
-            className="map-fill"
-            initialViewState={{
-              longitude: focus ? focus.lng : start.lng,
-              latitude: focus ? focus.lat : start.lat,
-              zoom: focus ? 14.5 : 12.5,
-            }}
-            layers={layers}
-            getTooltip={({ object }) =>
-              object?.station_name
-                ? { text: `${object.seq}. ${object.station_name}\n${object.action} ${object.quantity ?? ""} 台` }
-                : null
-            }
-          />
-        ) : (
-          <div className="dts-route-map-empty">此任務沒有可用座標，無法顯示路線</div>
-        )}
-      </div>
-      {task?.depot_load ? (
-        <div className="dts-depot-load">
-          <HomeOutlined /> {task.depot_load.label ?? `出發前於總部裝 ${task.depot_load.quantity} 台`}
-        </div>
-      ) : null}
-    </Modal>
-  );
-}
-
 // ── B：進行中任務卡 ──
 function TaskCard({ task, now, onOpenMap }) {
   const meta = TASK_STATUS[task.task_status] ?? TASK_STATUS.assigned;
@@ -237,6 +156,15 @@ function TaskCard({ task, now, onOpenMap }) {
                   <span className="dts-target">目標 {Number.isFinite(target) ? target : "—"} 台</span>
                   {!isLive ? <span className="dts-muted">（組單當下）</span> : null}
                 </span>
+                {/* ADR-330：站況本身變空/滿到現在多久（service_problems 時鐘，後端算，重開不歸零）。
+                    與任務計時不同——這是「這個站點出事多久還沒解決」。*/}
+                {s.problem_opened_at ? (
+                  <span className="dts-stop-problem mono">
+                    <Tag color={s.problem_kind === "empty" ? "red" : "orange"}>
+                      {s.problem_kind === "empty" ? "已空" : "已滿"}・緊急 {durationSince(s.problem_opened_at, now)}
+                    </Tag>
+                  </span>
+                ) : null}
               </span>
               <span className="dts-stop-status">
                 {isRemoved ? (
@@ -256,6 +184,101 @@ function TaskCard({ task, now, onOpenMap }) {
         })}
       </div>
     </Card>
+  );
+}
+
+// ── 進行中任務：內嵌路線地圖（給定 task 畫實走道路路線 + 車輛起點）──
+function TaskRouteMap({ task, focusStationId }) {
+  const stops = useMemo(
+    () =>
+      (task?.route ?? [])
+        .map((s, i) => ({ ...s, seq: i + 1, lat: Number(s.lat), lng: Number(s.lng),
+          quantity: s.est_quantity ?? s.quantity }))
+        .filter((s) => Number.isFinite(s.lat) && Number.isFinite(s.lng)),
+    [task],
+  );
+  const start = stops[0] ? { lat: stops[0].lat, lng: stops[0].lng } : null;
+  const [geometry, setGeometry] = useState(null);
+  useEffect(() => {
+    setGeometry(null);
+    if (!start || !stops.length) return undefined;
+    let cancelled = false;
+    const coords = [[start.lng, start.lat], ...stops.map((s) => [s.lng, s.lat])];
+    getRoadRoute(coords)
+      .then((res) => { if (!cancelled && res?.mode === "road") setGeometry(res.geometry); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task?.task_id]);
+  const layers = useMemo(() => {
+    if (!start || !stops.length) return [];
+    return [...createPlanRouteLayers({ start, route: stops, geometry }),
+      createVehicleLayer({ start })].filter(Boolean);
+  }, [start, stops, geometry]);
+  const focus = stops.find((s) => String(s.station_id) === String(focusStationId));
+  if (!start || !stops.length) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="此任務無可繪製的座標" />;
+  }
+  return (
+    <SharedMap
+      className="dts-board-map"
+      ariaLabel={`任務 ${task?.task_id} 路線`}
+      initialViewState={{ longitude: start.lng, latitude: start.lat, zoom: 12.5 }}
+      focusTarget={focus ? { id: focus.station_id, longitude: focus.lng, latitude: focus.lat, zoom: 14 } : null}
+      layers={layers}
+    />
+  );
+}
+
+// ── B：進行中任務看板（左任務列表 → 右選中任務的地圖＋資源＋各站狀況）──
+function ActiveTasksBoard({ tasks, now }) {
+  const [selectedId, setSelectedId] = useState(null);
+  const selected = tasks.find((t) => t.task_id === selectedId) ?? tasks[0] ?? null;
+  const [focusStationId, setFocusStationId] = useState(null);
+
+  if (!tasks.length) {
+    return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="目前沒有進行中的分派任務" />;
+  }
+  return (
+    <div className="dts-board">
+      {/* 左：任務列表 */}
+      <div className="dts-board-list">
+        {tasks.map((t) => {
+          const meta = TASK_STATUS[t.task_status] ?? TASK_STATUS.assigned;
+          const route = t.route ?? [];
+          const done = route.filter((s) => s.station_status === "completed").length;
+          const activeStops = route.filter((s) => s.station_status !== "removed");
+          const isSel = selected?.task_id === t.task_id;
+          return (
+            <button
+              type="button"
+              key={t.task_id}
+              className={`dts-board-item ${isSel ? "is-selected" : ""}`}
+              onClick={() => { setSelectedId(t.task_id); setFocusStationId(null); }}
+            >
+              <div className="dts-board-item-head">
+                <span className="mono dts-board-item-id">{t.task_id}</span>
+                <Tag color={meta.color}>{meta.label}</Tag>
+              </div>
+              <div className="dts-board-item-sub dts-muted mono">
+                {t.district ?? "—"}｜{done}/{activeStops.length} 站｜起始 {durationSince(t.assigned_at, now)}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {/* 右：選中任務詳情 */}
+      <div className="dts-board-detail">
+        {selected ? (
+          <>
+            <div className="dts-board-map-wrap">
+              <TaskRouteMap task={selected} focusStationId={focusStationId} />
+            </div>
+            <TaskCard task={selected} now={now} onOpenMap={(_t, sid) => setFocusStationId(sid)} />
+          </>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -301,6 +324,85 @@ function ResourceGroup({ title, icon, vehicles = null, operators }) {
   );
 }
 
+// ── 人力配置視圖：四類資源用顏色分類整齊呈現（ADR-330）──
+// 每類一個色系；卡頭顯示「閒置 / 任務中 / 未上班」三態計數；下方 chip 列出成員。
+function ResourceClassCard({ title, icon, accent, items, kind }) {
+  // kind: "operator" | "vehicle" —— 決定用哪套狀態語意與計數。
+  const statusMap = kind === "vehicle" ? VEHICLE_STATUS : OPERATOR_STATUS;
+  const counts =
+    kind === "vehicle"
+      ? {
+          idle: items.filter((v) => v.status === "available" || v.status === "standby").length,
+          busy: items.filter((v) => v.status === "dispatched").length,
+          off: items.filter((v) => ["maintenance", "off_duty"].includes(v.status)).length,
+        }
+      : {
+          idle: items.filter((o) => o.status === "on_duty").length,
+          busy: items.filter((o) => o.status === "busy").length,
+          off: items.filter((o) => o.status === "off_duty").length,
+        };
+  return (
+    <Card
+      size="small"
+      className="dts-class-card"
+      style={{ "--dts-accent": accent }}
+      title={
+        <Space size={6}>
+          <span className="dts-class-dot" style={{ background: accent }} />
+          {icon}
+          <span>{title}</span>
+          <Typography.Text type="secondary" className="dts-muted">共 {items.length}</Typography.Text>
+        </Space>
+      }
+    >
+      <div className="dts-class-counts">
+        <span className="dts-count-idle">閒置 {counts.idle}</span>
+        <span className="dts-count-busy">任務中 {counts.busy}</span>
+        <span className="dts-count-off">{kind === "vehicle" ? "停用/維修" : "未上班"} {counts.off}</span>
+      </div>
+      {items.length ? (
+        <div className="dts-chip-row">
+          {items.map((it) => {
+            const id = it.operator_id ?? it.vehicle_id;
+            return (
+              <span key={id} className="dts-chip">
+                {kind === "vehicle" ? <CarOutlined /> : <UserOutlined />}
+                <span className="mono">{id}</span>
+                {it.current_district ? <span className="dts-muted">{it.current_district}</span> : null}
+                <StatusDot map={statusMap} value={it.status} />
+                {it.current_task_id ? <span className="dts-muted mono">{it.current_task_id}</span> : null}
+              </span>
+            );
+          })}
+        </div>
+      ) : (
+        <Typography.Text type="secondary" className="dts-muted">無成員</Typography.Text>
+      )}
+    </Card>
+  );
+}
+
+function ResourceConfigView({ operators, vehicles }) {
+  // 人員分類：調度司機 / 駐點員 / 總部待命人
+  const drivers = operators.filter((o) => o.role_type === "driver");
+  const stationed = operators.filter((o) => o.role_type === "stationed");
+  const depotOps = operators.filter((o) => o.role_type === "depot_standby");
+  // 車輛分類：調度車（非預備非總部）/ 預備車（standby）/ 總部待命車（is_depot）
+  const dispatchCars = vehicles.filter((v) => !v.is_depot && v.status !== "standby");
+  const reserveCars = vehicles.filter((v) => !v.is_depot && v.status === "standby");
+  const depotCars = vehicles.filter((v) => v.is_depot);
+  return (
+    <div className="dts-class-grid">
+      <ResourceClassCard title="調度員" icon={<UserOutlined />} accent="#3b82f6" items={drivers} kind="operator" />
+      <ResourceClassCard title="駐點員" icon={<UserOutlined />} accent="#06b6d4" items={stationed} kind="operator" />
+      <ResourceClassCard title="總部待命人員" icon={<HomeOutlined />} accent="#a855f7" items={depotOps} kind="operator" />
+      <ResourceClassCard title="調度車" icon={<CarOutlined />} accent="#22c55e" items={dispatchCars} kind="vehicle" />
+      <ResourceClassCard title="預備車" icon={<CarOutlined />} accent="#eab308" items={reserveCars} kind="vehicle" />
+      <ResourceClassCard title="總部待命車" icon={<HomeOutlined />} accent="#a855f7" items={depotCars} kind="vehicle" />
+    </div>
+  );
+}
+
 // 一個班別分頁的內容：該班人力依行政區分組（+ 該班的總部預備）。
 function ShiftPanel({ operators, depotOperators }) {
   const districts = [...new Set(operators.map((o) => o.current_district).filter(Boolean))].sort();
@@ -325,10 +427,9 @@ function ShiftPanel({ operators, depotOperators }) {
 }
 
 export default function DispatchStatusPage() {
-  // ADR-329：點站點卡開路線地圖
-  const [routeMap, setRouteMap] = useState(null);
-  const openRouteMap = (task, stationId) => setRouteMap({ task, stationId });
   const { data, error, loading, reload } = useDispatchStatus();
+  // 頂層視圖切換：任務狀況（進行中任務看板）/ 人力配置（四類資源顏色分類）。
+  const [view, setView] = useState("tasks");
   // 每 30 秒重算一次相對時間（讓「已等待 / 至今」跟著走，不必等輪詢）。
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -394,6 +495,14 @@ export default function DispatchStatusPage() {
       <div className="dashboard-toolbar">
         <Typography.Title level={2}>分派任務狀況</Typography.Title>
         <Space wrap>
+          <Segmented
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "tasks", label: "任務狀況" },
+              { value: "resources", label: "人力配置" },
+            ]}
+          />
           <Tag color="processing">進行中任務 {activeTasks.length}</Tag>
           <Tag color="success">閒置人力 {idleOps}</Tag>
           <Tag color="blue">任務中 {busyOps}</Tag>
@@ -403,24 +512,29 @@ export default function DispatchStatusPage() {
       </div>
 
       <AsyncState loading={loading && !data} error={error} data={data} onRetry={reload}>
-        {/* B：進行中任務 */}
-        <Card size="small" title={`進行中任務（${activeTasks.length}）`}>
-          <Typography.Paragraph type="secondary" className="dts-muted">
-            站點完成＝系統偵測到該站可借車數達目標水位（補車回升／取車下降至安全水位）；
-            全部站點完成即任務完成，該調度車與調度員自動回到閒置待命。
-          </Typography.Paragraph>
-          {activeTasks.length ? (
-            <div className="dts-task-list">
-              {activeTasks.map((t) => (
-                <TaskCard key={t.task_id} task={t} now={now} onOpenMap={openRouteMap} />
-              ))}
-            </div>
-          ) : (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="目前沒有進行中的分派任務" />
-          )}
-        </Card>
+        {/* 任務狀況視圖：進行中任務看板——左任務列表、右地圖＋資源＋各站狀況（含站況緊急計時） */}
+        {view === "tasks" ? (
+          <Card size="small" title={`進行中任務（${activeTasks.length}）`}>
+            <Typography.Paragraph type="secondary" className="dts-muted">
+              點左側任務看右側路線地圖與各站狀況。任務卡旁為「單起始至今」，站點旁為「該站變空/滿到現在」
+              的緊急計時（後端持續計時，關閉頁面不歸零）。站點達目標水位即自動完成，全站完成後車人回閒置。
+            </Typography.Paragraph>
+            <ActiveTasksBoard tasks={activeTasks} now={now} />
+          </Card>
+        ) : null}
 
-        {/* A-1：調度員依班別（早/晚/大夜）分組，班內再依行政區 */}
+        {/* 人力配置視圖：四類資源用顏色分類（調度員/駐點員/總部待命人 + 調度車/預備車/總部待命車） */}
+        {view === "resources" ? (
+          <Card size="small" title="人力與車輛配置（依類別）">
+            <Typography.Paragraph type="secondary" className="dts-muted">
+              各類資源以顏色區分；卡頭顯示閒置 / 任務中 / 未上班（車輛為停用/維修）計數。
+            </Typography.Paragraph>
+            <ResourceConfigView operators={operators} vehicles={vehicles} />
+          </Card>
+        ) : null}
+
+        {/* A-1：調度員依班別（早/晚/大夜）分組，班內再依行政區（人力配置視圖才顯示） */}
+        {view === "resources" ? (
         <Card size="small" title="調度人力排班（依班別 → 行政區）">
           <Typography.Paragraph type="secondary" className="dts-muted">
             人力分早/晚/大夜三班，班內依各行政區歷史工作量分派（早班含早高峰最多、晚班次之、
@@ -428,8 +542,10 @@ export default function DispatchStatusPage() {
           </Typography.Paragraph>
           <Tabs size="small" items={shiftTabs} />
         </Card>
+        ) : null}
 
-        {/* A-2：車輛依行政區（車不分班，隨任務移動） */}
+        {/* A-2：車輛依行政區（車不分班，隨任務移動）（人力配置視圖才顯示） */}
+        {view === "resources" ? (
         <Card size="small" title="調度車輛（依行政區）">
           <div className="dts-group-grid">
             {depotVehicles.length ? (
@@ -449,13 +565,9 @@ export default function DispatchStatusPage() {
             })()}
           </div>
         </Card>
+        ) : null}
       </AsyncState>
 
-      <RouteMapModal
-        task={routeMap?.task ?? null}
-        focusStationId={routeMap?.stationId}
-        onClose={() => setRouteMap(null)}
-      />
     </div>
   );
 }

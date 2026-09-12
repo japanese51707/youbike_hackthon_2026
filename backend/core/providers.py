@@ -38,28 +38,24 @@ class OperatorProvider(ABC):
         ...
 
     def available_operators(self) -> list[dict]:
-        """可派遣的一般調度員（啟用中、非忙碌/休息，且非總站待命）。
+        """可派遣的一般調度員（啟用中、driver、值勤三態為閒置 on_duty，且非總站待命）。
         總站待命人力（ADR-119 depot_standby）為獨立資源池，用 depot_standby_operators() 取。"""
-        out = []
-        for o in self.list_operators(active_only=True):
-            if o.get("role_type") != "driver":
-                continue
-            if o.get("status") == "on_duty" and not o.get("current_task_id"):
-                out.append(o)
-        return out
+        from core.shift import is_dispatchable
+        return [o for o in self.list_operators(active_only=True)
+                if o.get("role_type") == "driver" and is_dispatchable(o)]
 
     def assignable_operators(self, district: Optional[str] = None) -> list[dict]:
-        """可指派的司機（不要求先值勤）：啟用中、driver 角色、未占用任務，
-        含 off_duty（司機不常態待命，派到任務當下才上工）。
+        """可指派的司機（ADR-330：只派「當班且無任務」的閒置司機，與儀表板顯示的閒置一致）。
+
+        改點：不再收 off_duty（未上班）司機。可派＝當班閒置（is_dispatchable），這樣
+        「顯示閒置的人 = 自動配單派得到的人」，解決「顯示 109 閒置卻配不出」的狀態不一致。
 
         依優先序排：① 目前作業區＝目標區者優先；② 其次以 operator_id 穩定排序。
-        同一層級分數相同時，前端可自行改選（回傳順序即建議順序）。
         """
+        from core.shift import is_dispatchable
         pool = [
             o for o in self.list_operators(active_only=True)
-            if o.get("role_type") == "driver"
-            and o.get("status") in ("off_duty", "on_duty")
-            and not o.get("current_task_id")
+            if o.get("role_type") == "driver" and is_dispatchable(o)
         ]
 
         def rank(o):
@@ -69,10 +65,14 @@ class OperatorProvider(ABC):
         return sorted(pool, key=rank)
 
     def depot_standby_operators(self) -> list[dict]:
-        """總站待命人力（ADR-119，可調派各區支援）。"""
+        """總站待命人力（ADR-119/330，可調派各區支援）。
+
+        depot_standby 不綁班別、隨時機動：只要啟用中、無任務即可派——不再要求 DB status
+        == on_duty（seed 預設是 off_duty，舊判斷會讓這池永遠為空，需總部載車時派不到人）。
+        """
+        from core.shift import is_dispatchable
         return [o for o in self.list_operators(active_only=True)
-                if o.get("role_type") == "depot_standby"
-                and o.get("status") == "on_duty" and not o.get("current_task_id")]
+                if o.get("role_type") == "depot_standby" and is_dispatchable(o)]
 
 
 class FleetProvider(ABC):

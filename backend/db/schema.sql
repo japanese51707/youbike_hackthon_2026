@@ -222,3 +222,10 @@ CREATE TABLE IF NOT EXISTS dispatch_confirmations (
     confirmed_by TEXT NOT NULL,
     confirmed_at TEXT NOT NULL
 );
+
+-- ADR-330：任務單當日當班流水號計數器（產生 20260911-早001 這類人類可讀編號）。
+-- 鍵 = 日期(YYYYMMDD) + 班別代碼(早/晚/夜)；seq 每產一張單原子 +1，跨日跨班各自從 1 起算。
+CREATE TABLE IF NOT EXISTS task_seq (
+    seq_key TEXT PRIMARY KEY,     -- 例：20260911-早
+    seq     INTEGER NOT NULL      -- 目前已用到的最大流水號
+);

@@ -20,7 +20,34 @@ _COLUMNS = [
     "source_override_station_id", "cancel_reason", "cancelled_by", "assigned_at",
     "district", "assigned_vehicle", "vehicle_return_status", "resources_released",   # ADR-114：這趟任務的行政區 + 指派的調度車
     "onboard_start", "onboard_planned_end",   # ADR-123 車上載量（出車／計畫收車）
+    "shift",                                  # ADR-330 派工當下班別（供編號與顯示）
 ]
+
+
+# ADR-330：班別 → 編號用中文代碼
+_SHIFT_CODE = {"morning": "早", "evening": "晚", "night": "夜"}
+
+
+def next_task_id(shift: Optional[str] = None, now: Optional[_dt.datetime] = None) -> str:
+    """產生人類可讀的任務單編號：{YYYYMMDD}-{班別}{三位流水}，例：20260911-早001。
+
+    當日當班流水號存 task_seq 表，原子遞增（UPDATE ... 後讀回），跨日跨班各自從 1 起算。
+    須在寫入交易內呼叫（與任務落地同一交易），確保編號不重、不跳。
+    shift 未給時以現在班別推定；班別代碼查無則用 'X'。
+    """
+    from core.shift import current_shift
+    moment = now or _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
+    date_str = moment.strftime("%Y%m%d")
+    code = _SHIFT_CODE.get(shift or current_shift(moment) or "", "X")
+    key = f"{date_str}-{code}"
+    conn = get_connection()
+    # 原子遞增：先確保列存在，再 +1，最後讀回目前值（同一交易內，避免並發重號）。
+    conn.execute(
+        "INSERT INTO task_seq (seq_key, seq) VALUES (?, 0) "
+        "ON CONFLICT(seq_key) DO NOTHING", (key,))
+    conn.execute("UPDATE task_seq SET seq = seq + 1 WHERE seq_key = ?", (key,))
+    seq = conn.execute("SELECT seq FROM task_seq WHERE seq_key = ?", (key,)).fetchone()[0]
+    return f"{key}{seq:03d}"
 
 
 def _now() -> str:

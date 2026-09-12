@@ -69,8 +69,20 @@ def get_snapshot() -> dict:
 
 
 def get_recommendations(limit: int = 15, priority: Optional[str] = None) -> list[dict]:
-    """顯示用需調度清單（讀快取）。切 limit / 篩 priority 在讀取端做，不重算。"""
+    """顯示用需調度清單（讀快取）。切 limit / 篩 priority 在讀取端做，不重算。
+
+    ADR-330：剔除「已被進行中任務認領（pending）」的站——站一旦被派單，就不該再出現在
+    緊急/次安排清單（改到分派任務狀況頁追蹤）。認領狀態即時查（不受 60 秒快取延遲），
+    派單後立刻從清單消失。已完成的站規則引擎本就會判定不需調度而淡出。
+    """
     recs = get_snapshot()["recs"]
+    try:
+        from core.task_execution import station_claim_map
+        claimed = set(station_claim_map().keys())
+    except Exception:  # noqa: BLE001
+        claimed = set()
+    if claimed:
+        recs = [r for r in recs if str(r.get("station_id")) not in claimed]
     if priority:
         recs = [r for r in recs if r.get("priority_level") == priority]
     return recs[:limit]

@@ -156,6 +156,24 @@ def _attach_live_station_status(tasks: list[dict]) -> None:
             stop["live_total_docks"] = st.get("total_docks")
             stop["live_observed_at"] = st.get("observed_at") or st.get("timestamp")
 
+    # ADR-330：接空／滿站緊急時計（service_problems）——把「該站真正變空/滿的觸發時間」
+    # 附到對應停靠站，讓進行中任務卡的站點旁能顯示「已緊急 X 分」（與任務起始時間不同：
+    # 這是站況本身出事到現在多久，時鐘存後端 DB，前端只算差值，介面關掉後端仍持續計時）。
+    try:
+        from db import service_problems_repo
+        open_by_station = {str(r.get("station_id")): r for r in service_problems_repo.list_open()}
+    except Exception:  # noqa: BLE001
+        open_by_station = {}
+    if open_by_station:
+        for task in tasks:
+            for stop in task.get("route") or []:
+                if not isinstance(stop, dict):
+                    continue
+                incident = open_by_station.get(str(stop.get("station_id")))
+                if incident:
+                    stop["problem_opened_at"] = incident.get("opened_at")  # 觸發時間戳（後端算）
+                    stop["problem_kind"] = incident.get("kind")            # empty / full
+
 
 @router.get("/dispatch/overview")
 def overview():

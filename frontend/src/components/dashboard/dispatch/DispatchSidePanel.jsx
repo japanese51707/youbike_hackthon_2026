@@ -32,13 +32,8 @@ const STATUS_TONE = {
   full: { color: "var(--ct-danger)", label: "車位滿載" },
 };
 
-// 任務狀態生命週期（送出後可見的狀態改變，owner 第 3 點）。
-export const TRACK_STATUS = {
-  assigned: { color: "gold", label: "已送出・待接單" },
-  accepted: { color: "cyan", label: "司機已接" },
-  in_progress: { color: "blue", label: "執行中" },
-  completed: { color: "green", label: "完成" },
-};
+// ADR-330：任務追蹤分頁已移除——已派單的站從緊急/次安排清單過濾掉（後端 station_claim_map），
+// 進行中任務改到「分派任務狀況」頁追蹤，儀表板只保留緊急調度 / 次安排調度兩桶。
 
 // critical（含截斷 censored）＝最高緊急，緊急度直接呈現 100；warning 顯示其分數（若有）。
 // 合併卡片：一張卡同時呈現「站況警語（警報）」＋「該調度什麼（建議）」，最緊急排前。
@@ -167,51 +162,6 @@ function UrgencySection({ bucket, items, hint, nav, onPickStation, onFocus, onAc
   );
 }
 
-function TrackSection({ orders }) {
-  return (
-    <section className="deck-section">
-      <div className="deck-section-title">
-        進行中任務追蹤
-        <span className="deck-count">{orders.length} 單</span>
-      </div>
-      {orders.length ? (
-        <div className="deck-track-list">
-          {orders.map((o) => {
-            const meta = TRACK_STATUS[o.status] ?? TRACK_STATUS.assigned;
-            const done = o.stops.filter((s) => s.stop_status === "completed").length;
-            return (
-              <div key={o.order_id} className="deck-track-card">
-                <div className="deck-track-head">
-                  <Typography.Text className="deck-track-id mono">{o.order_id}</Typography.Text>
-                  <Tag color={meta.color}>{meta.label}</Tag>
-                </div>
-                <div className="deck-track-sub mono">
-                  {o.vehicle?.vehicle_id ?? "待指派車"}｜{o.stops.length} 站｜
-                  約 {o.estimate.totalMin} 分｜{o.estimate.distanceKm} km
-                </div>
-                <div className="deck-track-progress">
-                  {o.stops.map((s) => (
-                    <span
-                      key={s.seq}
-                      className={`deck-track-dot ${s.stop_status === "completed" ? "done" : ""}`}
-                      title={`${s.seq}. ${s.station_name}（${s.action} ${s.quantity}）`}
-                    />
-                  ))}
-                  <span className="deck-track-count mono">
-                    {done}/{o.stops.length}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚無送出的調度單" />
-      )}
-    </section>
-  );
-}
-
 // tab 標題：文字 + 數量 badge。
 function TabLabel({ text, count, dot }) {
   return (
@@ -244,7 +194,6 @@ export default function DispatchSidePanel({
   onDistrictChange,
   onPickStation,
   onFocus,
-  orders,
   apiMode = false,
 }) {
   const section = (bucket) => (
@@ -277,11 +226,6 @@ export default function DispatchSidePanel({
       key: SCHEDULED,
       label: <TabLabel text={TRIAGE_LABELS[SCHEDULED]} count={scheduled.length} />,
       children: section(SCHEDULED),
-    },
-    {
-      key: "track",
-      label: <TabLabel text="任務追蹤" count={orders?.length ?? 0} />,
-      children: <TrackSection orders={orders} />,
     },
   ];
 

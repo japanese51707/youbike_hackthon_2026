@@ -103,6 +103,41 @@ def allow_cross_district(now: Optional[_dt.datetime] = None) -> bool:
     return bool(s.get("allow_cross_district", True))
 
 
+def duty_status_of(operator: dict, now: Optional[_dt.datetime] = None) -> str:
+    """單一真相：一名人員此刻的「值勤三態」。呈現層與可派池共用同一判斷（ADR-330）。
+
+    回傳：
+      "busy"     任務中（有 current_task_id）→ 不可派
+      "on_duty"  閒置待命（當班且無任務，或總部待命 depot_standby 無任務）→ 可派
+      "off_duty" 未上班（非當班且無任務）→ 不可派
+
+    規則（優先看 shift 班別；沒排班則尊重 DB 的明確上班狀態，避免兩套判斷不一致造成
+    「顯示閒置卻派不出」）：
+      - 有 current_task_id → busy
+      - depot_standby（不綁班別，隨時機動）→ on_duty
+      - 有 shift 欄位：shift == 當前班別 → on_duty；否則 off_duty（依排班自動上下線）
+      - 無 shift 欄位（未排班）：尊重 DB status——明確 on_duty 才算閒置可派，否則 off_duty
+    """
+    if operator.get("current_task_id"):
+        return "busy"
+    if operator.get("role_type") == "depot_standby":
+        return "on_duty"
+    shift = operator.get("shift")
+    if shift:
+        return "on_duty" if shift == current_shift(now) else "off_duty"
+    # 未排班：尊重明確上班狀態（手動上班 set_duty / 測試 put_drivers_on_duty）
+    return "on_duty" if operator.get("status") == "on_duty" else "off_duty"
+
+
+def is_dispatchable(operator: dict, now: Optional[_dt.datetime] = None) -> bool:
+    """此人此刻是否可被自動／手動派單：啟用中 + 具執行角色 + 值勤三態為閒置(on_duty)。"""
+    if not operator.get("is_active", True):
+        return False
+    if operator.get("role_type") not in ("driver", "depot_standby"):
+        return False
+    return duty_status_of(operator, now) == "on_duty"
+
+
 def check_labor(work_minutes: float) -> dict:
     """勞基法工時檢查（ADR-116）。
 

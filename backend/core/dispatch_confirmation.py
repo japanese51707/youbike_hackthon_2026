@@ -75,7 +75,10 @@ def _confirm(submitted, operator, snapshots):
                     or current["observed_at"] != stop.get("observed_at")):
                 raise DispatchConflict("站點觀測已更新，請重新預覽")
     from core.dispatcher import _persist_trip
-    trip = {**draft, "trip_id": draft_id.replace("DRAFT-", "TRIP-", 1)}
+    from db import tasks_repo
+    # ADR-330：改用人類可讀編號（20260911-早001）。冪等由上方收據保證——同一 draft 重送
+    # 會先命中 receipt 直接回傳，不會再進到這裡產生第二個編號。編號在寫入交易內原子遞增。
+    trip = {**draft, "trip_id": tasks_repo.next_task_id(draft.get("shift"))}
     _persist_trip(trip)
     receipt = {"draft_id": draft_id, "version": version, "fingerprint": digest,
                "task_id": trip["trip_id"], "confirmed_by": operator,

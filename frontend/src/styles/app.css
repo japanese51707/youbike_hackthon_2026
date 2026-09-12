@@ -3833,3 +3833,83 @@ body.rider-phone-preview .rider-page {
 .dts-route-map { height: 460px; border-radius: 10px; overflow: hidden; border: 1px solid var(--ct-border); display: flex; }
 .dts-route-map > .shared-map { flex: 1 1 auto; min-width: 0; }
 .dts-route-map-empty { flex: 1; display: grid; place-items: center; color: var(--ct-text-dim); font-size: 13px; }
+
+/* ADR-330：進行中任務看板——左任務列表 + 右選中任務地圖與詳情 */
+.dts-board {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.dts-board-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 620px;
+  overflow-y: auto;
+}
+.dts-board-item {
+  text-align: left;
+  border: 1px solid var(--ct-border);
+  border-radius: 10px;
+  background: var(--ct-panel);
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dts-board-item:hover { background: var(--ct-bg-soft); }
+.dts-board-item.is-selected {
+  border-color: var(--ct-primary);
+  box-shadow: 0 0 0 1px var(--ct-primary) inset;
+}
+.dts-board-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.dts-board-item-id { font-size: 13px; font-weight: 700; }
+.dts-board-item-sub { font-size: 11px; margin-top: 3px; }
+.dts-board-detail { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.dts-board-map-wrap {
+  height: 340px;
+  border: 1px solid var(--ct-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.dts-board-map { width: 100%; height: 100%; }
+.dts-stop-problem { margin-top: 3px; }
+
+@media (max-width: 900px) {
+  .dts-board { grid-template-columns: 1fr; }
+  .dts-board-list { max-height: 180px; flex-direction: row; overflow-x: auto; }
+  .dts-board-item { min-width: 200px; }
+}
+
+/* ADR-330：人力配置視圖——四類資源顏色分類卡 */
+.dts-class-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+.dts-class-card {
+  border: 1px solid var(--ct-border);
+  border-top: 3px solid var(--dts-accent, var(--ct-border));
+}
+.dts-class-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.dts-class-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.dts-count-idle { color: #22c55e; font-weight: 600; }
+.dts-count-busy { color: #3b82f6; font-weight: 600; }
+.dts-count-off { color: var(--ct-text-secondary); }
