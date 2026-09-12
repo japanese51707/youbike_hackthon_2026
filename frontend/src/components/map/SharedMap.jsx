@@ -7,6 +7,7 @@ import {
 } from "../../config/mapConfig.js";
 import { createBasemapStyle } from "../../config/darkBasemapStyle.js";
 import { createNoBasemapStyle } from "../../config/noBasemapStyle.js";
+import { createRasterBasemapStyle } from "../../config/rasterBasemapStyle.js";
 import { useAppearance } from "../../theme/ThemeProvider.jsx";
 import { applyMapAppearance } from "./applyMapAppearance.js";
 import BasemapStatus from "./BasemapStatus.jsx";
@@ -90,6 +91,9 @@ export default function SharedMap({
     let styleReady = false;
     let map;
     let overlay;
+    // ADR-314 底圖兩段式 fallback：主底圖(OpenFreeMap vector) 失敗 → raster(OSM) → no-basemap。
+    // "none"=用主底圖；"raster"=已切 raster 備案；"nobasemap"=兩者皆失敗退純色。
+    let fallbackStage = startsOffline ? "nobasemap" : "none";
 
     const clearStyleLoadTimer = () => {
       if (styleLoadTimer) {
@@ -111,8 +115,9 @@ export default function SharedMap({
       clearResourceLoadTimer();
       resetResourceErrors();
     };
-    const switchToNoBasemap = (reason) => {
-      if (disposed || fallbackAppliedRef.current || !map) return;
+    // 最終備案：退到本地純色 no-basemap（deck.gl 站點層仍運作）。
+    const applyNoBasemap = (reason) => {
+      fallbackStage = "nobasemap";
       fallbackAppliedRef.current = true;
       clearRuntimeTimers();
       setFallbackReason(reason);
@@ -122,6 +127,37 @@ export default function SharedMap({
       } catch {
         setFallbackReason("本地 no-basemap 初始化失敗");
         setBasemapStatus("map-unavailable");
+      }
+    };
+
+    // ADR-314 兩段式：主底圖失敗先切 raster 備案；raster 也失敗才退 no-basemap。
+    const switchToNoBasemap = (reason) => {
+      if (disposed || !map) return;
+      if (fallbackStage === "none") {
+        // 第一次失敗（主底圖 OpenFreeMap）→ 切 raster 備案，重新給它一輪載入時間。
+        fallbackStage = "raster";
+        fallbackAppliedRef.current = false;   // raster 仍是「有底圖」狀態，讓載入監測重新計時
+        styleReady = false;
+        resetResourceErrors();
+        clearStyleLoadTimer();
+        clearResourceLoadTimer();
+        setFallbackReason(`主底圖不可用（${reason}），改用備援街道圖`);
+        setBasemapStatus("loading");
+        try {
+          map.setStyle(createRasterBasemapStyle(modeRef.current));
+          // 給 raster 一輪 style 載入逾時（raster 輕，通常很快）
+          styleLoadTimer = window.setTimeout(
+            () => applyNoBasemap("備援街道圖載入逾時"),
+            mapConfig.styleLoadTimeoutMs,
+          );
+        } catch {
+          applyNoBasemap("備援街道圖初始化失敗");
+        }
+        return;
+      }
+      if (fallbackStage === "raster") {
+        // raster 備案又失敗 → 最終退 no-basemap。
+        applyNoBasemap(reason);
       }
     };
     const transformRequest = (url) => {
@@ -184,6 +220,14 @@ export default function SharedMap({
         ensureOverlay();
         return;
       }
+      // ADR-314：raster 備案的 style 載成功（切 style 不會再觸發 map 'load' 事件），
+      // 直接就緒——raster 圖磚會陸續載入，deck.gl 站點層此時已可疊上。保留「備援街道圖」提示。
+      if (fallbackStage === "raster") {
+        clearResourceLoadTimer();
+        ensureOverlay();
+        setBasemapStatus("ready");
+        return;
+      }
       clearResourceLoadTimer();
       resourceLoadTimer = window.setTimeout(
         () => switchToNoBasemap("底圖資源載入逾時"),
@@ -209,7 +253,7 @@ export default function SharedMap({
     const handleMapError = () => {
       if (fallbackAppliedRef.current) return;
       if (!styleReady) {
-        switchToNoBasemap("OpenFreeMap style 載入失敗");
+        switchToNoBasemap(fallbackStage === "raster" ? "備援街道圖 style 載入失敗" : "OpenFreeMap style 載入失敗");
         return;
       }
 
