@@ -121,9 +121,10 @@ export async function getBackendDashboard() {
   const fallbackPoint = pickWeatherPoint([]);
   const [stationsResult, recs, alerts, kpi, vehicles, weather, tasks] = await Promise.all([
     settle(fetchBackendStations()),
-    // 需調度清單抓 200（空/滿站緊急度 100 的站不漏；main 側口徑）
-    settle(request("/dispatch/recommendations?limit=200")),
-    settle(request("/alerts")),
+    // 需調度清單抓 200（空/滿站緊急度 100 的站不漏）。後端要對全市站跑規則引擎算緊急度，
+    // 冷啟動較久，timeout 拉高到 45s，避免首次載入被 20s 預設砍掉而清單全空。
+    settle(request("/dispatch/recommendations?limit=200", { timeoutMs: 45000 })),
+    settle(request("/alerts", { timeoutMs: 45000 })),
     settle(request("/kpi")),
     settle(request("/vehicles")),
     settle(
