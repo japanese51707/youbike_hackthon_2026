@@ -69,6 +69,7 @@
 | [ADR-313](ADR-313-需調度清單背景預算快取.md) | 需調度清單背景預算快取（顯示讀快取，派工維持即時） | accepted | dispatch, api, performance | 背景每60秒預算全量build_dispatch_list進TTL快取,recommendations/alerts/escalations讀快取(14-32s→1s),派工端口維持即時;config開關+僅真實源 |
 | [ADR-312](ADR-312-班別人力配置與雲端固定位址.md) | 班別人力配置（三班×行政區）與雲端固定位址 | accepted | dispatch, data, database, deployment | 人力分早40/晚35/夜25三班,班內依行政區工作量配額;operators加shift欄;seed依行政區×班別分派;雲端 NLB+Elastic IP 固定位址(task重啟不變),workforce json 進 image 讓雲端分派生效 |
 | [ADR-314](ADR-314-前端同源上雲.md) | 前端與後端同源上雲 | accepted | deployment, frontend, api, security | ECS 同一 image 出 SPA；`http://54.227.205.77:8000/` 畫面、`/api/v1` API；不另開公開 S3／CloudFront |
+| [ADR-317](ADR-317-git-push自動部署ECS.md) | push main 自動部署同源前後端 | accepted | deployment, security | GitHub Actions 建同一 image → ECR → ECS；觸發僅 `main` 與手動按鈕；憑證走 GitHub Secrets |
 | [ADR-310](ADR-310-自動偵測調度完成.md) | 自動偵測調度完成（免人工回報，達標即結） | accepted | dispatch, data, backend | 背景輪詢即時站況，進行中任務待處理站達派工目標（補車升/取車降逼近 target+最小變化量濾波動）即自動標記完成、推進、結案，複用 report_station(auto=True)；不論車誰移動達目標即需求消化；config 開關+僅真實源啟用；待 owner 核准 |
 
 ## 新決策流程
