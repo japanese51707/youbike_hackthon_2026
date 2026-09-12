@@ -74,6 +74,40 @@ def unacked_station_levels() -> set:
     return {(r["station_id"], r["level"]) for r in rows}
 
 
+def resolve_stale_by_station(active_station_ids: set,
+                             status_by_id: Optional[dict] = None) -> int:
+    """清除過時警報（保持警報反映即時狀況），兩種情形：
+
+    1. 站況已恢復：station_id 不在 active_station_ids（本輪不再需要警示）。
+    2. 訊息與現況矛盾：訊息寫「已空站」但現況非 empty、或寫「已滿站」但現況非 full。
+
+    ★含已讀警報一併清除：站況已恢復的已讀警報留著只會在警報區誤導（顯示「已空站」
+      但現況正常），沒有有效稽核意義。稽核軌跡另由 audit log 保留。
+    回傳清除筆數。
+    """
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT alert_id, station_id, message FROM alerts").fetchall()
+    status_by_id = status_by_id or {}
+    stale_ids = []
+    for r in rows:
+        if r["station_id"] not in active_station_ids:
+            stale_ids.append(r["alert_id"])
+            continue
+        status = status_by_id.get(r["station_id"])
+        msg = r["message"] or ""
+        if status is not None and (
+            ("已空站" in msg and status != "empty")
+            or ("已滿站" in msg and status != "full")
+        ):
+            stale_ids.append(r["alert_id"])
+    if stale_ids:
+        conn.executemany("DELETE FROM alerts WHERE alert_id = ?",
+                         [(aid,) for aid in stale_ids])
+        conn.commit()
+    return len(stale_ids)
+
+
 # ── alert_subscriptions ──
 def insert_subscription(sub: dict) -> None:
     conn = get_connection()

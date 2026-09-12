@@ -1,12 +1,14 @@
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import * as maplibregl from "maplibre-gl";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   isAllowedBasemapRequest,
   mapConfig,
 } from "../../config/mapConfig.js";
-import { createDarkBasemapStyle } from "../../config/darkBasemapStyle.js";
+import { createBasemapStyle } from "../../config/darkBasemapStyle.js";
 import { createNoBasemapStyle } from "../../config/noBasemapStyle.js";
+import { useAppearance } from "../../theme/ThemeProvider.jsx";
+import { applyMapAppearance } from "./applyMapAppearance.js";
 import BasemapStatus from "./BasemapStatus.jsx";
 
 const BLOCKED_RESOURCE_URL = "data:application/octet-stream;base64,";
@@ -46,15 +48,24 @@ export default function SharedMap({
   layers,
   overlay = null,
 }) {
+  const { mode, colors } = useAppearance();
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const themedTooltip = useCallback((info) => {
+    const result = getTooltip?.(info);
+    if (!result) return null;
+    const content = typeof result === "string" ? { text: result } : result;
+    return { ...content, style: { ...content.style, background: colors.overlay, color: colors.text, border: `1px solid ${colors.border}`, borderRadius: "10px", padding: "10px 12px", boxShadow: `0 4px 16px ${colors.shadow}` } };
+  }, [getTooltip, colors]);
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const overlayRef = useRef(null);
-  const overlayPropsRef = useRef({ layers, getTooltip });
+  const overlayPropsRef = useRef({ layers, getTooltip: themedTooltip });
   const fallbackAppliedRef = useRef(false);
   const [basemapStatus, setBasemapStatus] = useState("loading");
   const [fallbackReason, setFallbackReason] = useState(null);
 
-  overlayPropsRef.current = { layers, getTooltip };
+  overlayPropsRef.current = { layers, getTooltip: themedTooltip };
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
@@ -99,7 +110,7 @@ export default function SharedMap({
       setFallbackReason(reason);
       setBasemapStatus("no-basemap");
       try {
-        map.setStyle(createNoBasemapStyle());
+        map.setStyle(createNoBasemapStyle(modeRef.current));
       } catch {
         setFallbackReason("本地 no-basemap 初始化失敗");
         setBasemapStatus("map-unavailable");
@@ -116,7 +127,7 @@ export default function SharedMap({
     try {
       map = new maplibregl.Map({
         container: containerRef.current,
-        style: startsOffline ? createNoBasemapStyle() : createDarkBasemapStyle(),
+        style: startsOffline ? createNoBasemapStyle(modeRef.current) : createBasemapStyle(modeRef.current),
         center: [initialViewState.longitude, initialViewState.latitude],
         zoom: initialViewState.zoom,
         bearing: initialViewState.bearing ?? 0,
@@ -158,6 +169,7 @@ export default function SharedMap({
     };
 
     const handleStyleLoad = () => {
+      applyMapAppearance(map, modeRef.current, fallbackAppliedRef.current);
       styleReady = true;
       clearStyleLoadTimer();
       if (fallbackAppliedRef.current) {
@@ -231,8 +243,12 @@ export default function SharedMap({
   ]);
 
   useEffect(() => {
-    overlayRef.current?.setProps({ layers, getTooltip });
-  }, [getTooltip, layers]);
+    overlayRef.current?.setProps({ layers, getTooltip: themedTooltip });
+  }, [themedTooltip, layers]);
+
+  useEffect(() => {
+    if (mapRef.current) applyMapAppearance(mapRef.current, mode, fallbackAppliedRef.current);
+  }, [mode]);
 
   // 外部（例如缺口排行榜）觸發平滑飛越到指定站點。
   useEffect(() => {

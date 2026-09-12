@@ -4,23 +4,23 @@ import {
   CheckCircleOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Button, Empty, Tag, Typography } from "antd";
+import { Badge, Button, Empty, Tabs, Tag, Typography } from "antd";
 
 // 調度面板・待命態（ADR-206）：警報區 / 需調度清單（緊急站排行，缺口榜併入）/ 執行追蹤。
 // 純呈現元件，資料與動作由 DashboardPage 提供；不進後端 payload。
 
 const ALERT_LEVEL = {
-  critical: { color: "#ff6b6b", label: "緊急" },
-  warning: { color: "#ffa94d", label: "警告" },
-  info: { color: "#4dabf7", label: "提示" },
+  critical: { color: "var(--ct-danger)", label: "緊急" },
+  warning: { color: "var(--ct-warning)", label: "警告" },
+  info: { color: "var(--ct-info)", label: "提示" },
 };
 
 const STATUS_TONE = {
-  empty: { color: "#ff6b6b", label: "空站" },
-  low: { color: "#ffa94d", label: "偏低" },
-  normal: { color: "#38d9a9", label: "正常" },
-  high: { color: "#4dabf7", label: "偏高" },
-  full: { color: "#9775fa", label: "滿站" },
+  empty: { color: "var(--ct-danger)", label: "無車可借" },
+  low: { color: "var(--ct-warning)", label: "偏低" },
+  normal: { color: "var(--ct-success)", label: "正常" },
+  high: { color: "var(--ct-warning)", label: "偏高" },
+  full: { color: "var(--ct-danger)", label: "車位滿載" },
 };
 
 // 任務狀態生命週期（送出後可見的狀態改變，owner 第 3 點）。
@@ -31,7 +31,14 @@ export const TRACK_STATUS = {
   completed: { color: "green", label: "完成" },
 };
 
-function AlertsSection({ alerts, onAcknowledge, onEmergency }) {
+// critical（含截斷 censored）＝最高緊急，緊急度直接呈現 100；warning 顯示其分數（若有）。
+function alertUrgency(a) {
+  if (a.level === "critical") return 100;
+  if (Number.isFinite(Number(a.priority_score))) return Math.round(Number(a.priority_score));
+  return null;
+}
+
+function AlertsSection({ alerts, onAcknowledge, onEmergency, onFocusAlert }) {
   const sorted = [...(alerts ?? [])].sort((a, b) => {
     const rank = { critical: 0, warning: 1, info: 2 };
     return (rank[a.level] ?? 3) - (rank[b.level] ?? 3);
@@ -47,11 +54,27 @@ function AlertsSection({ alerts, onAcknowledge, onEmergency }) {
         <div className="deck-alert-list">
           {sorted.map((a) => {
             const meta = ALERT_LEVEL[a.level] ?? ALERT_LEVEL.info;
+            const urgency = alertUrgency(a);
             return (
-              <div key={a.alert_id} className={`deck-alert deck-alert-${a.level}`}>
+              <div
+                key={a.alert_id}
+                className={`deck-alert deck-alert-${a.level}`}
+                role="button"
+                tabIndex={0}
+                title="點擊定位到此站"
+                onClick={() => onFocusAlert?.(a)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") onFocusAlert?.(a);
+                }}
+              >
                 <div className="deck-alert-head">
                   <span className="deck-alert-dot" style={{ background: meta.color }} />
                   <Typography.Text className="deck-alert-name">{a.station_name}</Typography.Text>
+                  {urgency != null ? (
+                    <span className="deck-alert-urgency mono" style={{ color: meta.color }}>
+                      緊急度 {urgency}
+                    </span>
+                  ) : null}
                   <Tag color={a.level === "critical" ? "red" : a.level === "warning" ? "orange" : "blue"}>
                     {meta.label}
                   </Tag>
@@ -64,13 +87,23 @@ function AlertsSection({ alerts, onAcknowledge, onEmergency }) {
                       size="small"
                       danger
                       icon={<ThunderboltOutlined />}
-                      onClick={() => onEmergency?.(a)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEmergency?.(a);
+                      }}
                     >
                       緊急出車
                     </Button>
                   ) : null}
                   {!a.acknowledged ? (
-                    <Button size="small" type="text" onClick={() => onAcknowledge?.(a.alert_id)}>
+                    <Button
+                      size="small"
+                      type="text"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAcknowledge?.(a.alert_id);
+                      }}
+                    >
                       標記已讀
                     </Button>
                   ) : null}
@@ -103,19 +136,31 @@ function UrgencySection({ items, onPickStation, onFocus }) {
                 key={item.station.station_id}
                 className="deck-urgency-row"
                 onClick={() => onPickStation?.(item.station)}
-                title="點擊以此站組單（站找車）"
+                title={item.reason || "點擊以此站組單（站找車）"}
               >
                 <span className="deck-urgency-score mono" style={{ color: tone.color }}>
-                  {Math.round(item.urgency)}
+                  {item.urgencyTier === "censored" ? 100 : Math.round(item.urgency)}
                 </span>
                 <span className="deck-urgency-main">
-                  <span className="deck-urgency-name">{item.station.station_name}</span>
+                  <span className="deck-urgency-name">
+                    {item.station.station_name}
+                    {item.predictionStatus === "degraded" ? (
+                      <Tag color="default" style={{ marginLeft: 6, fontSize: 11 }}>
+                        緊急度：即時降級
+                      </Tag>
+                    ) : null}
+                  </span>
                   <span className="deck-urgency-sub mono">
                     {item.station.district}｜{tone.label}｜{item.action} {item.quantity} 台
-                    {Number.isFinite(Number(item.predicted))
-                      ? `｜到達時 ${item.predicted} 台`
-                      : ""}
+                    {Number.isFinite(Number(item.targetAvailable))
+                      ? `｜補到 ${item.targetAvailable} 台`
+                      : Number.isFinite(Number(item.predicted))
+                        ? `｜到達時 ${item.predicted} 台`
+                        : ""}
                   </span>
+                  {item.reason ? (
+                    <span className="deck-urgency-reason">{item.reason}</span>
+                  ) : null}
                 </span>
                 <span
                   className="deck-icon-btn"
@@ -185,22 +230,77 @@ function TrackSection({ orders }) {
   );
 }
 
+// tab 標題：文字 + 數量 badge。
+function TabLabel({ text, count, dot }) {
+  return (
+    <span className="deck-tab-label">
+      {text}
+      {count > 0 ? (
+        <Badge
+          count={count}
+          size="small"
+          color={dot === "danger" ? "var(--ct-danger)" : undefined}
+          style={dot === "danger" ? undefined : { backgroundColor: "#4a5568" }}
+        />
+      ) : null}
+    </span>
+  );
+}
+
 export default function DispatchSidePanel({
   alerts,
   onAcknowledge,
   onEmergency,
+  onFocusAlert,
   urgencyItems,
   onPickStation,
   onFocus,
   orders,
+  apiMode = false,
 }) {
+  const unreadAlerts = (alerts ?? []).filter((a) => !a.acknowledged).length;
+  const criticalCount = (alerts ?? []).filter((a) => a.level === "critical").length;
+
+  const tabItems = [
+    {
+      key: "alerts",
+      label: <TabLabel text="警報區" count={unreadAlerts} dot={criticalCount > 0 ? "danger" : undefined} />,
+      children: (
+        <AlertsSection
+          alerts={alerts}
+          onAcknowledge={onAcknowledge}
+          onEmergency={onEmergency}
+          onFocusAlert={onFocusAlert}
+        />
+      ),
+    },
+    {
+      key: "urgency",
+      label: <TabLabel text="需調度清單" count={urgencyItems?.length ?? 0} dot="danger" />,
+      children: (
+        <UrgencySection items={urgencyItems} onPickStation={onPickStation} onFocus={onFocus} />
+      ),
+    },
+    {
+      key: "track",
+      label: <TabLabel text="任務追蹤" count={orders?.length ?? 0} />,
+      children: <TrackSection orders={orders} />,
+    },
+  ];
+
   return (
     <div className="dispatch-deck">
-      <AlertsSection alerts={alerts} onAcknowledge={onAcknowledge} onEmergency={onEmergency} />
-      <UrgencySection items={urgencyItems} onPickStation={onPickStation} onFocus={onFocus} />
-      <TrackSection orders={orders} />
+      <Tabs
+        className="deck-tabs"
+        defaultActiveKey="alerts"
+        size="small"
+        items={tabItems}
+      />
       <div className="deck-foot">
-        <CheckCircleOutlined /> 調度車位置與執行進度為 Mock 示意；送出僅本機展示，不寫入後端。
+        <CheckCircleOutlined />{" "}
+        {apiMode
+          ? "站況、建議、警示與任務皆來自後端；確認派發會寫入後端派工。"
+          : "調度車位置與執行進度為 Mock 示意；送出僅本機展示，不寫入後端。"}
       </div>
     </div>
   );

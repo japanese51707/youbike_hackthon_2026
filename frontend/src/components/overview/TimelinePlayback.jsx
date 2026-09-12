@@ -1,10 +1,11 @@
 import { Card, Empty, Slider, Tag, Typography } from "antd";
 import { useCallback, useMemo, useState } from "react";
+import StationLegend from "../map/StationLegend.jsx";
 import SharedMap from "../map/SharedMap.jsx";
 import { createStationLayer } from "../map/layers/stationLayers.js";
 import presentationConfig from "../../config/presentation.json";
 import { stationStatusLabels } from "../../utils/formatters.js";
-import { stationStatusColors } from "../../utils/mapPresentation.js";
+import { getStationColor } from "../../utils/mapPresentation.js";
 
 export default function TimelinePlayback({ timeline, stations }) {
   const [frameIndex, setFrameIndex] = useState(0);
@@ -26,8 +27,7 @@ export default function TimelinePlayback({ timeline, stations }) {
       createStationLayer({
         id: `timeline-stations-${frameIndex}`,
         data: frameStations,
-        getColor: (station) =>
-          stationStatusColors[station.status] ?? presentationConfig.fallbackColor,
+        getColor: getStationColor,
         radiusPixels: presentationConfig.markers.timelineRadiusPixels,
       }),
     ],
@@ -64,6 +64,7 @@ export default function TimelinePlayback({ timeline, stations }) {
         initialViewState={presentationConfig.maps.timeline}
         layers={layers}
         getTooltip={getTooltip}
+        overlay={<StationLegend />}
       />
     </Card>
   );

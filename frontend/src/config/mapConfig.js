@@ -1,7 +1,7 @@
-// 共用地圖遠端邊界：底圖 style 改為自帶暗色 style（ADR-204），
+// 共用地圖遠端邊界：底圖使用自帶日夜 style（ADR-208），
 // 但所有 tile／glyph／sprite 仍鎖 OpenFreeMap 同源；此處集中出向 allowlist 與 attribution。
 export const mapConfig = Object.freeze({
-  // 僅作為 origin allowlist 與相對 URL 解析的基準；實際 style 由 createDarkBasemapStyle() 提供。
+  // 僅作為 origin allowlist 與相對 URL 解析的基準；實際 style 由 createBasemapStyle() 提供。
   styleBaseUrl: "https://tiles.openfreemap.org/",
   allowedOrigins: Object.freeze(["https://tiles.openfreemap.org"]),
   styleLoadTimeoutMs: 15000,

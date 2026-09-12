@@ -1,8 +1,18 @@
 {
   "maps": {
-    "dashboard": { "longitude": 121.49, "latitude": 25.015, "zoom": 11 },
-    "route": { "zoom": 12 },
-    "timeline": { "longitude": 121.497, "latitude": 24.994, "zoom": 14 }
+    "dashboard": {
+      "longitude": 121.49,
+      "latitude": 25.015,
+      "zoom": 11
+    },
+    "route": {
+      "zoom": 12
+    },
+    "timeline": {
+      "longitude": 121.497,
+      "latitude": 24.994,
+      "zoom": 14
+    }
   },
   "markers": {
     "stationRadiusPixels": 9,
@@ -11,10 +21,10 @@
     "fillOpacity": 0.85
   },
   "route": {
-    "lineColor": "#38d9a9",
+    "lineColor": "#c17b25",
     "lineWidthPixels": 4,
-    "completedColor": "#38d9a9",
-    "pendingColor": "#ffa94d"
+    "completedColor": "#789449",
+    "pendingColor": "#d9a03d"
   },
   "layers": {
     "voronoiOpacity": 0.16,
@@ -23,32 +33,72 @@
     "hexagonRadiusMeters": 700,
     "hexagonElevationScale": 14,
     "hexagonColorRange": [
-      [14, 30, 54],
-      [23, 58, 92],
-      [30, 96, 130],
-      [45, 171, 247],
-      [56, 217, 169],
-      [140, 233, 154]
+      [
+        232,
+        224,
+        197
+      ],
+      [
+        217,
+        204,
+        146
+      ],
+      [
+        192,
+        187,
+        113
+      ],
+      [
+        149,
+        161,
+        93
+      ],
+      [
+        104,
+        132,
+        78
+      ],
+      [
+        70,
+        104,
+        70
+      ]
     ],
     "arcWidthMinPixels": 2,
     "arcWidthScale": 0.5,
-    "arcSourceColor": "#ffa94d",
-    "arcTargetColor": "#38d9a9",
+    "arcSourceColor": "#d7963c",
+    "arcTargetColor": "#73965d",
     "arcHeight": 0.35
   },
-  "fallbackColor": "#495057",
+  "fallbackColor": "#858783",
   "statusColors": {
-    "empty": "#c92a2a",
-    "low": "#f08c00",
-    "normal": "#2b8a3e",
-    "high": "#1971c2",
-    "full": "#6741d9"
+    "offline": "#858783",
+    "empty": "#ff9819",
+    "low": "#87ce24",
+    "normal": "#87ce24",
+    "high": "#87ce24",
+    "full": "#bd2823"
   },
   "usageBands": [
-    { "max": 10, "color": "#c92a2a" },
-    { "max": 30, "color": "#f08c00" },
-    { "max": 70, "color": "#2b8a3e" },
-    { "max": 99.9, "color": "#1971c2" },
-    { "max": 100, "color": "#6741d9" }
+    {
+      "max": 10,
+      "color": "#b77522"
+    },
+    {
+      "max": 30,
+      "color": "#d8ac54"
+    },
+    {
+      "max": 70,
+      "color": "#879b55"
+    },
+    {
+      "max": 99.9,
+      "color": "#6b9290"
+    },
+    {
+      "max": 100,
+      "color": "#456d76"
+    }
   ]
 }

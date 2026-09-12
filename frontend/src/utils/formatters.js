@@ -61,12 +61,12 @@ export function formatStationTime(station, { withSeconds = true } = {}) {
 }
 
 export const stationStatusLabels = {
-  offline: "停用／離線",
-  empty: "空站",
+  offline: "暫停營運",
+  empty: "無車可借",
   low: "偏低",
   normal: "正常",
   high: "偏高",
-  full: "滿站",
+  full: "車位滿載",
 };
 
 export const terrainLabels = {

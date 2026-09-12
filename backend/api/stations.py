@@ -128,6 +128,7 @@ def _build_prediction(station):
         return {**base, "source": intervals[0].source, "status": getattr(multi, "status", "ready"),
                 "model_version": getattr(multi, "model_version", None),
                 "missing_features": getattr(multi, "missing_features", []),
+                "lag_source": getattr(multi, "lag_source", None),
                 "horizons": [{**vars(iv), "predict_target_time": (anchor + timedelta(minutes=iv.horizon_minutes)).isoformat()}
                              for iv in intervals]}
     except (NotImplementedError, ValueError, OSError, KeyError, TypeError):

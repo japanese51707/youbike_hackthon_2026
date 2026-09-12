@@ -53,9 +53,12 @@ def validate_resources(trip, exclude=None):
         raise DispatchConflict("車輛不存在、停用或目前不可派遣")
     if vehicle.get("current_task_id") not in (None, exclude):
         raise DispatchConflict("車輛已有任務")
-    if (not operator or not operator["is_active"] or operator.get("status") != "on_duty"
+    # 司機不常態待命：派到任務當下才上工，故確認時允許 off_duty（落地會轉 busy + 帶行政區）。
+    # 仍排除已在忙碌/休息中占用（busy/resting）與非執行角色。
+    if (not operator or not operator["is_active"]
+            or operator.get("status") not in {"off_duty", "on_duty"}
             or operator.get("role_type") not in {"driver", "depot_standby"}):
-        raise DispatchConflict("人員不存在、停用、未值勤或不具調度車執行角色")
+        raise DispatchConflict("人員不存在、停用、狀態不可指派或不具調度車執行角色")
     if operator.get("current_task_id") not in (None, exclude):
         raise DispatchConflict("人員已有任務")
     for task in occupied_tasks(exclude):

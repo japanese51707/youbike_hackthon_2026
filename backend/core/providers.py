@@ -48,6 +48,26 @@ class OperatorProvider(ABC):
                 out.append(o)
         return out
 
+    def assignable_operators(self, district: Optional[str] = None) -> list[dict]:
+        """可指派的司機（不要求先值勤）：啟用中、driver 角色、未占用任務，
+        含 off_duty（司機不常態待命，派到任務當下才上工）。
+
+        依優先序排：① 目前作業區＝目標區者優先；② 其次以 operator_id 穩定排序。
+        同一層級分數相同時，前端可自行改選（回傳順序即建議順序）。
+        """
+        pool = [
+            o for o in self.list_operators(active_only=True)
+            if o.get("role_type") == "driver"
+            and o.get("status") in ("off_duty", "on_duty")
+            and not o.get("current_task_id")
+        ]
+
+        def rank(o):
+            same_district = 0 if (district and o.get("current_district") == district) else 1
+            return (same_district, str(o.get("operator_id")))
+
+        return sorted(pool, key=rank)
+
     def depot_standby_operators(self) -> list[dict]:
         """總站待命人力（ADR-119，可調派各區支援）。"""
         return [o for o in self.list_operators(active_only=True)

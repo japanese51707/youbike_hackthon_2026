@@ -13,6 +13,9 @@ import { resetDemoData } from "../../api/operationsApi.js";
 import { useEffect, useState } from "react";
 import { isApiMode, request, getActorId, setActorId } from "../../api/httpClient.js";
 
+import AppearanceControl from "./AppearanceControl.jsx";
+import brandLogo from "../../assets/brand/youbike-logo.png";
+
 const navigation = [
   { key: "/dashboard", icon: <DashboardOutlined />, label: "調度面板" },
   { key: "/driver", icon: <MobileOutlined />, label: "司機手機端" },
@@ -42,10 +45,10 @@ export default function AppShell({ children }) {
       {contextHolder}
       <header className="topbar">
         <Space className="brand" size={10}>
-          <span className="brand-mark">Ub</span>
+          <span className="brand-logo"><img src={brandLogo} alt="YouBike" width="92" height="54" /></span>
           <div>
-            <Typography.Title level={4}>YouBike 智慧調度</Typography.Title>
-            <Typography.Text>決策支援展示介面</Typography.Text>
+            <Typography.Title level={4}>智慧調度</Typography.Title>
+            <Typography.Text>新北市・讓每一站，剛剛好</Typography.Text>
           </div>
         </Space>
         <Menu
@@ -55,7 +58,9 @@ export default function AppShell({ children }) {
           items={navigation}
           onClick={({ key }) => navigate(key)}
         />
-        <Space className="demo-actions">
+        <div className="header-tools">
+          <AppearanceControl />
+          <Space className="demo-actions">
           <Tag color={isApiMode ? "cyan" : "gold"}>{isApiMode ? "後端連線 · 受控 Demo" : "MOCK DEMO"}</Tag>
           {isApiMode && <Select showSearch optionFilterProp="label" aria-label="操作身分"
             placeholder={operatorError || "選擇操作身分"} value={getActorId() || undefined} style={{ width: 185 }}
@@ -69,6 +74,7 @@ export default function AppShell({ children }) {
             {isApiMode ? "重新整理" : "重置"}
           </Button>
         </Space>
+        </div>
       </header>
       <div className="mock-notice">
         {isApiMode && location.pathname !== "/twin"

@@ -1,33 +1,14 @@
-// 自帶（bundle 於前端）的暗色骨架化 MapLibre style（ADR-204）。
-// 所有 source／glyph／sprite 仍鎖 OpenFreeMap 同源；origin allowlist 與出向邊界不變。
-// 刻意只保留背景、水域、道路骨架、邊界與少量地名，過濾 POI 噪音，
-// 讓上層 Deck.gl 亮色資料元素在深藍灰底上突出。
+// ADR-208：自帶日光／夜間底圖；所有資源維持 OpenFreeMap 同源。
+import { palettes } from "../theme/palettes.js";
 
 const TILE_ORIGIN = "https://tiles.openfreemap.org";
 
-// 深藍灰戰情室色票（Slate 系）。
-const palette = Object.freeze({
-  background: "#0B0F19",
-  water: "#0d1a2e",
-  waterway: "#1b3350",
-  park: "#0f1c1a",
-  wood: "#101f1b",
-  building: "#131b2c",
-  buildingOutline: "#1c273c",
-  roadCasing: "#161f33",
-  roadMinor: "#22314c",
-  roadMajor: "#2c3e5e",
-  motorway: "#3a527a",
-  boundary: "#3a4a66",
-  label: "#9fb0c3",
-  labelHalo: "#05070d",
-  waterLabel: "#5f7fa6",
-});
 
-export function createDarkBasemapStyle() {
+export function createBasemapStyle(mode = "light") {
+  const palette = (palettes[mode] ?? palettes.light).map;
   return {
     version: 8,
-    name: "YouBike command-center dark",
+    name: `YouBike ${mode}`,
     glyphs: `${TILE_ORIGIN}/fonts/{fontstack}/{range}.pbf`,
     sprite: `${TILE_ORIGIN}/sprites/ofm_f384/ofm`,
     sources: {
@@ -324,3 +305,5 @@ export function createDarkBasemapStyle() {
     ],
   };
 }
+
+export function createDarkBasemapStyle() { return createBasemapStyle("dark"); }

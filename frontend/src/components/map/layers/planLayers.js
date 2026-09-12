@@ -1,3 +1,5 @@
+import presentationConfig from "../../../config/presentation.json";
+import { hexToRgba } from "../../../utils/mapPresentation.js";
 import { PathLayer, ScatterplotLayer } from "@deck.gl/layers";
 import { fleetPlannerConfig } from "../../../config/fleetMock.js";
 
@@ -12,8 +14,8 @@ export function createServiceRangeLayer({ start, radiusKm, id = "plan-range" }) 
     radiusUnits: "meters",
     stroked: true,
     filled: true,
-    getFillColor: [102, 217, 232, 22],
-    getLineColor: [102, 217, 232, 160],
+    getFillColor: hexToRgba(presentationConfig.route.lineColor, 0.08),
+    getLineColor: hexToRgba(presentationConfig.route.lineColor, 0.65),
     getLineWidth: 2,
     lineWidthUnits: "pixels",
     pickable: false,
@@ -31,7 +33,7 @@ export function createVehicleLayer({ start, id = "plan-vehicle" }) {
     radiusUnits: "pixels",
     stroked: true,
     getFillColor: fleetPlannerConfig.vehicleColor,
-    getLineColor: [5, 7, 13, 220],
+    getLineColor: [255, 254, 250, 240],
     getLineWidth: 2,
     lineWidthUnits: "pixels",
     pickable: false,
@@ -51,7 +53,7 @@ export function createPlanRouteLayers({ start, route, id = "plan-route" }) {
       id: `${id}-path`,
       data: [{ path }],
       getPath: (item) => item.path,
-      getColor: [102, 217, 232, 200],
+      getColor: hexToRgba(presentationConfig.route.lineColor, 0.9),
       getWidth: 3,
       widthUnits: "pixels",
       pickable: false,

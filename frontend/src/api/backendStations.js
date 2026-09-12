@@ -1,7 +1,9 @@
-// 後端站點讀取（GET /api/v1/stations）——探索性接線。
+// 後端站點讀取（GET /api/v1/stations）。
 // 後端走 data_source 層（mock / historical / tdx / youbike_official，由 config.yaml 切換），
 // 回標準站點欄位。這裡只做「當不可信輸入」的容錯正規化，不假造缺漏欄位。
-import { apiConfig } from "./apiConfig.js";
+// 統一走 httpClient.request（與其餘端點同一 base URL + Vite proxy + 錯誤處理），
+// 不再自己組絕對網址，避免站點與其他端點打到不同後端。
+import { request } from "./httpClient.js";
 
 const REQUIRED = [
   "station_id",
@@ -37,13 +39,8 @@ function isValid(s) {
   );
 }
 
-export async function fetchBackendStations({ signal } = {}) {
-  const res = await fetch(`${apiConfig.baseUrl}/stations`, {
-    headers: { Accept: "application/json" },
-    signal,
-  });
-  if (!res.ok) throw new Error(`後端 /stations 回應 ${res.status}`);
-  const data = await res.json();
+export async function fetchBackendStations() {
+  const data = await request("/stations");
   if (!Array.isArray(data)) throw new Error("後端 /stations 格式非陣列");
   const stations = data.filter(isValid).map(normalize);
   if (!stations.length) throw new Error("後端 /stations 無有效站點");

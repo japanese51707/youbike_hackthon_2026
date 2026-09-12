@@ -206,3 +206,41 @@ class HistoricalDataSource(DataSource):
                     "detail": f"{self._default_month}｜{len(df)} rows"}
         except Exception as e:
             return {"source": self.name, "available": False, "detail": str(e)}
+
+    def slot_median(self, station_id: str, weekday: int, time_slot: int,
+                    months: Optional[tuple[str, ...]] = None) -> Optional[float]:
+        """回傳某站在指定 weekday+time_slot 的歷史 available_bikes 中位數；查無回 None。"""
+        if months is None:
+            cfg = _cfg()
+            # 預設用全部可用月份（1~default_month），週期樣本越多越穩。
+            last = int(str(cfg.get("historical_default_month", "2026-06"))[-2:])
+            year = str(cfg.get("historical_default_month", "2026-06"))[:4]
+            months = tuple(f"{year}-{mo:02d}" for mo in range(1, last + 1))
+        table = _slot_table(tuple(sorted(months)))
+        return table.get((str(station_id), int(weekday), int(time_slot)))
+
+
+# ── ADR-306：同時段歷史代理查表（模組級快取，跨 instance 共用）──
+# 比賽階段只有 1–6 月官方歷史、即時是 9 月，模型的 lag（絕對往前推 1 天/1 週）
+# 在即時 asof 下取不到真值。用「同一站 × 同 weekday × 同 time_slot」的歷史
+# available_bikes 中位數當代理，讓 predict 能補上 lag。屬近似值（週期性代理，非真值），
+# 呼叫端須誠實標示，且此代理只餵預測特徵、不改站況/不進派工 payload。
+# 用模組級 lru_cache：整包查表建一次常駐（首次含 S3 讀取較慢，之後 O(1) 查詢）。
+@lru_cache(maxsize=1)
+def _slot_table(months: tuple[str, ...]) -> dict:
+    import pandas as pd
+    src = HistoricalDataSource()
+    frames = []
+    for m in months:
+        try:
+            frames.append(src._df(m))
+        except Exception:
+            continue  # 缺某月分區不致命，用有的月份即可
+    if not frames:
+        return {}
+    df = pd.concat(frames, ignore_index=True)
+    t = pd.to_datetime(df["timestamp"])
+    df = df.assign(_wd=t.dt.weekday, _slot=t.dt.hour * 2 + (t.dt.minute >= 30).astype(int))
+    grouped = df.groupby(["station_id", "_wd", "_slot"])["available_bikes"].median()
+    return {(str(sid), int(wd), int(slot)): float(val)
+            for (sid, wd, slot), val in grouped.items()}

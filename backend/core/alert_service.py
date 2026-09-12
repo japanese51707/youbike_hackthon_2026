@@ -101,7 +101,18 @@ class AlertService:
         """掃描站點，產生警示清單。recommendations 供分級與建議動作。"""
         from db import alerts_repo
         rec_by_id = {r["station_id"]: r for r in (recommendations or [])}
-        # 已有「未讀」警示的站，不重複產生（去重：同站同等級一次就好）
+        # 先算出本輪「當下真的需要警示」的站（依即時站況重新判定）。
+        active_station_ids = {st.get("station_id") for st in stations
+                              if classify_alert_level(st, rec_by_id.get(st.get("station_id"))) is not None}
+        # 先清理（在產生之前）：
+        #   1. 站況已恢復、本輪不再需要警示的未讀警報 → 刪。
+        #   2. 訊息與當前站況矛盾者（如訊息寫「已滿站」但現況非 full）→ 刪，
+        #      這類站雖仍需警示（如快滿 high），但舊訊息過時；刪掉後下面會用即時訊息重建。
+        # 清理放在產生之前，被清掉的站就不在 existing 裡，本輪會立即重建正確訊息。
+        status_by_id = {s.get("station_id"): s.get("status") for s in stations}
+        alerts_repo.resolve_stale_by_station(active_station_ids, status_by_id)
+
+        # 去重：該站該等級已有未讀警示就不重複產生。
         existing = alerts_repo.unacked_station_levels()
         new_alerts = []
         for st in stations:
@@ -110,7 +121,7 @@ class AlertService:
             if level is None:
                 continue
             if (st.get("station_id"), level) in existing:
-                continue   # 該站該等級已有未讀警示，跳過
+                continue
             new_alerts.append(self._create_alert(st, level, rec))
         return new_alerts
 
@@ -120,12 +131,14 @@ class AlertService:
         suffix = self._uuid.uuid4().hex[:8]
         name = station.get("station_name", "")
         status = station.get("status")
+        # 訊息以「當前站況」為準：空/滿站用明確文字；其餘（含 rec 判定的高緊急）
+        # 用 rec 的即時原因，避免寫死歷史狀況造成「訊息說空站、現況卻是 low」的錯位。
         if status == "empty":
             msg = f"{name} 已空站（無車可借），建議立即補車"
         elif status == "full":
             msg = f"{name} 已滿站（無位可還），使用者無法還車"
-        elif rec:
-            msg = f"{name}{rec.get('reason', '需注意')}"
+        elif rec and rec.get("reason"):
+            msg = f"{name}｜{rec['reason']}"
         else:
             msg = f"{name}狀態需注意"
         alert = {

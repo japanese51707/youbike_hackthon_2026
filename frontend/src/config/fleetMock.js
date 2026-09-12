@@ -4,9 +4,9 @@ export const fleetPlannerConfig = Object.freeze({
   serviceRadiusKm: 5, // 每台載具的服務半徑
   maxStops: 6, // 單條示意路線最多停靠點
   targetRatio: 0.5, // 站點目標水位（佔容量比例），用於估算取/補數量
-  vehicleColor: [102, 217, 232], // 載具標記
-  stopPickupColor: [255, 169, 77], // 取車
-  stopDropoffColor: [56, 217, 169], // 補車
+  vehicleColor: [104, 151, 148], // 載具標記
+  stopPickupColor: [211, 158, 74], // 取車
+  stopDropoffColor: [138, 166, 100], // 補車
 });
 
 // 互動式組單（ADR-119 三入口）示意參數。真正最優組單在後端 dispatch_builder，

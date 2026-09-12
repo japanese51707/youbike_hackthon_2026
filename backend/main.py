@@ -31,11 +31,37 @@ _sec = cfg.get("security", {})
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """啟動時初始化 SQLite schema 並種入預設帳號（A5）。"""
+    """啟動時初始化 SQLite schema 並種入預設帳號與車隊（A5 / ADR-114）。"""
     from db import init_db
-    from db.operators_repo import seed_default_operators
+    from db.operators_repo import (
+        seed_default_operators, seed_dispatch_operators,
+        seed_depot_standby_operators, seed_stationed_operators,
+    )
+    from db.vehicles_repo import seed_default_vehicles, set_reserve_fleet
     init_db()
     seed_default_operators()
+    # ADR-114/116 調度人力 seed（開發/Demo 起始值，之後由人力 API 覆蓋）。全部預設 off_duty；
+    # 司機不常態待命，被派到任務的當下才轉上工（見 dispatch 確認落地）。
+    seed_dispatch_operators(total=350)      # OP-001~350，role_type=driver
+    seed_depot_standby_operators(total=10)  # DEP-001~010，總站待命人力（可跨區支援）
+    seed_stationed_operators(total=30)      # ST-001~030，駐點人員
+    # ADR-114 車隊主檔 seed（組單三入口與緊急救火需要車輛清單，缺 seed 會回空陣列）。
+    seed_default_vehicles(n=45)
+    # ADR-118 靜態保留率：把車隊末端一定比例標為 standby（緊急救火用）。
+    set_reserve_fleet(cfg.get("reserve", {}).get("保留率", 0.12))
+    # ADR-306：背景預熱「同時段歷史代理」查表（讀 S3 1–6 月建一次，供即時預測補 lag）。
+    # 用 daemon thread 不阻塞啟動；非即時源（mock）不預熱。
+    if cfg.get("data_source", {}).get("mode") not in (None, "mock"):
+        import threading
+
+        def _warm_slot_table():
+            try:
+                from core.data.historical import HistoricalDataSource
+                HistoricalDataSource().slot_median("__warmup__", 0, 0)
+            except Exception:
+                pass  # 預熱失敗不影響啟動；真正請求時會再建一次
+
+        threading.Thread(target=_warm_slot_table, daemon=True).start()
     yield
 
 
