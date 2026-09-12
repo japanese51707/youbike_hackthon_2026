@@ -5,9 +5,21 @@ import { fetchBackendStations } from "./backendStations.js";
 import { getBackendDashboard, getTwinDashboard } from "./backendDashboard.js";
 
 const dashboardCache = { full: null, twin: null };
+const MOCK_SWAP_MAX_STATIONS = 50;
 
 export function peekDashboardData(lite = false) {
   return lite ? dashboardCache.twin : dashboardCache.full;
+}
+
+function keepPreviousStations(key, reason) {
+  const previous = dashboardCache[key];
+  if (!previous?.stations?.length) return null;
+  const stale = {
+    ...previous,
+    stationsSource: `stale（${reason}）`,
+  };
+  dashboardCache[key] = stale;
+  return stale;
 }
 
 // 調度面板資料。
@@ -17,6 +29,15 @@ export function peekDashboardData(lite = false) {
 export async function getDashboardData({ lite = false } = {}) {
   const key = lite ? "twin" : "full";
   const remember = (payload) => {
+    const previous = dashboardCache[key];
+    const incoming = payload?.stations?.length ?? 0;
+    if (
+      (previous?.stations?.length ?? 0) >= MOCK_SWAP_MAX_STATIONS &&
+      incoming < MOCK_SWAP_MAX_STATIONS &&
+      String(payload?.stationsSource || "").includes("mock")
+    ) {
+      return keepPreviousStations(key, `未改用示範站：${payload.stationsSource}`) ?? payload;
+    }
     dashboardCache[key] = payload;
     return payload;
   };
@@ -25,6 +46,8 @@ export async function getDashboardData({ lite = false } = {}) {
     try {
       return remember(lite ? await getTwinDashboard() : await getBackendDashboard());
     } catch (err) {
+      const kept = keepPreviousStations(key, `後端暫時無法更新：${err.message}`);
+      if (kept) return kept;
       const base = await mockAdapter.getDashboard();
       return remember({ ...base, stationsSource: `mock（後端連線失敗：${err.message}）` });
     }
@@ -39,6 +62,8 @@ export async function getDashboardData({ lite = false } = {}) {
     const stations = await fetchBackendStations();
     return remember({ ...base, stations, stationsSource: "backend" });
   } catch (err) {
+    const kept = keepPreviousStations(key, `後端暫時無法更新：${err.message}`);
+    if (kept) return kept;
     return remember({ ...base, stationsSource: `mock（後端連線失敗：${err.message}）` });
   }
 }

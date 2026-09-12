@@ -47,6 +47,8 @@ export default function SharedMap({
   initialViewState,
   layers,
   overlay = null,
+  onCameraMove,
+  onCameraIdle,
 }) {
   const { mode, colors } = useAppearance();
   const modeRef = useRef(mode);
@@ -66,6 +68,10 @@ export default function SharedMap({
   const [fallbackReason, setFallbackReason] = useState(null);
 
   overlayPropsRef.current = { layers, getTooltip: themedTooltip };
+  const onCameraMoveRef = useRef(onCameraMove);
+  const onCameraIdleRef = useRef(onCameraIdle);
+  onCameraMoveRef.current = onCameraMove;
+  onCameraIdleRef.current = onCameraIdle;
 
   useEffect(() => {
     if (!containerRef.current) return undefined;
@@ -189,6 +195,7 @@ export default function SharedMap({
       if (!ensureOverlay() || fallbackAppliedRef.current) return;
       setFallbackReason(null);
       setBasemapStatus("ready");
+      handleCameraIdle();
     };
     const handleMapError = () => {
       if (fallbackAppliedRef.current) return;
@@ -209,10 +216,18 @@ export default function SharedMap({
       }
     };
     const handleOffline = () => switchToNoBasemap("瀏覽器目前離線");
+    const cameraPayload = () => {
+      const center = map.getCenter();
+      return { lat: center.lat, lng: center.lng, zoom: map.getZoom() };
+    };
+    const handleCameraMove = () => onCameraMoveRef.current?.(cameraPayload());
+    const handleCameraIdle = () => onCameraIdleRef.current?.(cameraPayload());
 
     map.on("style.load", handleStyleLoad);
     map.on("load", handleMapLoad);
     map.on("error", handleMapError);
+    map.on("move", handleCameraMove);
+    map.on("moveend", handleCameraIdle);
     window.addEventListener("offline", handleOffline);
 
     if (!startsOffline) {
@@ -229,6 +244,8 @@ export default function SharedMap({
       map.off("style.load", handleStyleLoad);
       map.off("load", handleMapLoad);
       map.off("error", handleMapError);
+      map.off("move", handleCameraMove);
+      map.off("moveend", handleCameraIdle);
       overlay?.setProps({ layers: [] });
       overlayRef.current = null;
       mapRef.current = null;
@@ -262,7 +279,7 @@ export default function SharedMap({
       duration: 800,
       essential: true,
     });
-  }, [focusTarget]);
+  }, [focusTarget?.id, focusTarget?.longitude, focusTarget?.latitude, focusTarget?.zoom]);
 
   return (
     <div className={`shared-map ${className}`} role="region" aria-label={ariaLabel}>

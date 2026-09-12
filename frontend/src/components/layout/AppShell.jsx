@@ -2,6 +2,7 @@ import {
   BarChartOutlined,
   DashboardOutlined,
   DeploymentUnitOutlined,
+  EnvironmentOutlined,
   MobileOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
@@ -19,6 +20,7 @@ const navigation = [
   { key: "/dashboard", icon: <DashboardOutlined />, label: "調度面板" },
   { key: "/driver", icon: <MobileOutlined />, label: "司機手機端" },
   { key: "/overview", icon: <BarChartOutlined />, label: "長官導覽面板" },
+  { key: "/rider", icon: <EnvironmentOutlined />, label: "找車（使用者）" },
   { key: "/twin", icon: <DeploymentUnitOutlined />, label: "數位孿生戰情室" },
 ];
 
@@ -76,7 +78,9 @@ export default function AppShell({ children }) {
       </header>
       <div className="mock-notice">
         {isApiMode
-          ? location.pathname === "/twin"
+          ? location.pathname === "/rider"
+            ? "此頁給騎乘者找附近可借／可還站，不派工。站點等級目前依站名推估，與實際調度會有誤差。"
+            : location.pathname === "/twin"
             ? "此頁只做空間解讀與最適化審核，不派工。請依資料來源、新鮮度與右側結論邊界判讀。"
             : "操作會寫入後端。請依資料來源與觀測時間判讀；此處的身分選擇僅供受控展示。"
           : "此頁為本機 Mock 示範，不代表即時站況；操作僅影響展示資料。"}

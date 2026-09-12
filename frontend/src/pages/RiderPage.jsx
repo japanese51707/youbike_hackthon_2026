@@ -1,0 +1,216 @@
+import { CompassOutlined } from "@ant-design/icons";
+import { ScatterplotLayer } from "@deck.gl/layers";
+import { Alert, Button, Empty, Segmented, Tag, Typography } from "antd";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import SharedMap from "../components/map/SharedMap.jsx";
+import { createStationGaugeLayer } from "../components/map/layers/stationGaugeLayer.js";
+import presentationConfig from "../config/presentation.json";
+import useDashboardData from "../hooks/useDashboardData.js";
+import useGeolocation from "../hooks/useGeolocation.js";
+import { stationStatusLabels } from "../utils/formatters.js";
+import { getStationColor } from "../utils/mapPresentation.js";
+import {
+  deriveServiceGrade,
+  recommendNearbyStations,
+  SERVICE_GRADES,
+  walkDirectionsUrl,
+} from "../utils/riderStations.js";
+
+const FALLBACK_ORIGIN = { lat: 25.01427, lng: 121.46256 };
+const INTENT_OPTIONS = [
+  { value: "rent", label: "我要借車" },
+  { value: "return", label: "我要還車" },
+];
+
+export default function RiderPage() {
+  const dashboard = useDashboardData({ lite: true });
+  const geo = useGeolocation();
+  const [intent, setIntent] = useState("rent");
+  const [searchOrigin, setSearchOrigin] = useState(FALLBACK_ORIGIN);
+  const [moving, setMoving] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
+  const [focusTarget, setFocusTarget] = useState(null);
+
+  const stations = dashboard.data?.stations ?? [];
+  const advice = useMemo(
+    () => recommendNearbyStations({ stations, origin: searchOrigin, intent }),
+    [stations, searchOrigin, intent],
+  );
+  const selected = advice.items.find((row) => row.station_id === selectedId) ?? null;
+
+  useEffect(() => {
+    if (!geo.coords) return;
+    setFocusTarget({
+      id: `gps-${geo.coords.lat}-${geo.coords.lng}`,
+      longitude: geo.coords.lng,
+      latitude: geo.coords.lat,
+      zoom: 15,
+    });
+  }, [geo.coords]);
+
+  const onCameraMove = useCallback(() => setMoving(true), []);
+  const onCameraIdle = useCallback(({ lat, lng }) => {
+    setMoving(false);
+    setSearchOrigin((prev) => {
+      if (Math.abs(prev.lat - lat) < 1e-5 && Math.abs(prev.lng - lng) < 1e-5) return prev;
+      return { lat, lng };
+    });
+  }, []);
+
+  const layers = useMemo(() => {
+    const recommended = new Set(advice.items.map((row) => row.station_id));
+    return [
+      new ScatterplotLayer({
+        id: "rider-grade-halo",
+        data: stations,
+        pickable: false,
+        stroked: true,
+        getPosition: (station) => [Number(station.lng), Number(station.lat)],
+        getFillColor: (station) => deriveServiceGrade(station).halo,
+        getLineColor: (station) => {
+          const grade = deriveServiceGrade(station);
+          return grade.key === "neighbor" ? [160, 160, 160, 90] : grade.halo;
+        },
+        getRadius: (station) => deriveServiceGrade(station).haloRadius,
+        radiusUnits: "pixels",
+        lineWidthMinPixels: 2,
+      }),
+      createStationGaugeLayer({
+        id: "rider-stations",
+        data: stations,
+        dimension: "status",
+        getColor: (station) => getStationColor(station, "status"),
+        onSelectStation: setSelectedId,
+        sizePixels: (station) => {
+          const grade = deriveServiceGrade(station);
+          if (recommended.has(station.station_id)) return grade.key === "neighbor" ? 42 : 50;
+          return grade.key === "core" ? 36 : grade.key === "priority" ? 32 : 26;
+        },
+      }),
+    ];
+  }, [stations, advice.items]);
+
+  const getTooltip = ({ object }) => {
+    if (!object?.station_name) return null;
+    const grade = deriveServiceGrade(object);
+    return {
+      text: `${object.station_name}\n${grade.label}（依站名推估，可能有誤差）｜${grade.hint}\n${stationStatusLabels[object.status] ?? object.status}｜可借 ${object.available_bikes}／可還 ${object.available_docks}`,
+    };
+  };
+
+  return (
+    <div className="fixed-page rider-page">
+      <div className="rider-toolbar">
+        <div>
+          <Typography.Title level={3}>附近找車</Typography.Title>
+          <Typography.Text type="secondary">
+            把地圖中心對準要找的地方，停下來才會更新附近推薦。排序以步行距離為主，庫存與站點等級只做小幅參考。等級依站名與規模推估，與實際調度會有誤差。
+          </Typography.Text>
+        </div>
+        <div className="rider-toolbar-actions">
+          <Segmented value={intent} options={INTENT_OPTIONS} onChange={setIntent} />
+          <Button icon={<CompassOutlined />} loading={geo.locating} onClick={geo.locate}>
+            回到我的位置
+          </Button>
+        </div>
+      </div>
+
+      {geo.error ? <Alert type="info" showIcon className="rider-banner" title={geo.error} /> : null}
+
+      <div className="rider-main">
+        <div className="rider-map">
+          <SharedMap
+            ariaLabel="附近 YouBike 站點地圖"
+            className="map-fill"
+            initialViewState={{
+              ...presentationConfig.maps.dashboard,
+              longitude: FALLBACK_ORIGIN.lng,
+              latitude: FALLBACK_ORIGIN.lat,
+              zoom: 14,
+            }}
+            focusTarget={focusTarget}
+            layers={layers}
+            getTooltip={getTooltip}
+            onCameraMove={onCameraMove}
+            onCameraIdle={onCameraIdle}
+            overlay={
+              <>
+                <div className="rider-legend">
+                  <div className="rider-legend-title">站點等級</div>
+                  {Object.values(SERVICE_GRADES).map((grade) => (
+                    <div key={grade.key} className="rider-legend-item">
+                      <span
+                        className={`rider-legend-dot rider-legend-${grade.key}`}
+                        style={{ background: `rgba(${grade.halo.join(",")})` }}
+                      />
+                      <span>
+                        {grade.label}
+                        <small>{grade.hint}</small>
+                      </span>
+                    </div>
+                  ))}
+                  <div className="rider-legend-note">目前依站名與規模推估，與實際調度會有誤差。圖釘顏色仍是可借／可還狀態。</div>
+                </div>
+                <div className={`rider-aim${moving ? " is-moving" : ""}`} aria-hidden="true">
+                  <span className="rider-aim-range" />
+                  <span className="rider-aim-pin" />
+                  <span className="rider-aim-label">{moving ? "移動中，停下來再搜尋" : "以地圖中心搜尋"}</span>
+                </div>
+              </>
+            }
+          />
+        </div>
+
+        <aside className="rider-list" aria-label="推薦站點">
+          {dashboard.loading && !stations.length ? (
+            <Empty description="站況載入中" />
+          ) : advice.items.length === 0 ? (
+            <Empty description={intent === "return" ? "附近暫時沒有可還車位" : "附近暫時沒有可借車輛"} />
+          ) : (
+            advice.items.map((row, index) => {
+              const href = walkDirectionsUrl(searchOrigin, row);
+              const active = selected?.station_id === row.station_id;
+              return (
+                <button
+                  key={row.station_id}
+                  type="button"
+                  className={`rider-card${active ? " is-active" : ""}`}
+                  onClick={() => setSelectedId(row.station_id)}
+                >
+                  <div className="rider-card-head">
+                    <span className="rider-rank">{index + 1}</span>
+                    <strong>{row.station_name}</strong>
+                    <Tag color={row.grade.color}>{row.grade.label}</Tag>
+                  </div>
+                  <div className="rider-card-meta">
+                    {row.reasons.map((reason) => (
+                      <span key={reason}>{reason}</span>
+                    ))}
+                  </div>
+                  {href ? (
+                    <div className="rider-card-actions">
+                      <Button size="small" type="primary" href={href} target="_blank" rel="noreferrer">
+                        步行導航
+                      </Button>
+                    </div>
+                  ) : null}
+                </button>
+              );
+            })
+          )}
+
+          {advice.unavailable.length ? (
+            <div className="rider-unavailable">
+              <Typography.Text type="secondary">附近目前不可用</Typography.Text>
+              {advice.unavailable.map((row) => (
+                <div key={row.station_id}>
+                  {row.station_name} · {row.grade.label} · 步行約 {row.walkMin} 分
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </aside>
+      </div>
+    </div>
+  );
+}
