@@ -109,11 +109,15 @@ function resolveStart(vehicle, operator, stops, district) {
   );
 }
 
-function routeFocus(start, stops) {
-  const points = [
+function routeFocus(start, stops, path) {
+  const pathPoints = Array.isArray(path)
+    ? path.filter((pair) => Array.isArray(pair) && Number.isFinite(pair[0]) && Number.isFinite(pair[1]))
+    : [];
+  const waypoints = [
     start ? [start.lng, start.lat] : null,
     ...stops.map((stop) => [stop.lng, stop.lat]),
   ].filter((pair) => pair && Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
+  const points = [...waypoints, ...pathPoints];
   if (!points.length) return null;
   if (points.length === 1) {
     return {
@@ -126,12 +130,12 @@ function routeFocus(start, stops) {
   const lngs = points.map((pair) => pair[0]);
   const lats = points.map((pair) => pair[1]);
   return {
-    id: points.map((pair) => pair.join(",")).join(";"),
+    id: `${waypoints.map((pair) => pair.join(",")).join(";")}|${pathPoints.length}`,
     bounds: [
       [Math.min(...lngs), Math.min(...lats)],
       [Math.max(...lngs), Math.max(...lats)],
     ],
-    padding: 32,
+    padding: 48,
   };
 }
 
@@ -404,15 +408,6 @@ export default function BackendDriverPage() {
         .filter((stop) => Number.isFinite(stop.lat) && Number.isFinite(stop.lng)),
     [stops],
   );
-  const navStops = useMemo(
-    () => mapStops.filter((stop) => stop.station_status === "pending"),
-    [mapStops],
-  );
-  const mapFocus = useMemo(() => {
-    const base = routeFocus(start, navStops.length ? navStops : mapStops);
-    if (!base) return null;
-    return { ...base, id: `${base.id}#${focusTick}` };
-  }, [start, mapStops, navStops, focusTick]);
 
   // 實走道路路線：把「起點 + 各停靠點」丟給後端換沿路折線。
   // roadKey 是這組座標的指紋，座標沒變就不重打（後端也還有一層快取）。
@@ -447,6 +442,11 @@ export default function BackendDriverPage() {
   }, [roadKey]);
 
   const roadGeometry = road?.key === roadKey && road?.mode === "road" ? road.geometry : null;
+  const mapFocus = useMemo(() => {
+    const base = routeFocus(start, mapStops, roadGeometry);
+    if (!base) return null;
+    return { ...base, id: `${base.id}#${focusTick}` };
+  }, [start, mapStops, roadGeometry, focusTick]);
 
   const pending = stops.filter((s) => s.station_status === "pending");
   const currentStop = pending[0] ?? null;
