@@ -19,6 +19,7 @@ import EscalationModal from "../alerts/EscalationModal.jsx";
 import useEscalations from "../../hooks/useEscalations.js";
 
 import AppearanceControl from "./AppearanceControl.jsx";
+import ApiSyncButton from "./ApiSyncButton.jsx";
 import brandLogo from "../../assets/brand/youbike-logo.png";
 
 // 警示追蹤放在調度面板旁邊：它是調度員與管理後台共用的那份真相（ADR-309）。
@@ -100,6 +101,7 @@ export default function AppShell({ children }) {
         />
         <div className="header-tools">
           <AppearanceControl />
+          <ApiSyncButton />
           <Space className="demo-actions">
           <Tag color={isApiMode ? "cyan" : "gold"}>{isApiMode ? "後端連線 · 受控 Demo" : "MOCK DEMO"}</Tag>
           {isApiMode && <Select showSearch optionFilterProp="label" aria-label="操作身分"
