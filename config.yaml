@@ -289,7 +289,7 @@ security:
   allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
   allowed_headers: ["Content-Type", "X-Operator-Id"]
   rate_limit_per_min: 120         # 每 IP 每分鐘請求上限（入向 DoS 防護）
-  rate_limit_exempt_paths: ["/health"]  # 健康檢查不限流
+  rate_limit_exempt_paths: ["/health", "/assets/"]  # 健康檢查與 SPA 靜態檔不限流（ADR-314）
 
 # ── 戰情室顧問（ADR-311）──
 # 金鑰只走環境變數（AWS_*）；這裡只放非機密預設。模型 ID 可用 BEDROCK_MODEL_ID 覆寫。

@@ -21,6 +21,12 @@ from starlette.responses import JSONResponse
 _WINDOW_SEC = 60
 
 
+def _path_is_exempt(path: str, exempt: set[str]) -> bool:
+    if path in exempt:
+        return True
+    return any(path.startswith(prefix) for prefix in exempt if prefix.endswith("/"))
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, limit_per_min: int, exempt_paths: list[str] | None = None):
         super().__init__(app)
@@ -35,7 +41,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        if path in self._exempt or self._limit <= 0:
+        if self._limit <= 0 or _path_is_exempt(path, self._exempt):
             return await call_next(request)
 
         ip = self._client_ip(request)

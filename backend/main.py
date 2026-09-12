@@ -22,6 +22,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from core.data.observations import DataUnavailable
+from core.frontend_static import mount_frontend
 from config_loader import get_config
 from middleware import RateLimitMiddleware
 from api import (
@@ -171,3 +172,7 @@ for module in (stations, dispatch, operators, alerts,
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "0.1.0-A0"}
+
+
+# ADR-314：有打包進 image 的 SPA 才掛。須在 API／health 之後，才能當深連結 fallback。
+mount_frontend(app)
