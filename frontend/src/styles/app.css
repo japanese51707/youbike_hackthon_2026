@@ -1899,6 +1899,73 @@ body.twin-agent-dragging .shared-map {
   flex: none;
 }
 
+.rider-fault-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rider-fault-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ct-text);
+  font-size: 13px;
+}
+
+.rider-fault-issues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rider-fault-issues .ant-radio-button-wrapper {
+  border-radius: 999px;
+  margin-inline-start: 0 !important;
+}
+
+.rider-fault-known,
+.rider-card-fault {
+  color: var(--ct-warning);
+}
+
+.rider-fault-known {
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--ct-warning) 45%, var(--ct-border));
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.rider-fault-confirm p {
+  margin: 0 0 12px;
+  color: var(--ct-text);
+}
+
+.rider-fault-confirm dl {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+
+.rider-fault-confirm div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rider-fault-confirm dt {
+  color: var(--ct-text-dim);
+  font-size: 12px;
+}
+
+.rider-fault-confirm dd {
+  margin: 0;
+  color: var(--ct-text);
+  font-size: 16px;
+  font-weight: 700;
+}
+
 .rider-main {
   flex: 1;
   min-height: 0;

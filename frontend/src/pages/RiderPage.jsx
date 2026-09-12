@@ -1,8 +1,11 @@
-import { CompassOutlined, DesktopOutlined, MobileOutlined } from "@ant-design/icons";
+import { CompassOutlined, DesktopOutlined, MobileOutlined, WarningOutlined } from "@ant-design/icons";
 import { ScatterplotLayer } from "@deck.gl/layers";
 import { Alert, Button, Empty, Segmented, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import RiderFaultModal from "../components/rider/RiderFaultModal.jsx";
 import SharedMap from "../components/map/SharedMap.jsx";
+import { fetchFaultSummaries } from "../api/riderFaultApi.js";
+import { formatFaultSummary } from "../utils/riderFaultReports.js";
 import { createStationGaugeLayer } from "../components/map/layers/stationGaugeLayer.js";
 import presentationConfig from "../config/presentation.json";
 import useDashboardData from "../hooks/useDashboardData.js";
@@ -33,6 +36,8 @@ export default function RiderPage() {
   const [selectedId, setSelectedId] = useState(null);
   const [focusTarget, setFocusTarget] = useState(null);
   const [locateNote, setLocateNote] = useState(null);
+  const [faultOpen, setFaultOpen] = useState(false);
+  const [faultSummaries, setFaultSummaries] = useState({});
   const [phoneUi, setPhoneUi] = useState(() => {
     try {
       return sessionStorage.getItem(PHONE_UI_KEY) === "1";
@@ -55,12 +60,35 @@ export default function RiderPage() {
     if (geo.locating) setLocateNote(null);
   }, [geo.locating]);
 
+  const reloadFaults = useCallback(() => {
+    fetchFaultSummaries().then(setFaultSummaries).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    reloadFaults();
+    const timer = window.setInterval(reloadFaults, 15000);
+    return () => window.clearInterval(timer);
+  }, [reloadFaults]);
+
   const stations = dashboard.data?.stations ?? [];
   const advice = useMemo(
     () => recommendNearbyStations({ stations, origin: searchOrigin, intent }),
     [stations, searchOrigin, intent],
   );
-  const selected = advice.items.find((row) => row.station_id === selectedId) ?? null;
+  const selected =
+    stations.find((row) => row.station_id === selectedId) ??
+    advice.items.find((row) => row.station_id === selectedId) ??
+    null;
+  const faultStations = useMemo(() => {
+    const seen = new Set();
+    const rows = [];
+    for (const row of [selected, ...advice.items, ...advice.unavailable]) {
+      if (!row?.station_id || seen.has(row.station_id)) continue;
+      seen.add(row.station_id);
+      rows.push(row);
+    }
+    return rows;
+  }, [selected, advice.items, advice.unavailable]);
 
   useEffect(() => {
     if (!geo.coords) return;
@@ -144,6 +172,9 @@ export default function RiderPage() {
         <Button size={phoneUi ? "small" : "middle"} icon={<CompassOutlined />} loading={geo.locating} onClick={geo.locate}>
           {phoneUi ? "定位" : "回到我的位置"}
         </Button>
+        <Button size={phoneUi ? "small" : "middle"} icon={<WarningOutlined />} onClick={() => setFaultOpen(true)}>
+          通報故障
+        </Button>
         {phoneUi ? null : (
           <Button icon={<MobileOutlined />} onClick={() => setPhoneUi(true)}>
             手機 UI
@@ -225,6 +256,9 @@ export default function RiderPage() {
                   {row.reasons.map((reason) => (
                     <span key={reason}>{reason}</span>
                   ))}
+                  {formatFaultSummary(faultSummaries[row.station_id]) ? (
+                    <span className="rider-card-fault">{formatFaultSummary(faultSummaries[row.station_id])}</span>
+                  ) : null}
                 </div>
                 {href ? (
                   <div className="rider-card-actions">
@@ -270,6 +304,14 @@ export default function RiderPage() {
           {phoneUi ? <div className="rider-phone-home" aria-hidden="true" /> : null}
         </div>
       </div>
+      <RiderFaultModal
+        open={faultOpen}
+        stations={faultStations}
+        defaultStationId={selected?.station_id || advice.items[0]?.station_id}
+        summaries={faultSummaries}
+        onClose={() => setFaultOpen(false)}
+        onSubmitted={reloadFaults}
+      />
     </div>
   );
 }
