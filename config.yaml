@@ -24,7 +24,7 @@ data_source:
   refresh_interval_sec: 120  # 多久抓一次官方即時資料（原 300 太久；官方 CSV 約 5-10 分更新，120 秒讓後端更快拿到最新，不過度打官方）
   stale_after_sec: 600      # 即時資料超過幾秒視為過期（觸發降級標記）
   future_tolerance_sec: 60
-  timeout_sec: 10
+  timeout_sec: 45           # 官方 CSV 約 404KB；雲端(us-east-1)跨海讀台灣官方源較慢，10 秒常 ReadTimeout，拉到 45 秒
   max_response_bytes: 5000000
   min_refresh_sec: 60
   retry_backoff_sec: 30

@@ -73,8 +73,6 @@ def get_stations_with_degradation(district=None, status=None):
                 _mock_fallback_reason = str(exc) or "真實資料來源無法取得"
             else:
                 # 正式路徑：無快照回 503，不碰 mock（ADR-303）。
-                # 診斷：印出真實源失敗的原始錯誤類型與訊息（雲端 503 追因用）。
-                print(f"[degradation] 站況源失敗 type={type(exc).__name__} msg={exc!r}")
                 raise DataUnavailable("站點資料暫時無法取得，請稍後重試") from exc
         if mock_fallback:
             rows = [_mark_mock_fallback(r) for r in rows]
