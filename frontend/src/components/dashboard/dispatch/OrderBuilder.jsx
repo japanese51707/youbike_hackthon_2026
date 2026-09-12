@@ -138,6 +138,26 @@ function BackendBuilder({
         items={[{ title: "選資源" }, { title: "路線預估" }, { title: "預覽確認" }]}
       />
 
+      {/* ADR-315：附近無足夠車源可取 → 醒目提示「需由總部載滿車出發」，避免只有一行字被忽略 */}
+      {draft.needs_depot_refill ? (
+        <Alert
+          className="ob-depot-alert"
+          type="error"
+          showIcon
+          banner
+          message={<b>此區附近無足夠車源可取，需由總部載滿車出發調度</b>}
+          description={
+            <span>
+              缺 <b className="mono">{draft.supply_shortfall ?? "—"}</b> 台車源：
+              周邊站點（含跨區）能提供的車不足以補到目標。
+              系統已優先指派<b>總部待命車與待命人員</b>——請確認該車已在總部載滿車，
+              或於下方回報車上台數後再確認派發。
+            </span>
+          }
+          style={{ margin: "8px 0" }}
+        />
+      ) : null}
+
       {/* 步驟一：資源 */}
       <section className="ob-section">
         <div className="ob-section-title">資源</div>

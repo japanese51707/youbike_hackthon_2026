@@ -188,7 +188,14 @@ def build_from_station(
 
     seed = next((r for r in dispatch_list if str(r.get("station_id")) == str(station_id)), None)
     if seed is None:
-        return {"error": f"站點 {station_id} 不在需調度清單", "is_draft": True, "stations": []}
+        # ADR-315：前端需調度清單走快取（60 秒），與組單即時清單可能有落差 → 名單上的站
+        # 在即時清單裡查無。此時用即時站況為該站臨時生成建議（同 emergency 的保底機制），
+        # 讓「點名單任一站都能組單」，而不是直接報「不在清單」。
+        extra = _emergency_recs_for({str(station_id)}, cfg)
+        seed = next((r for r in extra if str(r.get("station_id")) == str(station_id)), None)
+        if seed is None:
+            return {"error": f"站點 {station_id} 查無即時站況或目前無需調度", "is_draft": True, "stations": []}
+        dispatch_list = list(dispatch_list) + extra
     district = seed.get("district")
 
     # ADR-116/315：選站範圍依班別——早/晚班只在同行政區配對；大夜班可跨區（全區大宗復原）。
@@ -210,31 +217,44 @@ def build_from_station(
     depot = fp.depot_standby_vehicles()
     candidates = in_district + nearby + depot
 
-    veh = fp.get_vehicle(vehicle_id) if vehicle_id else (candidates[0] if candidates else None)
-    cap = int(veh.get("max_capacity") or default_cap) if veh else default_cap
-    # ADR-315 載量守恆挑站：補車站需有車源（車上載量 + 趟內取車站），避免「只排補車卻沒車可補」。
-    # 車上初始載量未知（未回報）時當 0，讓規劃主動納入取車站湊足車源（先取後補）。
-    onboard = veh.get("onboard_bikes") if veh else None
+    # 先用「該區優先」的候選車估容量挑站（真正選哪台車在挑完站、判斷是否需總部後定）。
+    tentative_veh = fp.get_vehicle(vehicle_id) if vehicle_id else (candidates[0] if candidates else None)
+    cap = int(tentative_veh.get("max_capacity") or default_cap) if tentative_veh else default_cap
+    onboard = tentative_veh.get("onboard_bikes") if tentative_veh else None
     onboard = int(onboard) if onboard is not None else 0
     # 車源決策階梯（ADR-315）：①車上載量 ②同區取車站就近取（在 pool 內）
     # ③同區湊不足 → 允許跨區取「一站」補足車源（早晚班破例，因「有車補」優先於不跨區）。
-    # 早晚班才需要跨區備援；大夜班 pool 本就全區。
     cross_collectors = [] if cross_ok else sorted(
         [r for r in dispatch_list
          if r.get("action") == "取車" and r.get("district") != district],
         key=lambda r: -float(r.get("quantity", 0) or 0))
     stations = _dsp._pack_supply_aware_trip(
         pool, cap, max_stops, seed_id=station_id, onboard=onboard,
-        start_lat=veh.get("current_lat") if veh else None,
-        start_lng=veh.get("current_lng") if veh else None,
+        start_lat=tentative_veh.get("current_lat") if tentative_veh else None,
+        start_lng=tentative_veh.get("current_lng") if tentative_veh else None,
         extra_collectors=cross_collectors)
 
-    # 人員：指定 → 用指定；否則後端排優先序（同區優先），預設帶第一名，候選供後台改選。
-    # 司機不常態待命，被派到任務當下才上工（見確認落地）。
+    # ADR-315：判斷這趟是否「純靠總部載車」——補車需求超過（車上載量 + 趟內取車站可取量）。
+    _demand0 = sum(int(s.get("quantity", 0) or 0) for s in stations if s.get("action") != "取車")
+    _supply0 = onboard + sum(int(s.get("quantity", 0) or 0) for s in stations if s.get("action") == "取車")
+    needs_depot = _demand0 > _supply0
+    if vehicle_id:
+        veh = fp.get_vehicle(vehicle_id)
+    elif needs_depot and depot:
+        # 需總部載車：優先派總站待命車（已備車、可跨區支援），而非當地閒置車。
+        veh = depot[0]
+    else:
+        veh = candidates[0] if candidates else None
+
+    # 人員：指定 → 用指定；否則後端排優先序。
+    # ADR-315：需總部載車時（needs_depot），執行人員也優先派「總部待命人員」（隨總站待命車出發），
+    # 而非當地區域人員；否則維持同區優先。司機不常態待命，被派到任務當下才上工。
     assignable = op.assignable_operators(district=district)
     depot_ops = op.depot_standby_operators()
     if operator_id:
         oper = op.get_operator(operator_id)
+    elif needs_depot and depot_ops:
+        oper = depot_ops[0]
     else:
         oper = assignable[0] if assignable else (depot_ops[0] if depot_ops else None)
     escort = _resolve_escort(op, escort_id, oper)
