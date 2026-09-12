@@ -1,13 +1,11 @@
 import { QuestionCircleOutlined } from "@ant-design/icons";
-import { Checkbox, Popover, Segmented, Slider, Tag, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Checkbox, Popover, Segmented, Tag, Typography } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import StationDrawer from "../components/dashboard/StationDrawer.jsx";
 import StationLegend from "../components/map/StationLegend.jsx";
 import SharedMap from "../components/map/SharedMap.jsx";
 import {
-  createCatchmentLayer,
-  createCoverageGapLayer,
   createFlowArcLayer,
   createGiStarVoronoiLayer,
   createKdeHeatmapLayer,
@@ -17,16 +15,30 @@ import { createDensityLayer } from "../components/map/layers/densityLayer.js";
 import { createStationGaugeLayer } from "../components/map/layers/stationGaugeLayer.js";
 import { isApiMode, request } from "../api/httpClient.js";
 import { loadTemporalPresentation } from "../api/temporalMockAdapter.js";
+import { createDistrictOutlineLayer } from "../components/map/layers/districtOutlineLayer.js";
 import TwinAgentPane from "../components/twin/TwinAgentPane.jsx";
 import TwinAssistant from "../components/twin/TwinAssistant.jsx";
+import TwinDistrictCard from "../components/twin/TwinDistrictCard.jsx";
 import TwinInsightPanel from "../components/twin/TwinInsightPanel.jsx";
+import TwinLayerExplain from "../components/twin/TwinLayerExplain.jsx";
 import TwinOptimizationPane from "../components/twin/TwinOptimizationPane.jsx";
 import { ANALYSIS_CATALOG, PENDING_ANALYSES } from "../config/analysisCatalog.js";
 import presentationConfig from "../config/presentation.json";
+import districtCatalog from "../data/newtaipeiDistricts.json";
 import useDashboardData from "../hooks/useDashboardData.js";
+import {
+  CITY_SCOPE,
+  countScopedCoverage,
+  districtOutline,
+  filterByDistrict,
+  isCityScope,
+  listDistricts,
+  outlineBounds,
+} from "../utils/districtScope.js";
 import { stationStatusLabels } from "../utils/formatters.js";
 import { getStationColor } from "../utils/mapPresentation.js";
 import { GI_STAR_RAMP } from "../utils/spatialStats.js";
+import { resolveTwinFlowRecommendations } from "../utils/twinFlowMock.js";
 import { buildHeadline, buildTwinInsights, pickObservedAt } from "../utils/twinInsights.js";
 import { buildTwinView, pickTimelineFrame } from "../utils/twinSnapshot.js";
 
@@ -51,11 +63,13 @@ export default function TwinPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [active, setActive] = useState(["gauge", "voronoi"]);
   const [mode, setMode] = useState("live");
-  const [catchmentKm, setCatchmentKm] = useState(0.6);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [timeline, setTimeline] = useState(null);
   const [timelineNote, setTimelineNote] = useState("");
   const [agentOpen, setAgentOpen] = useState(true);
+  const [district, setDistrict] = useState(CITY_SCOPE);
+  const [focusTarget, setFocusTarget] = useState(null);
+  const skipInitialCityFocus = useRef(true);
   const [reviewStationIds, setReviewStationIds] = useState([]);
   const agentTab = searchParams.get("tab") === "optimization" ? "optimization" : "assistant";
   const setAgentTab = useCallback(
@@ -117,22 +131,81 @@ export default function TwinPage() {
     [stations, mode, temporal, historyFrame, dashboard.data?.recommendations],
   );
   const snapshot = temporalView.stations;
+  const districts = useMemo(() => listDistricts(stations), [stations]);
+  const scopedSnapshot = useMemo(() => filterByDistrict(snapshot, district), [snapshot, district]);
+  const scopedLive = useMemo(() => filterByDistrict(stations, district), [stations, district]);
+  const scopedRecommendations = useMemo(
+    () => filterByDistrict(dashboard.data?.recommendations, district),
+    [dashboard.data?.recommendations, district],
+  );
+  const flowView = useMemo(
+    () =>
+      resolveTwinFlowRecommendations({
+        stations: scopedSnapshot,
+        recommendations: scopedRecommendations,
+      }),
+    [scopedSnapshot, scopedRecommendations],
+  );
+  const outline = useMemo(
+    () => districtOutline(district, scopedSnapshot, districtCatalog.polygons),
+    [district, scopedSnapshot],
+  );
+  const scopedCoverage = useMemo(() => {
+    if (isCityScope(district)) {
+      return { covered: temporalView.covered, available: temporalView.available };
+    }
+    return countScopedCoverage({
+      stations: scopedSnapshot,
+      mode,
+      historyFrame,
+      temporalStations: temporal?.stations,
+      recommendations: scopedRecommendations,
+    });
+  }, [district, temporalView, scopedSnapshot, mode, historyFrame, temporal, scopedRecommendations]);
+  const scopeLabel = isCityScope(district) ? "全市" : district;
+
+  useEffect(() => {
+    if (isCityScope(district)) {
+      if (skipInitialCityFocus.current) {
+        skipInitialCityFocus.current = false;
+        return;
+      }
+      setFocusTarget({
+        id: "district-city",
+        longitude: presentationConfig.maps.dashboard.longitude,
+        latitude: presentationConfig.maps.dashboard.latitude,
+        zoom: presentationConfig.maps.dashboard.zoom,
+      });
+      return;
+    }
+    skipInitialCityFocus.current = false;
+    const next = districtOutline(district, [], districtCatalog.polygons);
+    const bounds = outlineBounds(next?.polygons);
+    if (!bounds) return;
+    setFocusTarget({
+      id: `district-${district}`,
+      bounds,
+      padding: { top: 72, bottom: 96, left: 72, right: 380 },
+    });
+  }, [district]);
 
   const fullInsightReport = useMemo(
     () =>
       buildTwinInsights({
-        stations: snapshot,
-        liveStations: stations,
-        recommendations: dashboard.data?.recommendations,
+        stations: scopedSnapshot,
+        liveStations: scopedLive,
+        recommendations: flowView.recommendations,
+        flowPairs: flowView.pairs,
         activeLayers: ALL_LAYER_KEYS,
         mode,
-        catchmentKm,
-        temporalCovered: temporalView.covered,
-        temporalAvailable: temporalView.available,
+        temporalCovered: scopedCoverage.covered,
+        temporalAvailable: scopedCoverage.available,
         stationsSource: dashboard.data?.stationsSource || (dashboard.loading ? "loading" : "unknown"),
-        observedAt: pickObservedAt(snapshot),
+        observedAt: pickObservedAt(scopedSnapshot),
+        scopeLabel,
+        flowSource: flowView.source,
       }),
-    [snapshot, stations, mode, catchmentKm, temporalView, dashboard.data, dashboard.loading],
+    [scopedSnapshot, scopedLive, flowView, mode, scopedCoverage, dashboard.data, dashboard.loading, scopeLabel],
   );
   const insightReport = useMemo(() => {
     const layers = fullInsightReport.layers.filter((layer) => active.includes(layer.key));
@@ -160,18 +233,18 @@ export default function TwinPage() {
     const on = (k) => active.includes(k);
     const getColor = (s) => getStationColor(s, "status");
     const composed = [];
-    if (on("density")) composed.push(createDensityLayer({ id: "twin-density", data: snapshot }));
-    if (on("coverage")) composed.push(createCoverageGapLayer({ data: snapshot }));
-    if (on("kde")) composed.push(createKdeHeatmapLayer({ data: snapshot }));
-    if (on("catchment")) composed.push(createCatchmentLayer({ data: snapshot, radiusKm: catchmentKm }));
-    if (on("voronoi")) composed.push(createGiStarVoronoiLayer({ data: snapshot }));
-    if (on("flow")) composed.push(createFlowArcLayer({ recommendations: dashboard.data?.recommendations }));
-    if (on("network")) composed.push(...createNetworkLayers({ data: snapshot, onSelectStation: openStation }));
+    const outlineLayer = createDistrictOutlineLayer(outline);
+    if (outlineLayer) composed.push(outlineLayer);
+    if (on("density")) composed.push(createDensityLayer({ id: "twin-density", data: scopedSnapshot }));
+    if (on("kde")) composed.push(createKdeHeatmapLayer({ data: scopedSnapshot }));
+    if (on("voronoi")) composed.push(createGiStarVoronoiLayer({ data: scopedSnapshot }));
+    if (on("flow")) composed.push(createFlowArcLayer({ pairs: flowView.pairs }));
+    if (on("network")) composed.push(...createNetworkLayers({ data: scopedSnapshot, onSelectStation: openStation }));
     if (on("gauge")) {
       composed.push(
         createStationGaugeLayer({
           id: "twin-gauge",
-          data: snapshot,
+          data: scopedSnapshot,
           dimension: "status",
           getColor,
           onSelectStation: openStation,
@@ -180,7 +253,7 @@ export default function TwinPage() {
       );
     }
     return composed.filter(Boolean);
-  }, [active, snapshot, catchmentKm, dashboard.data, openStation, pinSize]);
+  }, [active, scopedSnapshot, flowView, openStation, pinSize, outline]);
 
   const getTooltip = useCallback(({ object }) => {
     if (!object?.station_name) return null;
@@ -208,7 +281,7 @@ export default function TwinPage() {
                   <Tag color={tag.color} className="twin-mode-tag">{tag.text}</Tag>
                   <Popover
                     title={<span>{item.name}<Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 11 }}>{item.discipline}</Typography.Text></span>}
-                    content={<div style={{ maxWidth: 260, fontSize: 12 }}>{item.info}</div>}
+                    content={<TwinLayerExplain item={item} />}
                     trigger="click"
                   >
                     <QuestionCircleOutlined className="twin-info" />
@@ -218,14 +291,6 @@ export default function TwinPage() {
             );
           })}
         </div>
-
-        {active.includes("catchment") ? (
-          <div className="twin-slider">
-            <span>服務半徑</span>
-            <Slider min={0.2} max={2} step={0.1} value={catchmentKm} onChange={setCatchmentKm} style={{ flex: 1 }} tooltip={{ formatter: (v) => `${v} km` }} />
-            <Tag className="mono">{catchmentKm} km</Tag>
-          </div>
-        ) : null}
 
         {active.includes("voronoi") ? (
           <div className="twin-legend">
@@ -240,6 +305,63 @@ export default function TwinPage() {
           </div>
         ) : null}
 
+        {active.includes("network") ? (
+          <div className="twin-legend">
+            <div className="twin-legend-title">中心性（圓圈大小＋顏色）</div>
+            <div
+              className="twin-legend-ramp"
+              style={{
+                background: `linear-gradient(90deg, ${presentationConfig.layers.centralityColorRange
+                  .map((color) => `rgb(${color.join(",")})`)
+                  .join(", ")})`,
+              }}
+            />
+            <div className="twin-legend-ramp-labels">
+              <span>邊陲</span>
+              <span>中等</span>
+              <span>樞紐</span>
+            </div>
+            <div className="twin-legend-note">越大越暖＝地理鄰近中心性越高；不是流量。</div>
+          </div>
+        ) : null}
+
+        {active.includes("flow") ? (
+          <div className="twin-legend">
+            <div className="twin-legend-title">流向顏色＝方向</div>
+            <div
+              className="twin-legend-ramp"
+              style={{
+                background: `linear-gradient(90deg, rgb(${presentationConfig.layers.arcSourceRgb.join(",")}), rgb(${presentationConfig.layers.arcTargetRgb.join(",")}))`,
+              }}
+            />
+            <div className="twin-legend-ramp-labels">
+              <span>橘／取車（偏滿）</span>
+              <span>綠／補車（偏空）</span>
+            </div>
+            <div className="twin-legend-note">顏色只表示從哪裡取、補到哪，不是流量；粗細才是示意量。</div>
+          </div>
+        ) : null}
+
+        {active.includes("density") ? (
+          <div className="twin-legend">
+            <div className="twin-legend-title">Hexagon 顏色＝平均使用率</div>
+            <div
+              className="twin-legend-ramp"
+              style={{
+                background: `linear-gradient(90deg, ${presentationConfig.layers.hexagonColorRange
+                  .map((color) => `rgb(${color.join(",")})`)
+                  .join(", ")})`,
+              }}
+            />
+            <div className="twin-legend-ramp-labels">
+              <span>空／藍</span>
+              <span>約五成</span>
+              <span>滿／紅</span>
+            </div>
+            <div className="twin-legend-note">柱高仍是格內車柱總數；顏色不是流量。</div>
+          </div>
+        ) : null}
+
         <StationLegend />
         <Popover
           trigger="click"
@@ -250,15 +372,23 @@ export default function TwinPage() {
         </Popover>
       </div>
 
+      <TwinDistrictCard
+        value={district}
+        districts={districts}
+        stationCount={scopedSnapshot.length}
+        outlineSource={outline?.source}
+        onChange={setDistrict}
+      />
+
       <div className="twin-timebar">
         <span className="twin-timebar-label">時間機器</span>
         <Segmented value={mode} options={MODE_OPTIONS} onChange={setMode} />
         <Typography.Text type="secondary" className="twin-timebar-note">
           {mode === "live"
-            ? "即時站況可做全市解讀"
+            ? `即時站況可做${scopeLabel}解讀`
             : insightReport.cityWideOk
-              ? `${mode === "past" ? "歷史" : "預測"}覆蓋 ${temporalView.covered}/${snapshot.length} 站，已開全市解讀`
-              : `${timelineNote || `僅 ${temporalView.covered}/${snapshot.length || temporalView.available} 站有樣本`}，全市結論已關閉`}
+              ? `${mode === "past" ? "歷史" : "預測"}覆蓋 ${scopedCoverage.covered}/${scopedSnapshot.length} 站，已開${scopeLabel}解讀`
+              : `${timelineNote || `僅 ${scopedCoverage.covered}/${scopedSnapshot.length || scopedCoverage.available} 站有樣本`}，${scopeLabel}結論已關閉`}
         </Typography.Text>
       </div>
 
@@ -278,6 +408,7 @@ export default function TwinPage() {
           ariaLabel="數位孿生戰情室分析地圖"
           className="map-fill"
           initialViewState={presentationConfig.maps.dashboard}
+          focusTarget={focusTarget}
           layers={layers}
           getTooltip={getTooltip}
           overlay={overlay}
@@ -300,7 +431,7 @@ export default function TwinPage() {
         <div className="twin-agent-panel" hidden={agentTab !== "assistant"}>
           <TwinAssistant
             report={fullInsightReport}
-            snapshot={snapshot}
+            snapshot={scopedSnapshot}
             visibleLayers={active}
             dataReady={!dashboard.loading && Boolean(dashboard.data || dashboard.error)}
           />

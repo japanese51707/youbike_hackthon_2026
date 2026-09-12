@@ -132,6 +132,24 @@ function lerpChannel(from, to, t) {
   return Math.round(from + (to - from) * t);
 }
 
+export function interpolateColorRange(range, t, alpha = 255) {
+  const stops = range ?? [];
+  if (!stops.length) return [128, 128, 128, alpha];
+  const x = Math.min(1, Math.max(0, Number(t) || 0));
+  if (stops.length === 1) return [...stops[0], alpha];
+  const scaled = x * (stops.length - 1);
+  const index = Math.min(stops.length - 2, Math.floor(scaled));
+  const mix = scaled - index;
+  const from = stops[index];
+  const to = stops[index + 1];
+  return [
+    lerpChannel(from[0], to[0], mix),
+    lerpChannel(from[1], to[1], mix),
+    lerpChannel(from[2], to[2], mix),
+    alpha,
+  ];
+}
+
 export function giStarFillColor(z, alpha = 130) {
   const value = Number(z);
   if (!Number.isFinite(value) || value <= GI_STAR_RAMP[0][0]) {

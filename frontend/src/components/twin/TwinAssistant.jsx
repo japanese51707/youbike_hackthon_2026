@@ -9,7 +9,7 @@ const SUGGESTIONS = [
   "快速總結當前情況",
   "哪一區空站最集中？",
   "這層 Gi* 是什麼意思？",
-  "覆蓋缺口代表什麼？",
+  "這層流向弧線是真的嗎？",
 ];
 
 export default function TwinAssistant({
