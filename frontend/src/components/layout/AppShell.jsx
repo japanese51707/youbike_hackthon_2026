@@ -47,7 +47,7 @@ export default function AppShell({ children }) {
     prefetchAllPages();
   }, []);
   useEffect(() => {
-    if (!isApiMode || location.pathname !== "/dashboard" || !operators.length) return;
+    if (!isApiMode || !["/dashboard", "/twin"].includes(location.pathname) || !operators.length) return;
     const next = pickDashboardActor(operators, getActorId());
     if (!next || next === getActorId()) return;
     setActorId(next);

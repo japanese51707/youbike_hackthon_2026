@@ -34,7 +34,7 @@ function isPrivileged(operator) {
 }
 
 /**
- * 調度面板預設身分：沒選或選到沒派工權限的人時，改成李主任（OP-002）。
+ * 調度面板與戰情室預設身分：沒選或選到沒權限的人時，改成李主任（OP-002）。
  * 已經是調度／維運就留下，避免 Demo 中途手動切換被蓋掉。
  */
 export function pickDashboardActor(operators, currentId = "") {

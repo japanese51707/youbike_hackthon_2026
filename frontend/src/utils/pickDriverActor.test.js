@@ -44,7 +44,7 @@ test("pickDriverActor falls back to any tasked driver, then the current id", () 
   assert.equal(pickDriverActor([], ""), "");
 });
 
-test("pickDashboardActor uses 李主任 when nobody privileged is selected", () => {
+test("pickDashboardActor uses 李主任 on dashboard and twin when nobody privileged is selected", () => {
   const roster = [
     { operator_id: "OP-001", name: "王小明", role: "operator" },
     { operator_id: "OP-002", name: "李主任", role: "dispatcher" },
