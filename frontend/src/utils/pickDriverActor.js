@@ -26,6 +26,25 @@ export function pickDriverActor(operators, currentId = "") {
   return busy?.operator_id || withTask[0]?.operator_id || currentId || "";
 }
 
+const PRIVILEGED_ROLES = new Set(["dispatcher", "maintainer"]);
+const DEMO_DISPATCHER_NAME = "李主任";
+
+function isPrivileged(operator) {
+  return PRIVILEGED_ROLES.has(operator?.role);
+}
+
+/**
+ * 調度面板預設身分：沒選或選到沒派工權限的人時，改成李主任（OP-002）。
+ * 已經是調度／維運就留下，避免 Demo 中途手動切換被蓋掉。
+ */
+export function pickDashboardActor(operators, currentId = "") {
+  const rows = Array.isArray(operators) ? operators.filter((row) => row?.operator_id) : [];
+  const current = rows.find((row) => row.operator_id === currentId);
+  if (current && isPrivileged(current)) return current.operator_id;
+  const named = rows.find((row) => row.name === DEMO_DISPATCHER_NAME && isPrivileged(row));
+  return named?.operator_id || rows.find(isPrivileged)?.operator_id || currentId || "";
+}
+
 export function fieldOperators(operators) {
   return (Array.isArray(operators) ? operators : []).filter(isFieldOperator);
 }

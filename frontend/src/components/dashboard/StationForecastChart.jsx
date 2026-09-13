@@ -2,7 +2,7 @@ import { useAppearance } from "../../theme/ThemeProvider.jsx";
 import { InfoCircleOutlined } from "@ant-design/icons";
 import { Alert, Tag, Tooltip, Typography } from "antd";
 import ReactECharts from "echarts-for-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 // 預測方式說明（依 lag 來源）：放進標題旁的 icon tooltip，不佔版面。
 const PROXY_NOTE =
@@ -83,12 +83,19 @@ function buildOption(current, horizons, colors) {
         ? {
             silent: true,
             symbol: "none",
+            animation: false,
             lineStyle: { color: colors.border, type: "dashed" },
+            label: { color: colors.muted, fontSize: 11, distance: 4 },
             data: [
-              { yAxis: capacity, name: "滿柱" },
-              { yAxis: 0, name: "空站" },
+              {
+                yAxis: capacity,
+                label: { formatter: `滿柱 ${capacity}`, position: "insideStartBottom" },
+              },
+              {
+                yAxis: 0,
+                label: { formatter: "空站 0", position: "insideStartTop" },
+              },
             ],
-            label: { color: colors.muted, formatter: (p) => (p.value === 0 ? "空站 0" : `滿柱 ${capacity}`) },
           }
         : undefined,
     },
@@ -113,6 +120,7 @@ function buildOption(current, horizons, colors) {
 
   return {
     backgroundColor: "transparent",
+    animation: false,
     textStyle: { color: colors.text },
     legend: {
       data: hasSuppressed
@@ -120,8 +128,10 @@ function buildOption(current, horizons, colors) {
         : ["安全區間 P10–P90", "預測可借（實際會發生）"],
       textStyle: { color: colors.muted, fontSize: 11 },
       top: 0,
-      itemWidth: 18,
+      left: 0,
+      itemWidth: 14,
       itemHeight: 8,
+      itemGap: 10,
     },
     tooltip: {
       trigger: "axis",
@@ -143,21 +153,19 @@ function buildOption(current, horizons, colors) {
         return html;
       },
     },
-    grid: { left: 40, right: 18, top: 30, bottom: 28, containLabel: true },
+    grid: { left: 36, right: 10, top: 36, bottom: 28, containLabel: false },
     xAxis: {
       type: "category",
       data: labels,
       boundaryGap: false,
       axisLine: { lineStyle: { color: colors.grid } },
-      axisLabel: { color: colors.muted },
+      axisLabel: { color: colors.muted, hideOverlap: true, interval: 0 },
     },
     yAxis: {
       type: "value",
-      name: "可借車輛",
       min: yMin,
       max: yMax,
-      nameTextStyle: { color: colors.muted },
-      axisLabel: { color: colors.muted },
+      axisLabel: { color: colors.muted, hideOverlap: true },
       splitLine: { lineStyle: { color: colors.grid } },
     },
     series,
@@ -172,6 +180,20 @@ export default function StationForecastChart({ current, prediction }) {
   );
 
   const available = prediction?.source && prediction.source !== "unavailable" && horizons.length > 0;
+  const option = useMemo(
+    () => (available && current ? buildOption(current, horizons, colors) : null),
+    [available, current, horizons, colors],
+  );
+  const boxRef = useRef(null);
+  const chartRef = useRef(null);
+  useEffect(() => {
+    const node = boxRef.current;
+    if (!node) return undefined;
+    const resize = () => chartRef.current?.getEchartsInstance()?.resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [available]);
 
   return (
     <div>
@@ -206,11 +228,15 @@ export default function StationForecastChart({ current, prediction }) {
 
       {available && current ? (
         <>
-          <ReactECharts
-            option={buildOption(current, horizons, colors)}
-            style={{ height: 240 }}
-            notMerge
-          />
+          <div ref={boxRef} className="forecast-chart">
+            <ReactECharts
+              ref={chartRef}
+              option={option}
+              style={{ height: 240, width: "100%" }}
+              notMerge
+              opts={{ renderer: "canvas" }}
+            />
+          </div>
           <div className="forecast-slot-notes">
             {[...horizons]
               .sort((a, b) => a.horizon_minutes - b.horizon_minutes)

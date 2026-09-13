@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   driverActorOptions,
   fieldOperators,
+  pickDashboardActor,
   pickDriverActor,
 } from "./pickDriverActor.js";
 
@@ -41,6 +42,18 @@ test("pickDriverActor falls back to any tasked driver, then the current id", () 
   assert.equal(pickDriverActor([rows[0], rows[2]], "OP-D"), "OP-2");
   assert.equal(pickDriverActor([rows[0]], "OP-D"), "OP-D");
   assert.equal(pickDriverActor([], ""), "");
+});
+
+test("pickDashboardActor uses 李主任 when nobody privileged is selected", () => {
+  const roster = [
+    { operator_id: "OP-001", name: "王小明", role: "operator" },
+    { operator_id: "OP-002", name: "李主任", role: "dispatcher" },
+    { operator_id: "OP-003", name: "陳工程師", role: "maintainer" },
+  ];
+  assert.equal(pickDashboardActor(roster, ""), "OP-002");
+  assert.equal(pickDashboardActor(roster, "OP-001"), "OP-002");
+  assert.equal(pickDashboardActor(roster, "OP-003"), "OP-003");
+  assert.equal(pickDashboardActor(roster, "OP-002"), "OP-002");
 });
 
 test("driverActorOptions lists field people with tasked drivers first", () => {

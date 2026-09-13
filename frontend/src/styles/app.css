@@ -801,6 +801,12 @@ body {
   gap: 6px;
 }
 
+.forecast-chart {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .forecast-slot-notes {
   display: flex;
   flex-wrap: wrap;
