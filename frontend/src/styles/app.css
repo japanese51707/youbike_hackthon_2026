@@ -4046,17 +4046,38 @@ body.rider-phone-preview .rider-page {
 .dts-route-map-empty { flex: 1; display: grid; place-items: center; color: var(--ct-text-dim); font-size: 13px; }
 
 /* ADR-330：進行中任務看板——左任務列表 + 右選中任務地圖與詳情 */
+/* 這張卡（.dts-tasks-card）固定填滿頁面剩餘高度，讓 .dts-board 也跟著填滿卡片內容區，
+   不再依賴視窗高度換算或 sticky——清單／任務卡各自用自己的 overflow-y:auto 捲動，
+   總高度剛好等於卡片高度，頁面本身（.page-stack）就不會多出捲軸。 */
+.dts-tasks-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.dts-tasks-card .ant-card-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dts-tasks-card .dts-muted {
+  flex: none;
+}
 .dts-board {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 .dts-board-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 620px;
+  height: 100%;
   overflow-y: auto;
 }
 .dts-board-item {
@@ -4081,20 +4102,54 @@ body.rider-phone-preview .rider-page {
 }
 .dts-board-item-id { font-size: 13px; font-weight: 700; }
 .dts-board-item-sub { font-size: 11px; margin-top: 3px; }
-.dts-board-detail { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+/* 狀態篩選：黏在任務列表頂端，捲動清單時仍看得到／點得到，不隨清單一起捲走。 */
+.dts-board-filter {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin-bottom: 2px;
+  background: var(--ct-bg-soft);
+  border-radius: 8px;
+}
+/* 地圖跟任務卡改成左右並排（不再上下堆疊）；整塊固定高度，任務卡自己內部捲動——
+   站點很多時只有任務卡那一欄出現捲軸（在這塊區域右側），不會把整頁撐得很長。 */
+.dts-board-detail {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 12px;
+  min-width: 0;
+  height: 100%;
+}
 .dts-board-map-wrap {
-  height: 340px;
+  flex: 1 1 45%;
+  min-width: 260px;
+  height: 100%;
   border: 1px solid var(--ct-border);
   border-radius: 12px;
   overflow: hidden;
 }
 .dts-board-map { width: 100%; height: 100%; }
+.dts-board-task-wrap {
+  flex: 1 1 55%;
+  min-width: 300px;
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 2px;
+}
 .dts-stop-problem { margin-top: 3px; }
 
-@media (max-width: 900px) {
+/* 900px 門檻太寬了——一般筆電視窗寬度常常落在 900~1200px 之間，也會被這條規則
+   收成上下堆疊，跟使用者想要的「地圖在清單右側」對不起來。改成只有真的窄到手機
+   尺寸（≤640px）才收合成單欄，桌機/筆電寬度一律維持左右並排。 */
+@media (max-width: 640px) {
   .dts-board { grid-template-columns: 1fr; }
   .dts-board-list { max-height: 180px; flex-direction: row; overflow-x: auto; }
   .dts-board-item { min-width: 200px; }
+  /* 手機寬度：地圖跟任務卡退回上下堆疊，任務卡跟著頁面自然捲動比較好操作。 */
+  .dts-board-detail { flex-direction: column; height: auto; }
+  .dts-board-map-wrap { flex: none; height: 240px; }
+  .dts-board-task-wrap { flex: none; height: auto; overflow-y: visible; }
 }
 
 /* ADR-330：人力配置視圖——四類資源顏色分類卡 */

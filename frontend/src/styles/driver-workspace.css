@@ -310,6 +310,24 @@ body.driver-phone-preview .app-shell {
   overflow-wrap: anywhere;
 }
 
+/* 臨時（緊急）任務標示：車牌旁邊，任何版面都看得到，不像執行中/待開始的狀態籤在手機版會被藏起來。 */
+.dw-emergency-tag {
+  margin-left: 8px;
+  vertical-align: middle;
+  font-size: 12px;
+}
+
+/* 多任務切換鈕：有臨時任務時在該任務名稱前加一個閃電圖示。 */
+.dw-task-switch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dw-task-switch-emergency {
+  color: var(--ct-danger, #ff6b6b);
+}
+
 .dw-vehicle-sub {
   font-size: 12px;
   color: var(--ct-text-dim);

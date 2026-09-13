@@ -5,6 +5,7 @@ import {
   DesktopOutlined,
   EnvironmentOutlined,
   ReloadOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
 import {
   Alert,
@@ -471,6 +472,7 @@ export default function BackendDriverPage() {
       createVehicleLayer({ start }),
     ].filter(Boolean);
   }, [start, mapStops, roadGeometry, currentIndex]);
+
   const doneCount = stops.filter(
     (s) => s.station_status === "completed" || s.station_status === "done",
   ).length;
@@ -598,7 +600,14 @@ export default function BackendDriverPage() {
                 onChange={setPickedTaskId}
                 options={active.map((t, i) => ({
                   value: t.task_id,
-                  label: `任務 ${i + 1}｜${t.district || "跨區"}`,
+                  label: (
+                    <span className="dw-task-switch-label">
+                      {t.task_type === "emergency" ? (
+                        <ThunderboltOutlined className="dw-task-switch-emergency" />
+                      ) : null}
+                      任務 {i + 1}｜{t.district || "跨區"}
+                    </span>
+                  ),
                 }))}
               />
             ) : null}
@@ -608,7 +617,14 @@ export default function BackendDriverPage() {
                 <div className="dw-vehicle-head">
                   {isPhoneLayout ? null : <TruckGlyph active={running} />}
                   <div>
-                    <div className="dw-vehicle-id mono">{task.assigned_vehicle || "未配車"}</div>
+                    <div className="dw-vehicle-id mono">
+                      {task.assigned_vehicle || "未配車"}
+                      {task.task_type === "emergency" ? (
+                        <Tag color="red" icon={<ThunderboltOutlined />} className="dw-emergency-tag">
+                          臨時任務
+                        </Tag>
+                      ) : null}
+                    </div>
                     <div className="dw-vehicle-sub">
                       {vehicle?.max_capacity ? `載運上限 ${vehicle.max_capacity} 台` : "調度貨車"}
                       {isPhoneLayout && shownKm !== null
@@ -750,7 +766,6 @@ export default function BackendDriverPage() {
                 </Space>
               </section>
 
-              {/* 右上：本趟路線地圖 */}
               <section className="dw-map" aria-label="本趟任務路線">
                 {start && mapStops.length ? (
                   <>

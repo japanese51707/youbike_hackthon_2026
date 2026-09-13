@@ -240,53 +240,101 @@ function TaskRouteMap({ task, focusStationId }) {
   );
 }
 
+// 任務狀態篩選：只在「進行中任務」的兩種子狀態之間切（已指派・待出發／執行中），
+// 「全部」＝不篩。只影響左側清單與預設選取，不影響上方頁面總計（那是全部進行中任務數）。
+const TASK_STATUS_FILTERS = [
+  { value: "all", label: "全部" },
+  { value: "assigned", label: "待出發" },
+  { value: "in_progress", label: "執行中" },
+];
+
 // ── B：進行中任務看板（左任務列表 → 右選中任務的地圖＋資源＋各站狀況）──
 function ActiveTasksBoard({ tasks, now }) {
+  const [statusFilter, setStatusFilter] = useState("all");
   const [selectedId, setSelectedId] = useState(null);
-  const selected = tasks.find((t) => t.task_id === selectedId) ?? tasks[0] ?? null;
   const [focusStationId, setFocusStationId] = useState(null);
+
+  const filteredTasks = useMemo(
+    () => (statusFilter === "all" ? tasks : tasks.filter((t) => t.task_status === statusFilter)),
+    [tasks, statusFilter],
+  );
+  const filterCounts = useMemo(
+    () => ({
+      all: tasks.length,
+      assigned: tasks.filter((t) => t.task_status === "assigned").length,
+      in_progress: tasks.filter((t) => t.task_status === "in_progress").length,
+    }),
+    [tasks],
+  );
+  const selected = filteredTasks.find((t) => t.task_id === selectedId) ?? filteredTasks[0] ?? null;
+
+  const changeFilter = (value) => {
+    setStatusFilter(value);
+    setSelectedId(null);
+    setFocusStationId(null);
+  };
 
   if (!tasks.length) {
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="目前沒有進行中的分派任務" />;
   }
   return (
     <div className="dts-board">
-      {/* 左：任務列表 */}
+      {/* 左：狀態篩選 + 任務列表 */}
       <div className="dts-board-list">
-        {tasks.map((t) => {
-          const meta = TASK_STATUS[t.task_status] ?? TASK_STATUS.assigned;
-          const route = t.route ?? [];
-          const done = route.filter((s) => s.station_status === "completed").length;
-          const activeStops = route.filter((s) => s.station_status !== "removed");
-          const isSel = selected?.task_id === t.task_id;
-          return (
-            <button
-              type="button"
-              key={t.task_id}
-              className={`dts-board-item ${isSel ? "is-selected" : ""}`}
-              onClick={() => { setSelectedId(t.task_id); setFocusStationId(null); }}
-            >
-              <div className="dts-board-item-head">
-                <span className="mono dts-board-item-id">{t.task_id}</span>
-                <Tag color={meta.color}>{meta.label}</Tag>
-              </div>
-              <div className="dts-board-item-sub dts-muted mono">
-                {t.district ?? "—"}｜{done}/{activeStops.length} 站｜起始 {durationSince(t.assigned_at, now)}
-              </div>
-            </button>
-          );
-        })}
+        <Segmented
+          block
+          size="small"
+          className="dts-board-filter"
+          value={statusFilter}
+          onChange={changeFilter}
+          options={TASK_STATUS_FILTERS.map((f) => ({
+            value: f.value,
+            label: `${f.label}（${filterCounts[f.value]}）`,
+          }))}
+        />
+        {filteredTasks.length ? (
+          filteredTasks.map((t) => {
+            const meta = TASK_STATUS[t.task_status] ?? TASK_STATUS.assigned;
+            const route = t.route ?? [];
+            const done = route.filter((s) => s.station_status === "completed").length;
+            const activeStops = route.filter((s) => s.station_status !== "removed");
+            const isSel = selected?.task_id === t.task_id;
+            return (
+              <button
+                type="button"
+                key={t.task_id}
+                className={`dts-board-item ${isSel ? "is-selected" : ""}`}
+                onClick={() => { setSelectedId(t.task_id); setFocusStationId(null); }}
+              >
+                <div className="dts-board-item-head">
+                  <span className="mono dts-board-item-id">{t.task_id}</span>
+                  <Tag color={meta.color}>{meta.label}</Tag>
+                </div>
+                <div className="dts-board-item-sub dts-muted mono">
+                  {t.district ?? "—"}｜{done}/{activeStops.length} 站｜起始 {durationSince(t.assigned_at, now)}
+                </div>
+              </button>
+            );
+          })
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="這個狀態目前沒有任務" />
+        )}
       </div>
-      {/* 右：選中任務詳情 */}
+      {/* 右：選中任務詳情——任務卡在左、地圖在最右邊；任務卡站點多時只有它自己內部捲動，
+          不會把整個區塊撐高、逼頁面出現長長的捲軸。 */}
       <div className="dts-board-detail">
         {selected ? (
           <>
+            <div className="dts-board-task-wrap">
+              <TaskCard task={selected} now={now} onOpenMap={(_t, sid) => setFocusStationId(sid)} />
+            </div>
             <div className="dts-board-map-wrap">
               <TaskRouteMap task={selected} focusStationId={focusStationId} />
             </div>
-            <TaskCard task={selected} now={now} onOpenMap={(_t, sid) => setFocusStationId(sid)} />
           </>
-        ) : null}
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="這個狀態目前沒有任務可顯示" />
+        )}
       </div>
     </div>
   );
@@ -522,11 +570,13 @@ export default function DispatchStatusPage() {
       </div>
 
       <AsyncState loading={loading && !data} error={error} data={data} onRetry={reload}>
-        {/* 任務狀況視圖：進行中任務看板——左任務列表、右地圖＋資源＋各站狀況（含站況緊急計時） */}
+        {/* 任務狀況視圖：進行中任務看板——左任務列表、右任務卡＋地圖（含站況緊急計時）。
+            這張卡固定填滿頁面剩餘高度，內容不會撐出頁面本身的捲軸——只有任務列表跟任務卡
+            內部各自捲動，使用者往下滑不到頁面本身。 */}
         {view === "tasks" ? (
-          <Card size="small" title={`進行中任務（${activeTasks.length}）`}>
+          <Card size="small" className="dts-tasks-card" title={`進行中任務（${activeTasks.length}）`}>
             <Typography.Paragraph type="secondary" className="dts-muted">
-              點左側任務看右側路線地圖與各站狀況。任務卡旁為「單起始至今」，站點旁為「該站變空/滿到現在」
+              點左側任務看右側任務卡與地圖狀況。任務卡旁為「單起始至今」，站點旁為「該站變空/滿到現在」
               的緊急計時（後端持續計時，關閉頁面不歸零）。站點達目標水位即自動完成，全站完成後車人回閒置。
             </Typography.Paragraph>
             <ActiveTasksBoard tasks={activeTasks} now={now} />
