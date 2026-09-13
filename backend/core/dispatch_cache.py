@@ -54,7 +54,18 @@ def _refresh() -> dict:
     result = _compute()
     with _lock:
         _cache = result
+    _sync_escalations(result)
     return result
+
+
+def _sync_escalations(snap: dict) -> None:
+    """站況預算完成後同步緊急案件。失敗不回滾快取。"""
+    try:
+        from core import escalation
+        from core.task_manager import get_task_manager
+        escalation.sync_cases(snap["stations"], snap["recs"], get_task_manager().list_tasks())
+    except Exception as exc:  # noqa: BLE001
+        print(f"[dispatch_cache] 緊急案件同步失敗（不擋快取）：{exc}")
 
 
 def get_snapshot() -> dict:

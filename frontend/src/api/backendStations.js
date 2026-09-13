@@ -4,6 +4,10 @@
 // 統一走 httpClient.request（與其餘端點同一 base URL + Vite proxy + 錯誤處理），
 // 不再自己組絕對網址，避免站點與其他端點打到不同後端。
 import { request } from "./httpClient.js";
+import { cachedRead } from "./resourceCache.js";
+
+const STATIONS_CACHE_KEY = "backend-stations";
+const STATIONS_TTL_MS = 60_000;
 
 const REQUIRED = [
   "station_id",
@@ -39,10 +43,12 @@ function isValid(s) {
   );
 }
 
-export async function fetchBackendStations() {
-  const data = await request("/stations", { timeoutMs: 40000 });
-  if (!Array.isArray(data)) throw new Error("後端 /stations 格式非陣列");
-  const stations = data.filter(isValid).map(normalize);
-  if (!stations.length) throw new Error("後端 /stations 無有效站點");
-  return stations;
+export async function fetchBackendStations({ bypass = false } = {}) {
+  return cachedRead(STATIONS_CACHE_KEY, async () => {
+    const data = await request("/stations", { timeoutMs: 40000 });
+    if (!Array.isArray(data)) throw new Error("後端 /stations 格式非陣列");
+    const stations = data.filter(isValid).map(normalize);
+    if (!stations.length) throw new Error("後端 /stations 無有效站點");
+    return stations;
+  }, { ttlMs: STATIONS_TTL_MS, bypass });
 }

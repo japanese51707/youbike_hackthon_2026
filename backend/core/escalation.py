@@ -68,21 +68,35 @@ OPEN_TASK_STATUS = ("pending", "assigned", "in_progress", "retryable", "manual_r
 DEFAULT_STAGES = (30, 45)
 
 
+TAIPEI = _dt.timezone(_dt.timedelta(hours=8))
+
+
 def _now() -> _dt.datetime:
-    return _dt.datetime.now()
+    return _dt.datetime.now(TAIPEI)
+
+
+def _to_taipei(moment: _dt.datetime) -> _dt.datetime:
+    """案件時計一律台北。naive 當台北牆上時間，不跟容器 UTC 對打。"""
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=TAIPEI)
+    return moment.astimezone(TAIPEI)
 
 
 def _iso(moment: _dt.datetime) -> str:
-    return moment.isoformat(timespec="seconds")
+    return _to_taipei(moment).isoformat(timespec="seconds")
 
 
 def _parse(value) -> Optional[_dt.datetime]:
     if not value:
         return None
     try:
-        return _dt.datetime.fromisoformat(str(value))
+        return _to_taipei(_dt.datetime.fromisoformat(str(value)))
     except (TypeError, ValueError):
         return None
+
+
+def _align(left: _dt.datetime, right: _dt.datetime) -> tuple[_dt.datetime, _dt.datetime]:
+    return _to_taipei(left), _to_taipei(right)
 
 
 def _settings(config: Optional[dict] = None) -> dict:
@@ -152,7 +166,8 @@ def stage_of(case: dict, now: Optional[_dt.datetime] = None,
     if opened is None:
         return 0
     stages = _settings(config)["stages"]
-    waited = ((now or _now()) - opened).total_seconds() / 60.0
+    opened, moment = _align(opened, now or _now())
+    waited = (moment - opened).total_seconds() / 60.0
     reached = 0
     for index, minutes in enumerate(stages, start=1):
         if waited >= minutes:
@@ -166,14 +181,22 @@ def describe(case: dict, now: Optional[_dt.datetime] = None,
     settings = _settings(config)
     moment = now or _now()
     opened = _parse(case.get("opened_at"))
-    waited = max(0.0, (moment - opened).total_seconds() / 60.0) if opened else 0.0
+    if opened is not None:
+        opened, moment = _align(opened, moment)
+        waited = max(0.0, (moment - opened).total_seconds() / 60.0)
+    else:
+        waited = 0.0
     stage = stage_of(case, moment, config)
     stages = settings["stages"]
     next_at = None
     if opened is not None and stage < len(stages):
         next_at = _iso(opened + _dt.timedelta(minutes=stages[stage]))
     muted_until = _parse(case.get("muted_until"))
-    muted = bool(muted_until and muted_until > moment)
+    if muted_until is not None:
+        muted_until, muted_now = _align(muted_until, moment)
+        muted = muted_until > muted_now
+    else:
+        muted = False
     district = case.get("district") or ""
     return {
         **case,
@@ -275,16 +298,27 @@ def sync_cases(stations: list, recommendations: Optional[list] = None,
                 OBS_CONFIRMED if observation_trustworthy(station, config) else OBS_UNVERIFIED,
                 station.get("source"))
 
-    # ── 3. 補推算欄位 + 承辦責任 ────────────────────────────────────
+    return list_open_described(now=moment, config=config, tasks=tasks)
+
+
+def list_open_described(now: Optional[_dt.datetime] = None, config: Optional[dict] = None,
+                        tasks: Optional[list] = None) -> list:
+    """只讀未結案案件並補階段／等待／承辦。不開不關（ADR-335 顯示路徑）。"""
+    from db import escalation_repo
+
+    moment = now or _now()
     assignments = assignments_by_station(tasks or [])
     result = []
     for case in escalation_repo.list_open_cases():
-        described = describe(case, moment, config)
-        described.update(responsibility_of(case["station_id"], assignments))
-        if described["stage"] > int(case.get("highest_stage") or 0):
-            escalation_repo.set_highest_stage(case["case_id"], described["stage"])
-            described["highest_stage"] = described["stage"]
-        result.append(described)
+        try:
+            described = describe(case, moment, config)
+            described.update(responsibility_of(case["station_id"], assignments))
+            if described["stage"] > int(case.get("highest_stage") or 0):
+                escalation_repo.set_highest_stage(case["case_id"], described["stage"])
+                described["highest_stage"] = described["stage"]
+            result.append(described)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[escalation] 描述案件失敗 case_id={case.get('case_id')}：{exc}")
     result.sort(key=lambda c: (-c["stage"], -c["waited_minutes"]))
     return result
 

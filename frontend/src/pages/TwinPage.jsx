@@ -14,6 +14,7 @@ import {
 import { createDensityLayer } from "../components/map/layers/densityLayer.js";
 import { createStationGaugeLayer } from "../components/map/layers/stationGaugeLayer.js";
 import { isApiMode, request } from "../api/httpClient.js";
+import { peekResource, rememberResource } from "../api/resourceCache.js";
 import { loadTemporalPresentation } from "../api/temporalMockAdapter.js";
 import { createDistrictOutlineLayer } from "../components/map/layers/districtOutlineLayer.js";
 import TwinAgentPane from "../components/twin/TwinAgentPane.jsx";
@@ -64,8 +65,8 @@ export default function TwinPage() {
   const [active, setActive] = useState(["gauge", "voronoi"]);
   const [mode, setMode] = useState("live");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [timeline, setTimeline] = useState(null);
-  const [timelineNote, setTimelineNote] = useState("");
+  const [timeline, setTimeline] = useState(() => peekResource("twin-timeline"));
+  const [timelineNote, setTimelineNote] = useState(() => peekResource("twin-timeline")?.note || "");
   const [agentOpen, setAgentOpen] = useState(true);
   const [district, setDistrict] = useState(CITY_SCOPE);
   const [focusTarget, setFocusTarget] = useState(null);
@@ -102,6 +103,7 @@ export default function TwinPage() {
     request("/stations/timeline?district=全市&date=2026-06-02")
       .then((payload) => {
         if (activeRequest) {
+          rememberResource("twin-timeline", payload);
           setTimeline(payload);
           setTimelineNote(payload?.note || "");
         }
@@ -394,7 +396,7 @@ export default function TwinPage() {
 
       <TwinInsightPanel
         report={insightReport}
-        loading={dashboard.loading}
+        loading={dashboard.loading && !dashboard.data}
         error={dashboard.error}
         onSelectStation={openStation}
       />
@@ -433,7 +435,7 @@ export default function TwinPage() {
             report={fullInsightReport}
             snapshot={scopedSnapshot}
             visibleLayers={active}
-            dataReady={!dashboard.loading && Boolean(dashboard.data || dashboard.error)}
+            dataReady={Boolean(dashboard.data || dashboard.error)}
           />
         </div>
         <div className="twin-agent-panel" hidden={agentTab !== "optimization"}>

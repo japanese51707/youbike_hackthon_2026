@@ -1,6 +1,7 @@
 import { ReloadOutlined } from "@ant-design/icons";
 import { Button, Card, Empty, Space, Table, Tag, Typography } from "antd";
 import { useCallback, useEffect, useState } from "react";
+import { peekResource, rememberResource } from "../api/resourceCache.js";
 import AsyncState from "../components/common/AsyncState.jsx";
 import {
   ACTION_LABELS,
@@ -8,6 +9,8 @@ import {
   STAGE_LABELS,
   formatWaited,
   getEscalationHistory,
+  nextChaseCopy,
+  waitedSince,
 } from "../api/escalationApi.js";
 import useEscalations from "../hooks/useEscalations.js";
 import { formatDateTime } from "../utils/formatters.js";
@@ -23,11 +26,16 @@ const stageTag = (stage) => (
 
 export default function AlertTrackingPage() {
   const live = useEscalations();
-  const [history, setHistory] = useState(null);
+  const [history, setHistory] = useState(() => peekResource("escalation-history"));
   const [error, setError] = useState(null);
 
   const loadHistory = useCallback(() => {
-    getEscalationHistory(100).then(setHistory).catch(setError);
+    getEscalationHistory(100)
+      .then((rows) => {
+        rememberResource("escalation-history", rows);
+        setHistory(rows);
+      })
+      .catch(setError);
   }, []);
   useEffect(loadHistory, [loadHistory]);
 
@@ -41,17 +49,22 @@ export default function AlertTrackingPage() {
         </Space>
       ) },
     { title: "已等待", dataIndex: "waited_minutes", width: 110,
-      render: (v) => <b className="mono">{formatWaited(v)}</b> },
+      render: (v, row) => <b className="mono">{formatWaited(v ?? waitedSince(row.opened_at))}</b> },
     { title: "開案時間", dataIndex: "opened_at", width: 140, render: formatDateTime },
-    { title: "下一階段", dataIndex: "next_stage_at", width: 140,
-      render: (v, row) => (v
-        ? `${formatDateTime(v)}（還有 ${Math.max(0, Math.round(row.next_stage_in_minutes))} 分）`
-        : "已達最高階段") },
+    { title: "下次催辦", dataIndex: "next_stage_at", width: 180,
+      render: (_v, row) => nextChaseCopy(row) },
     { title: "狀態", dataIndex: "muted", width: 120,
       render: (muted) => (muted
         ? <Tag>靜音中（時鐘照走）</Tag>
         : <Tag color="red">待處理</Tag>) },
   ];
+
+  const historyRows = Array.isArray(history) ? history : [];
+  const closedHistory = historyRows.filter((row) => row.closed_at);
+  const openFromHistory = historyRows
+    .filter((row) => !row.closed_at)
+    .map((row) => ({ ...row, stage: row.stage ?? row.highest_stage ?? 0 }));
+  const openCases = live.cases.length ? live.cases : openFromHistory;
 
   const historyColumns = [
     { title: "站點", dataIndex: "station_name",
@@ -79,11 +92,11 @@ export default function AlertTrackingPage() {
   ];
 
   return (
-    <div className="page-stack">
+    <div className="fixed-page alert-tracking-page">
       <div className="dashboard-toolbar">
         <Typography.Title level={2}>警示追蹤</Typography.Title>
         <Space>
-          <Tag color="red">待處理 {live.counts.open}</Tag>
+          <Tag color="red">待處理 {openCases.length}</Tag>
           <Tag color="orange">需再提示 {live.counts.banner}</Tag>
           <Tag color="red">需電話聯絡 {live.counts.prompt}</Tag>
           <Button size="small" icon={<ReloadOutlined />}
@@ -91,23 +104,31 @@ export default function AlertTrackingPage() {
         </Space>
       </div>
 
-      <Card size="small" title="未結案案件">
+      <Card size="small" className="alert-tracking-card alert-tracking-open" title="未結案案件">
         <Typography.Paragraph type="secondary" className="escalation-rule-note">
-          案件只有兩種關法，都由系統判定：<b>有未結案的派工任務涵蓋該站</b>，或<b>站況已恢復</b>。
-          按「已讀」只會暫時靜音，不關案、不重置等待時間。
+          空／滿站一出現就開案計時。未滿 30 分是「已開案」；滿 30 分「需再提示」；滿 45 分「需電話聯絡」。
+          站況恢復才關案，派工或已讀都不關。
         </Typography.Paragraph>
-        {live.error ? <Typography.Text type="danger">{live.error}</Typography.Text> : null}
-        <Table rowKey="case_id" size="small" pagination={false}
-          dataSource={live.cases} columns={openColumns} loading={live.loading}
-          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="目前沒有未結案的緊急案件" /> }} />
+        {live.error && !openCases.length ? (
+          <Typography.Text type="danger">{live.error}</Typography.Text>
+        ) : live.error ? (
+          <Typography.Text type="secondary">即時狀態暫時讀不到，先顯示資料庫裡尚未關閉的案件。</Typography.Text>
+        ) : null}
+        <div className="alert-tracking-scroll">
+          <Table rowKey="case_id" size="small" pagination={false}
+            dataSource={openCases} columns={openColumns} loading={live.loading && openCases.length === 0}
+            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="目前沒有未結案的緊急案件" /> }} />
+        </div>
       </Card>
 
-      <Card size="small" title="案件歷史與稽核軌跡">
-        <AsyncState loading={history === null && !error} error={error} data={history} onRetry={loadHistory}>
-          <Table rowKey="case_id" size="small" pagination={{ pageSize: 10 }}
-            dataSource={history ?? []} columns={historyColumns}
-            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚無案件紀錄" /> }} />
-        </AsyncState>
+      <Card size="small" className="alert-tracking-card alert-tracking-history" title="案件歷史與稽核軌跡">
+        <div className="alert-tracking-scroll">
+          <AsyncState loading={history === null && !error} error={error} data={history} onRetry={loadHistory}>
+            <Table rowKey="case_id" size="small" pagination={{ pageSize: 10 }}
+              dataSource={closedHistory} columns={historyColumns}
+              locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="尚無案件紀錄" /> }} />
+          </AsyncState>
+        </div>
       </Card>
     </div>
   );

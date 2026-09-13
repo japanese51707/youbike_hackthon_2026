@@ -10,6 +10,7 @@ import {
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Select, Space, Tag, Typography, message } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
+import { prefetchAllPages } from "../../api/prefetchPages.js";
 import { resetDemoData } from "../../api/operationsApi.js";
 
 import { useEffect, useState } from "react";
@@ -41,6 +42,7 @@ export default function AppShell({ children }) {
   const [operatorError, setOperatorError] = useState("");
   useEffect(() => {
     if (isApiMode) request("/operators").then(setOperators).catch(error => setOperatorError(error.message));
+    prefetchAllPages();
   }, []);
   const location = useLocation();
   const navigate = useNavigate();

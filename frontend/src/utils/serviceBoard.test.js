@@ -12,7 +12,25 @@ import {
   rankDistrictPressure,
   ratesFromKpi,
   resolveCardCopy,
+  kpiFromStations,
 } from "./serviceBoard.js";
+
+test("kpiFromStations matches backend KPI denominators", () => {
+  const kpi = kpiFromStations([
+    { status: "empty" },
+    { status: "full" },
+    { status: "normal", source: "youbike_official" },
+    { status: "offline" },
+  ]);
+  assert.equal(kpi.total_stations, 4);
+  assert.equal(kpi.in_service_stations, 3);
+  assert.equal(kpi.empty_stations, 1);
+  assert.equal(kpi.full_stations, 1);
+  assert.equal(kpi.offline_stations, 1);
+  assert.equal(kpi.healthy_stations, 1);
+  assert.equal(kpi.health_rate_pct, 33.3);
+  assert.equal(kpi.source, "youbike_official");
+});
 
 test("ratesFromKpi uses in-service stations as the denominator", () => {
   const rates = ratesFromKpi({
@@ -140,5 +158,6 @@ test("resolveCardCopy uses whatever is in the window, not a full 24h", () => {
     city: {},
     liveProblems: 7,
   });
-  assert.equal(liveOnly.value, "7 站");
+  assert.equal(liveOnly.value, "—");
+  assert.match(liveOnly.hint, /空／滿 7 站/);
 });
