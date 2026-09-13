@@ -25,13 +25,10 @@ _cache = None
 
 
 def _apply_env_overrides(cfg: dict) -> dict:
-    """本機預設直連官方；雲端 ECS 自動改走 S3 中繼（ADR-332）。"""
-    ds = cfg.setdefault("data_source", {})
+    """可用 YOUBIKE_DATA_SOURCE_MODE 覆寫資料源，未設就跟 config.yaml。"""
     mode = os.environ.get("YOUBIKE_DATA_SOURCE_MODE", "").strip()
     if mode:
-        ds["mode"] = mode
-    elif os.environ.get("AWS_EXECUTION_ENV", "").startswith("AWS_ECS"):
-        ds["mode"] = "youbike_s3"
+        cfg.setdefault("data_source", {})["mode"] = mode
     return cfg
 
 

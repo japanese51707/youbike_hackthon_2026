@@ -13,8 +13,7 @@
 
 # ── 資料源（NFR-7 可抽換）──
 data_source:
-  # 本機預設直連新北官方。雲端 us-east-1 會被官方封鎖（ADR-332），部署時用
-  # YOUBIKE_DATA_SOURCE_MODE=youbike_s3，並靠台灣端中繼上傳 S3。
+  # 直連新北官方即時站況 CSV。若雲端 us-east-1 再被封鎖，再改回 youbike_s3（ADR-332）。
   mode: "youbike_official"  # mock / historical / tdx / youbike_official / youbike_s3
   live_s3_key: "live/stations_latest.csv"  # ADR-332 中繼上傳的站況物件 key
   s3_max_age_sec: 900       # ADR-332 S3 站況超過此秒數視為過期（中繼掛掉不供應過期資料）
