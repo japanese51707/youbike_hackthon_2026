@@ -8,6 +8,25 @@ export function pct(part, whole, digits = 1) {
   return Number(((Number(part) || 0) * 100 / den).toFixed(digits));
 }
 
+export function kpiFromStations(stations = []) {
+  const total = stations.length;
+  const empty = stations.filter((s) => s.status === "empty").length;
+  const full = stations.filter((s) => s.status === "full").length;
+  const offline = stations.filter((s) => s.status === "offline").length;
+  const inService = Math.max(0, total - offline);
+  const healthy = Math.max(0, inService - empty - full);
+  return {
+    total_stations: total,
+    in_service_stations: inService,
+    offline_stations: offline,
+    empty_stations: empty,
+    full_stations: full,
+    healthy_stations: healthy,
+    health_rate_pct: inService ? Number(((healthy / inService) * 100).toFixed(1)) : 0,
+    source: stations.find((row) => row.source)?.source,
+  };
+}
+
 export function ratesFromKpi(kpi) {
   const inService = Number(kpi?.in_service_stations) || 0;
   const empty = Number(kpi?.empty_stations) || 0;
@@ -179,9 +198,9 @@ export function resolveCardCopy({ city = {}, history = {}, longestOpen, liveProb
   }
   if (liveProblems > 0) {
     return {
-      value: `${liveProblems} 站`,
-      timer: "時計還沒接上，先看目前空／滿數",
-      hint: "未滿 24 時也會顯示已有資料｜點開看各區",
+      value: "—",
+      timer: "時計還沒接到，先不顯示時間",
+      hint: `目前空／滿 ${liveProblems} 站｜接到時計後才算排除時間`,
     };
   }
   return {

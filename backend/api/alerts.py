@@ -91,13 +91,16 @@ class CaseActionRequest(BaseModel):
     contact: str = Field(default="", max_length=120)
 
 
-def _sync_escalations():
-    # ADR-313：讀背景預算快取的站況 + 需調度清單。
-    from core import escalation, dispatch_cache
+def _read_open_escalations():
+    # ADR-335：顯示只讀已保存案件。開／關由 dispatch_cache 背景同步，避免本頁等全市預測。
+    from core import escalation
     from core.task_manager import get_task_manager
-    snap = dispatch_cache.get_snapshot()
-    tasks = get_task_manager().list_tasks()
-    return escalation.sync_cases(snap["stations"], snap["recs"], tasks)
+    try:
+        tasks = get_task_manager().list_tasks()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[alerts] 讀任務失敗（案件清單仍回）：{exc}")
+        tasks = []
+    return escalation.list_open_described(tasks=tasks)
 
 
 def _controller_ids() -> list:
@@ -114,12 +117,11 @@ def _controller_ids() -> list:
 def escalations():
     """ADR-335：未結案的緊急調度案件（含階段、已持續分鐘、承辦責任、觀測新鮮度）。
 
-    案件只在「新鮮觀測確認解除」時關閉——派工不關案，所以這裡回的是
-    「問題還沒解除」的清單，不是「還沒派工」的清單。
-    同步時一併產生該輪的分級提醒（冪等，重複查詢不會重複送）。
+    顯示只讀已保存案件，不在此重跑全市預測。開／關由背景預算同步。
+    派工不關案，所以這裡回的是「問題還沒解除」的清單。
     """
     from core import notification_service
-    cases = _sync_escalations()
+    cases = _read_open_escalations()
     try:
         notification_service.sync_notifications(cases, _controller_ids())
     except Exception:  # noqa: BLE001 - 提醒寫入失敗不該讓案件清單掛掉

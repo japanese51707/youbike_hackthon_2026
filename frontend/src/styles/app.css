@@ -122,6 +122,28 @@ body {
   margin: 0 auto;
   padding: 18px 24px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.persistent-pages,
+.persistent-page {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+}
+
+.persistent-page[data-page="/alert-tracking"] {
+  overflow: hidden;
+}
+
+.page-content:has(.persistent-page[data-page="/alert-tracking"]:not([hidden])) {
+  overflow: hidden;
+}
+
+.persistent-page[hidden] {
+  display: none !important;
 }
 
 /* 捲動型頁面（司機桌機/長官，尚未改為無捲動）內容置中限寬 */
@@ -777,6 +799,12 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+
+.forecast-chart {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .forecast-slot-notes {
@@ -1526,6 +1554,23 @@ body {
   position: relative;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.slb-map-frame.is-zoomed {
+  cursor: grab;
+}
+
+.slb-map-frame.is-zoomed:active {
+  cursor: grabbing;
+}
+
+.slb-map-reset {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
 }
 
 .slb-map-svg {
@@ -1539,7 +1584,13 @@ body {
   stroke: var(--ct-border);
   stroke-width: 1;
   cursor: default;
+  outline: none;
   transition: fill 160ms ease, stroke 160ms ease;
+}
+
+.slb-map-poly:focus,
+.slb-map-poly:focus-visible {
+  outline: none;
 }
 
 .slb-map-poly.is-green {
@@ -3804,7 +3855,7 @@ body.rider-phone-preview .rider-page {
   line-height: 1.7;
 }
 
-/* 可捲動的一般頁面（警示追蹤不套無捲動版面） */
+/* 可捲動的一般頁面（分派任務狀況等尚未改成固定視窗） */
 .page-stack {
   display: flex;
   flex-direction: column;
@@ -3812,6 +3863,60 @@ body.rider-phone-preview .rider-page {
   height: 100%;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* 警示追蹤：整頁不捲，未結案／歷史各自在卡片內捲 */
+.alert-tracking-page {
+  overflow: hidden;
+  width: min(1500px, 100%);
+  margin: 0 auto;
+}
+
+.alert-tracking-card.ant-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.alert-tracking-open {
+  flex: 1 1 0;
+}
+
+.alert-tracking-history {
+  flex: 0 1 36%;
+  max-height: 38%;
+}
+
+.alert-tracking-card .ant-card-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.alert-tracking-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.alert-tracking-page .escalation-rule-note {
+  flex: none;
+}
+
+.alert-tracking-scroll .ant-table-thead > tr > th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.alert-tracking-history .ant-table-pagination {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-bottom: 0;
+  background: var(--ct-panel);
 }
 
 /* ── 分派任務狀況頁（ADR：警示追蹤改造）── */

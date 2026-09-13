@@ -14,7 +14,7 @@ const EMPTY = { cases: [], counts: { open: 0, banner: 0, prompt: 0 } };
 
 export async function getEscalations() {
   if (!isApiMode) return EMPTY;
-  return request("/alerts/escalations");
+  return request("/alerts/escalations", { timeoutMs: 45_000 });
 }
 
 /** ADR-335：我的分級提醒（後端依登入身分授權，司機只拿得到自己的）。 */
@@ -41,6 +41,43 @@ export async function recordCaseAction(caseId, action, { note = "", contact = ""
     method: "POST",
     body: { note, contact },
   });
+}
+
+const DEFAULT_STAGE_MINUTES = [30, 45, 60];
+const NEXT_STAGE_LABELS = ["需再提示", "需電話聯絡", "最高催辦"];
+
+/** 無時區的開案時間當台北牆上時間，避免被當成 UTC 多算 8 小時。 */
+export function parseCaseTime(value) {
+  if (value == null) return NaN;
+  const text = String(value).trim();
+  if (!text) return NaN;
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(text)) return Date.parse(text);
+  if (/^\d{4}-\d{2}-\d{2}T/.test(text)) return Date.parse(`${text}+08:00`);
+  return Date.parse(text);
+}
+
+/** 從開案時間算出已等待幾分鐘（後端沒帶回 waited_minutes 時用）。 */
+export function waitedSince(openedAt, nowMs = Date.now()) {
+  const opened = parseCaseTime(openedAt);
+  if (!Number.isFinite(opened)) return null;
+  return Math.max(0, (nowMs - opened) / 60000);
+}
+
+/** 下一欄：開案後 30／45／60 分升級，不是數到幾百小時。 */
+export function nextChaseCopy(row, nowMs = Date.now()) {
+  const thresholds = Array.isArray(row?.stage_thresholds) && row.stage_thresholds.length
+    ? row.stage_thresholds
+    : DEFAULT_STAGE_MINUTES;
+  const waited = waitedSince(row?.opened_at, nowMs) ?? Number(row?.waited_minutes) ?? 0;
+  let stage = 0;
+  thresholds.forEach((limit, index) => {
+    if (waited >= limit) stage = index + 1;
+  });
+  if (stage >= thresholds.length) {
+    return "已滿 60 分（最高催辦），約每 15 分再提醒，直到站況恢復";
+  }
+  const remain = Math.max(0, Math.round(thresholds[stage] - waited));
+  return `還有 ${remain} 分到「${NEXT_STAGE_LABELS[stage] ?? "下一階段"}」（滿 ${thresholds[stage]} 分）`;
 }
 
 /** 把分鐘數講成人看得懂的話。 */

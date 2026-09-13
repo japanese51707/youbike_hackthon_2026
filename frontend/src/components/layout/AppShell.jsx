@@ -10,12 +10,13 @@ import {
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Select, Space, Tag, Typography, message } from "antd";
 import { useLocation, useNavigate } from "react-router-dom";
+import { prefetchAllPages } from "../../api/prefetchPages.js";
 import { resetDemoData } from "../../api/operationsApi.js";
 
 import { useEffect, useState } from "react";
 import { isApiMode, request, getActorId, setActorId } from "../../api/httpClient.js";
 import { DRIVER_MANUAL_KEY } from "../../hooks/useDriverActor.js";
-import { driverActorOptions } from "../../utils/pickDriverActor.js";
+import { driverActorOptions, pickDashboardActor } from "../../utils/pickDriverActor.js";
 
 import EscalationBanner from "../alerts/EscalationBanner.jsx";
 import EscalationModal from "../alerts/EscalationModal.jsx";
@@ -39,11 +40,19 @@ const baseNavigation = [
 export default function AppShell({ children }) {
   const [operators, setOperators] = useState([]);
   const [operatorError, setOperatorError] = useState("");
-  useEffect(() => {
-    if (isApiMode) request("/operators").then(setOperators).catch(error => setOperatorError(error.message));
-  }, []);
   const location = useLocation();
   const navigate = useNavigate();
+  useEffect(() => {
+    if (isApiMode) request("/operators").then(setOperators).catch(error => setOperatorError(error.message));
+    prefetchAllPages();
+  }, []);
+  useEffect(() => {
+    if (!isApiMode || location.pathname !== "/dashboard" || !operators.length) return;
+    const next = pickDashboardActor(operators, getActorId());
+    if (!next || next === getActorId()) return;
+    setActorId(next);
+    window.location.reload();
+  }, [location.pathname, operators]);
   const [messageApi, contextHolder] = message.useMessage();
   // ADR-309：升級提示跨頁常駐——調度員切到別頁也不會漏掉該打電話的案件。
   const escalation = useEscalations();

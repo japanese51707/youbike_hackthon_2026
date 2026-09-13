@@ -8,6 +8,7 @@ import { fetchFaultSummaries } from "../api/riderFaultApi.js";
 import { formatFaultSummary } from "../utils/riderFaultReports.js";
 import { createStationGaugeLayer } from "../components/map/layers/stationGaugeLayer.js";
 import presentationConfig from "../config/presentation.json";
+import { usePageActive } from "../components/layout/PersistentPages.jsx";
 import useDashboardData from "../hooks/useDashboardData.js";
 import useGeolocation from "../hooks/useGeolocation.js";
 import useNarrowPhone from "../hooks/useNarrowPhone.js";
@@ -40,6 +41,7 @@ const INTENT_OPTIONS = [
 
 export default function RiderPage() {
   const dashboard = useDashboardData({ lite: true });
+  const pageActive = usePageActive();
   const geo = useGeolocation();
   const [intent, setIntent] = useState("rent");
   const [searchOrigin, setSearchOrigin] = useState(FALLBACK_ORIGIN);
@@ -63,9 +65,9 @@ export default function RiderPage() {
   }, [phoneUi]);
 
   useEffect(() => {
-    document.body.classList.toggle("rider-phone-preview", isPhoneLayout);
+    document.body.classList.toggle("rider-phone-preview", pageActive && isPhoneLayout);
     return () => document.body.classList.remove("rider-phone-preview");
-  }, [isPhoneLayout]);
+  }, [pageActive, isPhoneLayout]);
 
   useEffect(() => {
     if (geo.locating) setLocateNote(null);

@@ -15,7 +15,7 @@ import {
   TeamOutlined,
 } from "@ant-design/icons";
 import { Card, Collapse, List, Modal, Space, Tag, Typography } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import DistrictPressureMap from "../components/overview/DistrictPressureMap.jsx";
 import AsyncState from "../components/common/AsyncState.jsx";
 import useServiceBoard from "../hooks/useServiceBoard.js";
@@ -240,14 +240,51 @@ export default function OverviewPage() {
   const board = useServiceBoard();
   const data = board.data;
   const [openDistrict, setOpenDistrict] = useState(null);
-  const [focusDistrict, setFocusDistrict] = useState(null);
+  const [hoverDistrict, setHoverDistrict] = useState(null);
+  const [hoverHold, setHoverHold] = useState(null);
+  const [stickyList, setStickyList] = useState(null);
+  const [pinnedDistrict, setPinnedDistrict] = useState(null);
   const [metric, setMetric] = useState(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const districtListRef = useRef(null);
+  const clickPointRef = useRef(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const mark = (event) => {
+      clickPointRef.current = { x: event.clientX, y: event.clientY };
+    };
+    window.addEventListener("pointerdown", mark);
+    return () => window.removeEventListener("pointerdown", mark);
+  }, []);
+
+  useEffect(() => {
+    if (!stickyList) return undefined;
+    const origin = clickPointRef.current;
+    const onMove = (event) => {
+      if (origin && Math.abs(event.clientX - origin.x) + Math.abs(event.clientY - origin.y) < 5) return;
+      setStickyList(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
+  }, [stickyList]);
+
+  useEffect(() => {
+    if (!pinnedDistrict || !districtListRef.current) return;
+    const item = districtListRef.current.querySelector(`[data-district="${CSS.escape(pinnedDistrict)}"]`);
+    item?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [pinnedDistrict]);
+
+  const pinDistrict = (name) => {
+    setPinnedDistrict(name);
+    setHoverDistrict(null);
+    setHoverHold(name);
+    setStickyList(name);
+  };
 
   const view = useMemo(() => {
     if (!data) return null;
@@ -276,6 +313,16 @@ export default function OverviewPage() {
       fetchedAt: data.fetchedAt,
     };
   }, [data]);
+
+  const pressureList = useMemo(() => {
+    if (!view) return [];
+    const rows = view.districts.filter((row) => row.problems > 0);
+    if (pinnedDistrict && !rows.some((row) => row.district === pinnedDistrict)) {
+      const extra = view.districts.find((row) => row.district === pinnedDistrict);
+      if (extra) return [extra, ...rows];
+    }
+    return rows;
+  }, [view, pinnedDistrict]);
 
   const openById = useMemo(() => openProblemsByStation(view?.problems), [view]);
   const longestEmpty = longestOpenOfKind(view?.problems, "empty", nowMs);
@@ -306,7 +353,7 @@ export default function OverviewPage() {
         <Tag>{view?.fetchedAt ? formatDateTime(new Date(view.fetchedAt).toISOString()) : "—"}</Tag>
       </div>
 
-      <AsyncState loading={board.loading} error={board.error} data={data} onRetry={board.reload}>
+      <AsyncState loading={board.loading && !data} error={board.error} data={data} onRetry={board.reload}>
         {view && (
           <>
             <div className="slb-headline">
@@ -375,23 +422,45 @@ export default function OverviewPage() {
                 <div className="slb-pressure">
                   <DistrictPressureMap
                     districts={view.districts}
-                    highlight={focusDistrict}
-                    onHover={setFocusDistrict}
-                    onSelect={setOpenDistrict}
+                    highlight={hoverDistrict}
+                    selected={pinnedDistrict}
+                    onHover={(name) => {
+                      if (name && hoverHold === name) return;
+                      if (!name) setHoverHold(null);
+                      setHoverDistrict(name);
+                    }}
+                    onSelectDistrict={(name) => pinDistrict(name)}
+                    onReset={() => {
+                      setPinnedDistrict(null);
+                      setHoverDistrict(null);
+                      setHoverHold(null);
+                      setStickyList(null);
+                    }}
                   />
-                  <div className="slb-scroll">
+                  <div className="slb-scroll" ref={districtListRef}>
                     <List
                       size="small"
-                      dataSource={view.districts.filter((row) => row.problems > 0)}
+                      dataSource={pressureList}
                       locale={{ emptyText: "目前沒有空站或滿站集中的行政區" }}
                       renderItem={(row) => {
                         const longest = districtLongestOpen(row.district, view.problems, nowMs);
+                        const lit = stickyList === row.district || hoverDistrict === row.district;
                         return (
                           <List.Item
-                            className={`task-item slb-district-item${focusDistrict === row.district ? " is-focus" : ""}`}
-                            onMouseEnter={() => setFocusDistrict(row.district)}
-                            onMouseLeave={() => setFocusDistrict((cur) => (cur === row.district ? null : cur))}
-                            onClick={() => setOpenDistrict(row)}
+                            data-district={row.district}
+                            className={`task-item slb-district-item${lit ? " is-focus" : ""}`}
+                            onMouseEnter={() => {
+                              if (hoverHold === row.district) return;
+                              setHoverDistrict(row.district);
+                            }}
+                            onMouseLeave={() => {
+                              setHoverHold((cur) => (cur === row.district ? null : cur));
+                              setHoverDistrict((cur) => (cur === row.district ? null : cur));
+                            }}
+                            onClick={() => {
+                              pinDistrict(row.district);
+                              setOpenDistrict(row);
+                            }}
                           >
                             <span className={`slb-district-icon is-${row.pressure || "none"}`}><EnvironmentOutlined /></span>
                             <List.Item.Meta

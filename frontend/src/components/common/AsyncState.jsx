@@ -1,6 +1,8 @@
 import { Button, Empty, Result, Spin } from "antd";
 
 export default function AsyncState({ loading, error, data, onRetry, children }) {
+  if (data) return children;
+
   if (loading) {
     return (
       <div className="center-state">
@@ -20,9 +22,5 @@ export default function AsyncState({ loading, error, data, onRetry, children }) 
     );
   }
 
-  if (!data) {
-    return <Empty description="沒有可顯示的資料" />;
-  }
-
-  return children;
+  return <Empty description="沒有可顯示的資料" />;
 }

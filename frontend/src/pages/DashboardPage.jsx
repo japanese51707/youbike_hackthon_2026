@@ -695,7 +695,7 @@ export default function DashboardPage() {
 
   return (
     <AsyncState
-      loading={dashboard.loading}
+      loading={dashboard.loading && !dashboard.data}
       error={dashboard.error}
       data={dashboard.data}
       onRetry={dashboard.reload}
