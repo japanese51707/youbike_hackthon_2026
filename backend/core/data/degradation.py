@@ -153,7 +153,15 @@ def get_stations_with_degradation(district=None, status=None):
 def degradation_status():
     cfg = _cfg()
     try:
-        rows = get_stations_with_degradation()
+        # 連線燈只要看「後端有沒有站況」，不要為了狀態再打一次上游（會逾時變未連線）。
+        # _last 存的是資料源原始列，狀態燈要先 normalize 才有 freshness / quality_reasons。
+        with _lock:
+            cached = deepcopy(_last) if _last else None
+        rows = (
+            [normalize(r, cfg["mode"], cfg["stale_after_sec"], failed=False) for r in cached]
+            if cached
+            else get_stations_with_degradation()
+        )
         counts = {key: sum(r["data_freshness"] == key for r in rows)
                   for key in ("live", "stale", "historical", "mock")}
         # ADR-305：是否正處於「真實源失敗改用 mock」的降級狀態
@@ -164,11 +172,13 @@ def degradation_status():
             "freshness_counts": counts, "degrading_to_historical": False,
             "degrading_to_mock": degrading_to_mock,
             "mock_fallback_reason": _mock_fallback_reason if degrading_to_mock else None,
-            "dispatch_eligible_count": sum(r["dispatch_eligible"] for r in rows)}
+            "dispatch_eligible_count": sum(r["dispatch_eligible"] for r in rows),
+            "backend_reachable": True}
     except DataUnavailable:
         return {**cfg, "source": cfg["mode"], "primary_available": False,
                 "data_freshness": "unavailable", "degrading_to_historical": False,
-                "degrading_to_mock": False, "mock_fallback_reason": None}
+                "degrading_to_mock": False, "mock_fallback_reason": None,
+                "backend_reachable": True}
 
 
 def reset():

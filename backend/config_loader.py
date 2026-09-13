@@ -24,6 +24,17 @@ _CONFIG_PATH = Path(os.environ.get(
 _cache = None
 
 
+def _apply_env_overrides(cfg: dict) -> dict:
+    """本機預設直連官方；雲端 ECS 自動改走 S3 中繼（ADR-332）。"""
+    ds = cfg.setdefault("data_source", {})
+    mode = os.environ.get("YOUBIKE_DATA_SOURCE_MODE", "").strip()
+    if mode:
+        ds["mode"] = mode
+    elif os.environ.get("AWS_EXECUTION_ENV", "").startswith("AWS_ECS"):
+        ds["mode"] = "youbike_s3"
+    return cfg
+
+
 def get_config() -> dict:
     """讀取並快取 config.yaml。修改設定檔後需重啟服務才生效。"""
     global _cache
@@ -31,7 +42,7 @@ def get_config() -> dict:
         if not _CONFIG_PATH.exists():
             raise FileNotFoundError(f"找不到設定檔：{_CONFIG_PATH}")
         with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
-            _cache = yaml.safe_load(f)
+            _cache = _apply_env_overrides(yaml.safe_load(f) or {})
     return _cache
 
 

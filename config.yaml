@@ -13,10 +13,9 @@
 
 # ── 資料源（NFR-7 可抽換）──
 data_source:
-  # ADR-332：雲端（us-east-1 境外 IP）直連台灣官方被封鎖，改用 youbike_s3——由台灣端中繼
-  # （tools/relay_stations_to_s3.py，demo 期間跑在能連官方的本機）抓官方上傳 S3，雲端讀 S3。
-  # 本機開發要直連官方即時，可臨時改回 youbike_official。
-  mode: "youbike_s3"        # mock / historical / tdx / youbike_official / youbike_s3
+  # 本機預設直連新北官方。雲端 us-east-1 會被官方封鎖（ADR-332），部署時用
+  # YOUBIKE_DATA_SOURCE_MODE=youbike_s3，並靠台灣端中繼上傳 S3。
+  mode: "youbike_official"  # mock / historical / tdx / youbike_official / youbike_s3
   live_s3_key: "live/stations_latest.csv"  # ADR-332 中繼上傳的站況物件 key
   s3_max_age_sec: 900       # ADR-332 S3 站況超過此秒數視為過期（中繼掛掉不供應過期資料）
   # ADR-305：開發模式資料源降級。正式模式(youbike_official)永遠維持 ADR-303（失敗→同源 stale→503，不碰 mock）。

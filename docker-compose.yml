@@ -21,6 +21,7 @@ services:
       - YOUBIKE_MOCK_PATH=/data/mock_data.json
       - YOUBIKE_DB_PATH=/data/runtime/youbike.db
       - YOUBIKE_CLOCK_DB_PATH=/data/runtime/service_clock.db
+      - YOUBIKE_DATA_SOURCE_MODE=youbike_official
     # A0 階段：後端回 mock，不需 .env；A1 接資料源後再掛 .env
 
   # ADR-326：空滿時計獨立收集，不經 uvicorn --reload。

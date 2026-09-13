@@ -15,11 +15,17 @@ export default function ApiSyncButton() {
     setState("checking");
     setDetail("正在同步後端即時資料源…");
     try {
-      const s = await request("/data/status", { timeoutMs: 8000 });
+      const s = await request("/data/status", { timeoutMs: 25000 });
+      const live = s?.freshness_counts?.live ?? 0;
+      const stale = s?.freshness_counts?.stale ?? 0;
+      const known = live + stale + (s?.freshness_counts?.historical ?? 0) + (s?.freshness_counts?.mock ?? 0);
+      // 後端回應了就先算連上；即時源還沒好只在 tooltip 說明，不要整顆燈變未連線。
       if (s?.primary_available) {
-        const live = s?.freshness_counts?.live ?? 0;
         setState("ok");
         setDetail(`已連上後端（${s.mode}）｜即時站點 ${live} 站`);
+      } else if (known > 0) {
+        setState("ok");
+        setDetail(`已連上後端（${s.mode}）｜目前 ${known} 站（非即時或降級）`);
       } else {
         setState("fail");
         setDetail(`後端可達但資料源未就緒（${s?.mode ?? "未知"}）`);
