@@ -611,7 +611,7 @@ def _persist_trip_atomic(trip: dict) -> None:
         "district": trip["district"],
         "assigned_vehicle": trip["assigned_vehicle"],
         "route": route,
-        "assigned_at": _dt.datetime.now().isoformat(timespec="seconds"),
+        "assigned_at": trip.get("assigned_at") or _dt.datetime.now(_dt.timezone.utc).isoformat(),
         "estimated_total_minutes": feasibility.get("est_total_min"),
         "onboard_start": feasibility.get("onboard_start"),
         "onboard_planned_end": feasibility.get("onboard_end"),

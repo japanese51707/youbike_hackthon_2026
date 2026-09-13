@@ -4076,3 +4076,20 @@ body.rider-phone-preview .rider-page {
   font-size: 13px;
   color: var(--ct-text-secondary);
 }
+
+/* ADR-335：可收合彙總橫幅（取代強制彈窗）。收合後仍保留一行，
+   案件只有「確認解除」才會消失，不讓使用者以為問題自己好了。 */
+.escalation-banner.is-collapsed {
+  padding-block: 4px;
+  opacity: 0.9;
+}
+.escalation-banner.is-collapsed .escalation-banner-text strong {
+  font-size: 13px;
+}
+.escalation-banner-toggle {
+  margin-left: auto;
+  color: inherit;
+}
+.escalation-banner.is-critical .escalation-banner-toggle {
+  color: inherit;
+}

@@ -14,6 +14,7 @@ from db.connection import get_connection, commit
 
 # 存進 DB 的欄位（其餘非欄位的鍵會塞進 route_json 之外忽略）
 _COLUMNS = [
+    "started_at", "closed_at",
     "task_id", "task_type", "task_status", "assigned_operator", "assigned_escort",
     "estimated_travel_minutes", "estimated_work_minutes", "estimated_total_minutes",
     "estimated_distance_km", "estimated_fuel_cost", "route_map_url",
@@ -73,6 +74,20 @@ def _from_row(row) -> dict:
     # 移除純 DB 欄位，保留對外一致的鍵
     d.pop("created_at", None)
     d.pop("updated_at", None)
+    from core.operational_time import parse
+    original = d.get("assigned_at")
+    d["assigned_at_raw"] = original
+    stamp = parse(original)
+    d["assignment_time_source"] = "assigned_at" if stamp else "unknown"
+    if not stamp:
+        receipt = get_connection().execute(
+            "SELECT confirmed_at FROM dispatch_confirmations WHERE task_id = ? ORDER BY confirmed_at LIMIT 1",
+            (d["task_id"],)).fetchone()
+        stamp = parse(receipt[0]) if receipt else None
+        if stamp:
+            d["assignment_time_source"] = "confirmation_receipt"
+    d["assignment_time_status"] = "verified" if stamp else "unknown"
+    d["assigned_at"] = stamp.isoformat() if stamp else None
     return d
 
 
@@ -93,6 +108,8 @@ def update(task: dict) -> None:
     """整筆更新（task_manager 改狀態後回寫）。"""
     conn = get_connection()
     row = _to_row(task)
+    # 指派時間是不可變的原始事實；讀取時的正規化不回寫覆蓋歷史。
+    row.pop("assigned_at", None)
     row["updated_at"] = _now()
     sets = ", ".join(f"{c} = :{c}" for c in row if c != "task_id")
     conn.execute(f"UPDATE tasks SET {sets} WHERE task_id = :task_id", row)

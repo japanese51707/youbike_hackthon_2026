@@ -26,9 +26,10 @@ def _rec(station_id="S1", level="high", tier="censored"):
             "action": "補車", "quantity": 10, "reason": "已空站仍將持續流出"}
 
 
-def _task(station_id="S1", status="assigned"):
-    return {"task_id": "T1", "task_status": status,
-            "route": [{"station_id": station_id, "station_name": "測試站"}]}
+def _task(station_id="S1", status="assigned", operator="OP-004"):
+    return {"task_id": "T1", "task_status": status, "assigned_operator": operator,
+            "route": [{"station_id": station_id, "station_name": "測試站",
+                       "station_status": "pending"}]}
 
 
 CFG = {"escalation": {"階段": [30, 45], "靜音分鐘": 10,
@@ -65,12 +66,64 @@ def test_reopening_does_not_reset_the_clock():
     assert later[0]["waited_minutes"] == pytest.approx(20.0, abs=0.2)
 
 
-def test_case_closes_when_a_task_covers_the_station():
+def test_dispatch_does_not_close_the_case():
+    """ADR-335：派工只代表有人承辦，不代表問題解除——案件不關、時計不重設。
+
+    取代 ADR-309 的 test_case_closes_when_a_task_covers_the_station。舊規則一派工就
+    關案，等於停止催辦；司機還沒到、到了車不夠、補完又被借光，站其實一直是空的。
+    """
     escalation.sync_cases([_station()], [_rec()], [], CFG, now=T0)
     after = escalation.sync_cases([_station()], [_rec()], [_task()], CFG,
                                   now=T0 + _dt.timedelta(minutes=5))
+    assert len(after) == 1, "派工後案件必須繼續存在"
+    assert after[0]["opened_at"] == T0.isoformat(timespec="seconds"), "時計不得重設"
+    assert after[0]["waited_minutes"] == pytest.approx(5.0, abs=0.2)
+    # 承辦責任要指出來，讓提醒送得到人
+    assert after[0]["responsibility_status"] == "assigned"
+    assert after[0]["responsible_operator"] == _task()["assigned_operator"]
+    assert escalation_repo.get_open_case_by_station("S1") is not None
+
+
+def test_only_confirmed_recovery_closes_the_case():
+    """唯一的關案路徑：新鮮可信觀測確認不再緊急。"""
+    escalation.sync_cases([_station()], [_rec()], [], CFG, now=T0)
+    after = escalation.sync_cases([_station(status="normal")], [], [_task()], CFG,
+                                  now=T0 + _dt.timedelta(minutes=5))
     assert after == []
-    assert escalation_repo.get_open_case_by_station("S1") is None
+    closed = escalation_repo.get_open_case_by_station("S1")
+    assert closed is None
+
+
+def test_missing_station_is_not_treated_as_recovery():
+    """這輪沒看到這個站（缺站／查詢失敗）不能當成恢復。"""
+    escalation.sync_cases([_station()], [_rec()], [], CFG, now=T0)
+    after = escalation.sync_cases([], [], [], CFG, now=T0 + _dt.timedelta(minutes=5))
+    assert len(after) == 1, "資料不知道不等於問題解決了"
+    assert after[0]["observation_status"] == escalation.OBS_UNVERIFIED
+    assert after[0]["waited_minutes"] == pytest.approx(5.0, abs=0.2)
+
+
+def test_stale_observation_is_not_treated_as_recovery():
+    """過期／離線的觀測同樣不得關案。"""
+    escalation.sync_cases([_station()], [_rec()], [], CFG, now=T0)
+    stale = {**_station(status="normal"), "data_freshness": "stale"}
+    cfg = {**CFG, "data_source": {"mode": "youbike_official"}}
+    after = escalation.sync_cases([stale], [], [], cfg, now=T0 + _dt.timedelta(minutes=5))
+    assert len(after) == 1
+    assert after[0]["observation_status"] == escalation.OBS_UNVERIFIED
+
+
+def test_out_of_order_observation_cannot_reverse_state():
+    """比上次確認更舊的觀測不得反轉案件狀態。"""
+    fresh = {**_station(), "data_freshness": "live",
+             "observed_at": (T0 + _dt.timedelta(minutes=10)).isoformat()}
+    cfg = {**CFG, "data_source": {"mode": "youbike_official"}}
+    escalation.sync_cases([fresh], [_rec()], [], cfg, now=T0)
+    stale_recovery = {**_station(status="normal"), "data_freshness": "live",
+                      "observed_at": (T0 + _dt.timedelta(minutes=2)).isoformat()}
+    after = escalation.sync_cases([stale_recovery], [], [], cfg,
+                                  now=T0 + _dt.timedelta(minutes=15))
+    assert len(after) == 1, "舊觀測不得關掉已被較新觀測確認的案件"
 
 
 def test_completed_task_does_not_count_as_handled():

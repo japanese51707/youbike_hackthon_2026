@@ -1,7 +1,8 @@
 """警示端點（3.11）。★題目要求：現行系統無警示。接 alert_service。"""
 
+import datetime as _dt
 from fastapi import APIRouter, Body, HTTPException, Depends
-from auth import require_role
+from auth import get_operator, require_role
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
 
@@ -99,22 +100,90 @@ def _sync_escalations():
     return escalation.sync_cases(snap["stations"], snap["recs"], tasks)
 
 
+def _controller_ids() -> list:
+    """管理端收件者：dispatcher／maintainer 角色的啟用帳號。"""
+    from db import operators_repo
+    out = []
+    for row in operators_repo.list_operators(active_only=True):
+        if row.get("role") in ("dispatcher", "maintainer"):
+            out.append(row["operator_id"])
+    return out
+
+
 @router.get("/alerts/escalations")
 def escalations():
-    """ADR-309：未結案的緊急調度案件（含階段、已等待分鐘、下一階段時間）。
+    """ADR-335：未結案的緊急調度案件（含階段、已持續分鐘、承辦責任、觀測新鮮度）。
 
-    查詢時順帶同步開案／關案，與現行警示同樣沒有常駐排程。
-    時間一律後端換算，前端不自己累加（重整、換機器、多人同時看要一致）。
+    案件只在「新鮮觀測確認解除」時關閉——派工不關案，所以這裡回的是
+    「問題還沒解除」的清單，不是「還沒派工」的清單。
+    同步時一併產生該輪的分級提醒（冪等，重複查詢不會重複送）。
     """
+    from core import notification_service
     cases = _sync_escalations()
+    try:
+        notification_service.sync_notifications(cases, _controller_ids())
+    except Exception:  # noqa: BLE001 - 提醒寫入失敗不該讓案件清單掛掉
+        pass
     return {
         "cases": cases,
+        "server_now": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         "counts": {
             "open": len(cases),
             "banner": sum(1 for c in cases if c["should_banner"]),
             "prompt": sum(1 for c in cases if c["should_prompt"]),
+            "unassigned": sum(1 for c in cases
+                              if c.get("responsibility_status") == "unassigned"),
+            "unverified": sum(1 for c in cases
+                              if c.get("observation_status") == "unverified"),
         },
     }
+
+
+# ── ADR-335 站內通知：每人只看得到／只能標記自己的 ──────────────────
+@router.get("/alerts/notifications")
+def my_notifications(include_resolved: bool = False,
+                     operator: dict = Depends(get_operator)):
+    """我的提醒。司機只拿得到自己的；管理端拿到自己身分收到的那些。"""
+    from db import notifications_repo
+    rows = notifications_repo.list_for_recipient(
+        operator["operator_id"], include_resolved=include_resolved)
+    stamp = _dt.datetime.now(_dt.timezone.utc).isoformat()
+    for row in rows:
+        if not row.get("delivered_at"):
+            notifications_repo.mark(row["notification_id"], "delivered_at", stamp,
+                                    recipient_id=operator["operator_id"])
+            row["delivered_at"] = stamp
+    return {"notifications": rows, "server_now": stamp}
+
+
+@router.post("/alerts/notifications/{notification_id}/{action}")
+def notification_action(notification_id: str, action: str,
+                        operator: dict = Depends(get_operator)):
+    """標記自己的提醒：seen／ack／mute。
+
+    ★一個人已讀不會替另一端消音（ADR-335）：通知是每人一筆，
+      這裡只會動到呼叫者自己那一筆。靜音也不遮清單、不擋下一階段。
+    """
+    from core import notification_service
+    from db import notifications_repo
+    stamp = _dt.datetime.now(_dt.timezone.utc)
+    iso = stamp.isoformat()
+    if action == "seen":
+        row = notifications_repo.mark(notification_id, "seen_at", iso,
+                                      recipient_id=operator["operator_id"])
+    elif action == "ack":
+        row = notifications_repo.mark(notification_id, "acknowledged_at", iso,
+                                      recipient_id=operator["operator_id"])
+    elif action == "mute":
+        minutes = notification_service.settings()["mute_minutes"]
+        until = (stamp + _dt.timedelta(minutes=minutes)).isoformat()
+        notifications_repo.mute(notification_id, until, operator["operator_id"])
+        row = notifications_repo.find_by_id(notification_id)
+    else:
+        raise HTTPException(status_code=400, detail="action 必須是 seen／ack／mute")
+    if row is None:
+        raise HTTPException(status_code=404, detail="查無此提醒或不屬於你")
+    return row
 
 
 @router.get("/alerts/escalations/history")

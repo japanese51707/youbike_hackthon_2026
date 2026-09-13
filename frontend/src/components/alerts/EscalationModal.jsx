@@ -10,7 +10,7 @@ import { formatWaited, recordCaseAction } from "../../api/escalationApi.js";
  * ★三個出口都不關案：關案只認「有未結案任務涵蓋該站」或「站況恢復」。
  *   按鈕只會靜音一段時間，時鐘照走。
  */
-export default function EscalationModal({ open, item, onDispatch, onDone }) {
+export default function EscalationModal({ open, item, onDispatch, onDone, onClose }) {
   const [mode, setMode] = useState(null); // null | "call" | "defer"
   const [contact, setContact] = useState("");
   const [note, setNote] = useState("");
@@ -40,10 +40,14 @@ export default function EscalationModal({ open, item, onDispatch, onDone }) {
   return (
     <Modal
       open={open}
-      title={<span className="escalation-modal-title">緊急調度尚未處理</span>}
-      closable={false}
-      maskClosable={false}
-      keyboard={false}
+      title={<span className="escalation-modal-title">緊急案件詳情</span>}
+      /* ADR-335：詳情一律可關。叉叉／Esc／點遮罩都能離開，
+         關閉不需要先成功呼叫任何 API，也不持有派工或頁面鎖。
+         舊版 closable={false} 在多站同時逾時會把調度員鎖死。 */
+      onCancel={onClose}
+      closable
+      maskClosable
+      keyboard
       footer={null}
       width={520}
     >
@@ -56,8 +60,8 @@ export default function EscalationModal({ open, item, onDispatch, onDone }) {
         description={`${item.district}｜${item.trigger_reason}${item.suggested_action ? `｜建議 ${item.suggested_action}` : ""}`}
       />
       <Typography.Paragraph type="secondary" className="escalation-modal-note">
-        這張案件從 {item.opened_at?.replace("T", " ")} 開案到現在沒有派工。
-        以下三個動作都會留下紀錄，<b>但都不會結案</b>——只有實際派工或站況恢復才會。
+        這張案件從 {item.opened_at?.replace("T", " ")} 起持續緊急。
+        以下三個動作都會留下紀錄，<b>但都不會結案</b>——只有新鮮觀測確認站況恢復才會（ADR-335：派工不關案）。
       </Typography.Paragraph>
 
       {mode === null ? (
