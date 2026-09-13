@@ -1,4 +1,4 @@
-import { ReloadOutlined, CarOutlined, UserOutlined, EnvironmentOutlined, HomeOutlined } from "@ant-design/icons";
+import { ReloadOutlined, CarOutlined, UserOutlined, EnvironmentOutlined, HomeOutlined, ToolOutlined } from "@ant-design/icons";
 import { Button, Card, Empty, Progress, Segmented, Space, Tabs, Tag, Tooltip, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import AsyncState from "../components/common/AsyncState.jsx";
@@ -162,6 +162,16 @@ function TaskCard({ task, now, onOpenMap }) {
                   <span className="dts-stop-problem mono">
                     <Tag color={s.problem_kind === "empty" ? "red" : "orange"}>
                       {s.problem_kind === "empty" ? "已空" : "已滿"}・緊急 {durationSince(s.problem_opened_at, now)}
+                    </Tag>
+                  </span>
+                ) : null}
+                {/* ADR-336：疑似設備故障，提示調度員可把故障車取回 */}
+                {s.suspected_fault ? (
+                  <span className="dts-stop-fault mono">
+                    <Tag color="volcano" icon={<ToolOutlined />}>
+                      {s.fault_type === "vehicle"
+                        ? `疑似 ${s.fault_count ?? ""} 台車故障・可取回`
+                        : `疑似 ${s.fault_count ?? ""} 個柱位故障`}
                     </Tag>
                   </span>
                 ) : null}

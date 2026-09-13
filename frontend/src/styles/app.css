@@ -4093,3 +4093,7 @@ body.rider-phone-preview .rider-page {
 .escalation-banner.is-critical .escalation-banner-toggle {
   color: inherit;
 }
+
+/* ADR-336：任務站點的疑似設備故障提示 */
+.dts-stop-fault { margin-top: 3px; }
+.ob-stop-fault { display: inline-block; margin-top: 3px; }

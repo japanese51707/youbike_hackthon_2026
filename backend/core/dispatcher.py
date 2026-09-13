@@ -95,6 +95,21 @@ def build_dispatch_list(
             score = 70.0
         else:
             score = 50.0   # 無預測且尚未觸底：中性分數（降級）
+        # ADR-336：疑似故障站——st 已是「扣除故障後」站況（degradation 就地重算），故上面的
+        # calc_urgency 已用扣除後站況算分（扣掉壞車/壞柱後更接近空/滿→分數只會更高）。
+        # 再對「原始站況」算一次取 max 保底，確保故障偵測只會抬升不會反而壓低緊急度。
+        if st.get("suspected_fault") and interval is not None:
+            raw_st = {**st, "total_docks": st.get("raw_total_docks", st.get("total_docks")),
+                      "available_bikes": st.get("raw_available_bikes", st.get("available_bikes"))}
+            try:
+                score = max(score, urg.calc_urgency(raw_st, interval, r["action"]))
+            except Exception:  # noqa: BLE001
+                pass
+            # 把故障資訊帶進建議，供任務單顯示「疑似故障 N 台/柱，可取回」
+            r["suspected_fault"] = True
+            r["fault_type"] = st.get("fault_type")
+            r["fault_count"] = st.get("fault_count")
+            r["fault_reason"] = st.get("fault_reason")
         r["priority_score"] = score
         r["priority_level"] = _level(score, cfg)
         r["recommendation_id"] = _rec_id(r["station_id"])
@@ -575,9 +590,23 @@ def _persist_trip_atomic(trip: dict) -> None:
     if blocked:
         raise DispatchConflict(blocked)
     plan_by_station = {str(e["station_id"]): e for e in feasibility["load_plan"]}
+    # ADR-336：若組單站沒帶疑似故障資訊，從即時站況查一次補上（讓任務單能提示司機取回故障車）。
+    _fault_map: dict = {}
+    if any(s.get("suspected_fault") is None for s in trip["stations"]):
+        try:
+            from core.data import get_stations_with_degradation
+            _fault_map = {str(st.get("station_id")): {
+                "suspected_fault": st.get("suspected_fault"),
+                "fault_type": st.get("fault_type"), "fault_count": st.get("fault_count")}
+                for st in get_stations_with_degradation() if st.get("suspected_fault")}
+        except Exception:  # noqa: BLE001
+            _fault_map = {}
     # route 存「站物件」（含 target_available/station_status/認領人），供 task_execution 逐站操作（ADR-117）
     route = []
     for s in trip["stations"]:
+        # ADR-336：疑似故障資訊——優先用組單站帶的，否則從即時站況 map 補（讓任務單提示司機取回）。
+        _sid = str(s.get("station_id"))
+        _fault = _fault_map.get(_sid, {}) if s.get("suspected_fault") is None else {}
         route.append({
             "station_id": s.get("station_id"),
             "station_name": s.get("station_name"),
@@ -593,6 +622,10 @@ def _persist_trip_atomic(trip: dict) -> None:
             "current_available": s.get("current_available"),
             "claimed_by": trip["assigned_operator"],   # 認領標註（ADR-117）
             "lat": s.get("lat"), "lng": s.get("lng"),
+            # ADR-336：疑似設備故障（車/柱），提示調度員可把故障車取回
+            "suspected_fault": bool(s.get("suspected_fault") or _fault.get("suspected_fault")),
+            "fault_type": s.get("fault_type") or _fault.get("fault_type"),
+            "fault_count": s.get("fault_count") or _fault.get("fault_count"),
             # ADR-123：逐站到達偏移／所用預測視野／到站後車上載量（確認時算定，供執行端對照）
             "arrival_offset_min": plan_by_station.get(str(s.get("station_id")), {}).get(
                 "arrival_offset_min"),

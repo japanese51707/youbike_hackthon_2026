@@ -68,10 +68,23 @@ function operatorOptions(oc) {
 }
 
 // 後端草稿的逐站清單：優先用 load_plan（有序、含到達偏移），否則用 stations。
+// ADR-336：疑似故障資訊只在 draft.stations 上，用 station_id 補進 load_plan 的逐站。
 function backendStops(draft) {
+  const faultById = new Map(
+    (draft.stations ?? [])
+      .filter((s) => s.suspected_fault)
+      .map((s) => [String(s.station_id), s]),
+  );
+  const withFault = (base, stationId) => {
+    const f = faultById.get(String(stationId));
+    return f
+      ? { ...base, suspected_fault: true, fault_type: f.fault_type, fault_count: f.fault_count }
+      : base;
+  };
   if (Array.isArray(draft.load_plan) && draft.load_plan.length) {
-    return draft.load_plan.map((s) => ({
+    return draft.load_plan.map((s) => withFault({
       seq: s.seq,
+      station_id: s.station_id,
       station_name: s.station_name,
       action: s.action,
       quantity: s.quantity,
@@ -81,10 +94,11 @@ function backendStops(draft) {
       total_docks: s.total_docks,
       arrival_offset_min: s.arrival_offset_min,
       onboard_after: s.onboard_after,
-    }));
+    }, s.station_id));
   }
-  return (draft.stations ?? []).map((s, i) => ({
+  return (draft.stations ?? []).map((s, i) => withFault({
     seq: i + 1,
+    station_id: s.station_id,
     station_name: s.station_name,
     action: s.action,
     quantity: s.quantity,
@@ -95,7 +109,7 @@ function backendStops(draft) {
         ? Number(s.total_docks) - Number(s.available_bikes ?? s.current_available)
         : undefined),
     total_docks: s.total_docks,
-  }));
+  }, s.station_id));
 }
 
 // ── 後端草稿版（真實接線）──
@@ -236,6 +250,16 @@ function BackendBuilder({
                       ? `｜約 ${Math.round(s.arrival_offset_min)} 分到達`
                       : ""}
                   </span>
+                  {/* ADR-336：疑似設備故障，提示調度員可把故障車取回 */}
+                  {s.suspected_fault ? (
+                    <span className="ob-stop-fault">
+                      <Tag color="volcano">
+                        {s.fault_type === "vehicle"
+                          ? `⚠ 疑似 ${s.fault_count ?? ""} 台車故障・可順道取回`
+                          : `⚠ 疑似 ${s.fault_count ?? ""} 個柱位故障`}
+                      </Tag>
+                    </span>
+                  ) : null}
                 </span>
                 <Tag color={ACTION_COLOR[s.action]}>
                   {s.action} {s.quantity}
