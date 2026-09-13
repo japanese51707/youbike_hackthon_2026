@@ -1,10 +1,10 @@
 import {
-  AimOutlined,
   CheckCircleOutlined,
   CompassOutlined,
   DesktopOutlined,
   EnvironmentOutlined,
   ReloadOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
 import {
   Alert,
@@ -33,11 +33,6 @@ import {
   startTask,
 } from "../api/taskApi.js";
 import AsyncState from "../components/common/AsyncState.jsx";
-import SharedMap from "../components/map/SharedMap.jsx";
-import {
-  createPlanRouteLayers,
-  createVehicleLayer,
-} from "../components/map/layers/planLayers.js";
 import { getRoadRoute } from "../api/routingApi.js";
 import { districtCenter } from "../utils/districtCenter.js";
 import { haversineKm } from "../utils/geo.js";
@@ -107,36 +102,6 @@ function resolveStart(vehicle, operator, stops, district) {
     districtCenter(district || stops[0]?.district) ||
     (stops[0] ? point(stops[0].lat, stops[0].lng) : null)
   );
-}
-
-function routeFocus(start, stops, path) {
-  const pathPoints = Array.isArray(path)
-    ? path.filter((pair) => Array.isArray(pair) && Number.isFinite(pair[0]) && Number.isFinite(pair[1]))
-    : [];
-  const waypoints = [
-    start ? [start.lng, start.lat] : null,
-    ...stops.map((stop) => [stop.lng, stop.lat]),
-  ].filter((pair) => pair && Number.isFinite(pair[0]) && Number.isFinite(pair[1]));
-  const points = [...waypoints, ...pathPoints];
-  if (!points.length) return null;
-  if (points.length === 1) {
-    return {
-      id: `${points[0][0]},${points[0][1]}`,
-      longitude: points[0][0],
-      latitude: points[0][1],
-      zoom: 14.2,
-    };
-  }
-  const lngs = points.map((pair) => pair[0]);
-  const lats = points.map((pair) => pair[1]);
-  return {
-    id: `${waypoints.map((pair) => pair.join(",")).join(";")}|${pathPoints.length}`,
-    bounds: [
-      [Math.min(...lngs), Math.min(...lats)],
-      [Math.max(...lngs), Math.max(...lats)],
-    ],
-    padding: 48,
-  };
 }
 
 function routeDistanceKm(start, stops) {
@@ -337,7 +302,6 @@ export default function BackendDriverPage() {
   const [pickedTaskId, setPickedTaskId] = useState(null);
   const [now, setNow] = useState(() => Date.now());
   const [view, setView] = useState(readView);
-  const [focusTick, setFocusTick] = useState(0);
   const [messageApi, contextHolder] = message.useMessage();
   const narrowPhone = useNarrowPhone();
   const isPhoneLayout = view === "phone" || (view === "auto" && narrowPhone);
@@ -442,30 +406,10 @@ export default function BackendDriverPage() {
   }, [roadKey]);
 
   const roadGeometry = road?.key === roadKey && road?.mode === "road" ? road.geometry : null;
-  const mapFocus = useMemo(() => {
-    const base = routeFocus(start, mapStops, roadGeometry);
-    if (!base) return null;
-    return { ...base, id: `${base.id}#${focusTick}` };
-  }, [start, mapStops, roadGeometry, focusTick]);
 
   const pending = stops.filter((s) => s.station_status === "pending");
   const currentStop = pending[0] ?? null;
-  const currentIndex = mapStops.findIndex(
-    (stop) => stop.station_id === currentStop?.station_id,
-  );
 
-  const layers = useMemo(() => {
-    if (!start || !mapStops.length) return [];
-    return [
-      ...createPlanRouteLayers({
-        start,
-        route: mapStops,
-        geometry: roadGeometry,
-        currentIndex: currentIndex >= 0 ? currentIndex : null,
-      }),
-      createVehicleLayer({ start }),
-    ].filter(Boolean);
-  }, [start, mapStops, roadGeometry, currentIndex]);
   const doneCount = stops.filter(
     (s) => s.station_status === "completed" || s.station_status === "done",
   ).length;
@@ -593,7 +537,14 @@ export default function BackendDriverPage() {
                 onChange={setPickedTaskId}
                 options={active.map((t, i) => ({
                   value: t.task_id,
-                  label: `任務 ${i + 1}｜${t.district || "跨區"}`,
+                  label: (
+                    <span className="dw-task-switch-label">
+                      {t.task_type === "emergency" ? (
+                        <ThunderboltOutlined className="dw-task-switch-emergency" />
+                      ) : null}
+                      任務 {i + 1}｜{t.district || "跨區"}
+                    </span>
+                  ),
                 }))}
               />
             ) : null}
@@ -603,7 +554,14 @@ export default function BackendDriverPage() {
                 <div className="dw-vehicle-head">
                   {isPhoneLayout ? null : <TruckGlyph active={running} />}
                   <div>
-                    <div className="dw-vehicle-id mono">{task.assigned_vehicle || "未配車"}</div>
+                    <div className="dw-vehicle-id mono">
+                      {task.assigned_vehicle || "未配車"}
+                      {task.task_type === "emergency" ? (
+                        <Tag color="red" icon={<ThunderboltOutlined />} className="dw-emergency-tag">
+                          臨時任務
+                        </Tag>
+                      ) : null}
+                    </div>
                     <div className="dw-vehicle-sub">
                       {vehicle?.max_capacity ? `載運上限 ${vehicle.max_capacity} 台` : "調度貨車"}
                       {isPhoneLayout && shownKm !== null
@@ -743,55 +701,6 @@ export default function BackendDriverPage() {
                     退回任務
                   </Button>
                 </Space>
-              </section>
-
-              {/* 右上：本趟路線地圖 */}
-              <section className="dw-map" aria-label="本趟任務路線">
-                {start && mapStops.length ? (
-                  <>
-                    <SharedMap
-                      /* 切換版面會改變舞台寬度；重新掛載地圖，避免 canvas 停在舊尺寸 */
-                      key={`${task.task_id}:${view}:${isPhoneLayout ? "phone" : "web"}`}
-                      ariaLabel="本趟任務路線地圖"
-                      className="map-fill"
-                      initialViewState={{ longitude: start.lng, latitude: start.lat, zoom: 12.8 }}
-                      focusTarget={mapFocus}
-                      layers={layers}
-                      getTooltip={({ object }) =>
-                        object?.station_name
-                          ? { text: `${object.seq}. ${object.station_name}\n${object.action} ${object.quantity ?? ""} 台` }
-                          : null
-                      }
-                    />
-                    <button
-                      type="button"
-                      className="dw-map-recenter"
-                      onClick={() => {
-                        setFocusTick((tick) => tick + 1);
-                        document.querySelector(".dw-stop.is-current")?.scrollIntoView({
-                          behavior: "smooth",
-                          block: "nearest",
-                        });
-                      }}
-                    >
-                      <AimOutlined /> 回到路線
-                    </button>
-                    <div className="dw-map-legend mono">
-                      <span><i className="dot pickup" />取車</span>
-                      <span><i className="dot dropoff" />補車</span>
-                      <span><i className="dot start" />出發</span>
-                      <span className={`dw-route-mode${roadGeometry ? " is-road" : ""}`}>
-                        {road?.loading
-                          ? "路線計算中…"
-                          : roadGeometry
-                            ? "實走路線"
-                            : "直線示意"}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="dw-map-empty">此任務沒有可用座標，無法顯示路線</div>
-                )}
               </section>
             </div>
 
