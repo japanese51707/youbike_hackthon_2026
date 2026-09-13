@@ -260,7 +260,6 @@ body.driver-phone-preview .app-shell {
   flex: none;
 }
 
-/* 地圖移除後只剩車輛/人員這一塊，維持單欄即可，不用再依視窗寬度切兩欄。 */
 .dw-top {
   display: grid;
   grid-template-columns: 1fr;
@@ -268,7 +267,15 @@ body.driver-phone-preview .app-shell {
   flex: none;
 }
 
-/* ── 車輛與人員 ───────────────────────────────────────────────────── */
+@container dw (min-width: 900px) {
+  .dw-top {
+    grid-template-columns: minmax(300px, 380px) 1fr;
+    gap: 16px;
+    align-items: stretch;
+  }
+}
+
+/* ── 左上：車輛與人員 ─────────────────────────────────────────────── */
 
 .dw-vehicle {
   border: 1px solid var(--ct-border);
@@ -404,6 +411,168 @@ body.driver-phone-preview .app-shell {
   margin-top: auto;
 }
 
+/* ── 右上：路線地圖 ───────────────────────────────────────────────── */
+
+.dw-map {
+  position: relative;
+  border: 1px solid var(--ct-border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--ct-panel);
+  min-height: 260px;
+  height: 44vh;
+  /* flex 讓地圖子元素吃滿容器，不依賴 height:100% 對上父層高度 */
+  display: flex;
+}
+
+/* 絕對定位的圖例不在流內，不受影響 */
+.dw-map > .shared-map,
+.dw-map > .dw-map-empty {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@container dw (min-width: 900px) {
+  .dw-map {
+    height: auto;
+    min-height: 340px;
+  }
+}
+
+.dw-map-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ct-text-dim);
+  font-size: 13px;
+  padding: 16px;
+  text-align: center;
+}
+
+.dw-map .maplibregl-ctrl-group,
+.dw-map-recenter {
+  opacity: 0.78;
+  transition: opacity 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.dw-map .maplibregl-ctrl-group:hover,
+.dw-map .maplibregl-ctrl-group:focus-within,
+.dw-map .maplibregl-ctrl-group:has(:active),
+.dw-map-recenter:hover,
+.dw-map-recenter:focus-visible,
+.dw-map-recenter:active {
+  opacity: 1;
+}
+
+.dw-map .basemap-status {
+  left: auto;
+  right: 8px;
+  bottom: 6px;
+  max-width: 42%;
+  padding: 0 2px;
+  gap: 2px;
+  font-size: 8px;
+  line-height: 1.2;
+  box-shadow: none;
+  z-index: 2;
+}
+
+.dw-map .basemap-status-ready {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.dw-map .basemap-status .map-attribution {
+  font-size: 7px;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.dw-map-recenter {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--ct-border);
+  border-radius: 999px;
+  background: var(--ct-overlay);
+  color: var(--ct-text);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 6px 16px var(--ct-shadow);
+  cursor: pointer;
+}
+
+.dw-map-recenter:hover,
+.dw-map-recenter:focus-visible {
+  border-color: var(--ct-accent);
+  color: var(--ct-accent);
+  outline: none;
+}
+
+.dw.is-phone .dw-map-recenter {
+  min-height: 40px;
+  padding: 8px 14px;
+}
+
+.dw-map-legend {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 46%);
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: var(--ct-overlay);
+  border: 1px solid var(--ct-border);
+  font-size: 10px;
+  color: var(--ct-text-dim);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.dw-map-legend span {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 3px;
+}
+
+.dw-map-legend .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dw-route-mode {
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid var(--ct-border);
+  color: var(--ct-text-dim);
+  font-size: 9px;
+}
+
+.dw-route-mode.is-road {
+  border-color: var(--ct-accent);
+  color: var(--ct-accent);
+  font-weight: 600;
+}
+
+.dw-map-legend .dot.pickup { background: #e8833a; }
+.dw-map-legend .dot.dropoff { background: #5c9a4a; }
+.dw-map-legend .dot.start { background: var(--ct-text); }
+
 /* ── 下方：任務卡片 ───────────────────────────────────────────────── */
 
 .dw-next {
@@ -468,6 +637,24 @@ body.driver-phone-preview .app-shell {
 
 .dw-stop.is-compact .dw-stop-name {
   font-size: 15px;
+}
+
+.dw.is-phone .dw-map {
+  height: 220px;
+  min-height: 200px;
+  max-height: 240px;
+  flex: none;
+  order: -1;
+}
+
+.dw.is-phone:not(.has-bezel) .dw-map {
+  height: 28vh;
+  max-height: none;
+}
+
+.dw.is-phone .dw-top {
+  display: flex;
+  flex-direction: column;
 }
 
 .dw.is-phone .dw-vehicle {
@@ -597,9 +784,20 @@ body.driver-phone-preview .app-shell {
   padding-top: 4px;
 }
 
-/* 舊瀏覽器沒有 container query 時，退回用視窗寬度判斷（僅任務卡片還需要斷點；
-   .dw-top 移除地圖後已經一律單欄，不用再退回兩欄）。 */
+/* 舊瀏覽器沒有 container query 時，退回用視窗寬度判斷，
+   至少手機／桌機兩種版面還是對的（只是切換鈕會失效）。 */
 @supports not (container-type: inline-size) {
+  @media (min-width: 900px) {
+    .dw-top {
+      grid-template-columns: minmax(300px, 380px) 1fr;
+      gap: 16px;
+      align-items: stretch;
+    }
+    .dw-map {
+      height: auto;
+      min-height: 340px;
+    }
+  }
   @media (min-width: 760px) {
     .dw-stops {
       grid-template-columns: repeat(2, minmax(0, 1fr));
