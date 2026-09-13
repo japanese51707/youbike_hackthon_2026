@@ -306,7 +306,7 @@ export default function OverviewPage() {
         <Tag>{view?.fetchedAt ? formatDateTime(new Date(view.fetchedAt).toISOString()) : "—"}</Tag>
       </div>
 
-      <AsyncState loading={board.loading} error={board.error} data={data} onRetry={board.reload}>
+      <AsyncState loading={board.loading && !data} error={board.error} data={data} onRetry={board.reload}>
         {view && (
           <>
             <div className="slb-headline">

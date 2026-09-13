@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { peekResource, rememberResource } from "../api/resourceCache.js";
 import { getEscalations, getMyNotifications } from "../api/escalationApi.js";
 import { isApiMode } from "../api/httpClient.js";
+
+const LIVE_CACHE_KEY = "escalations-live";
 
 const POLL_MS = 30000;
 
@@ -15,12 +18,13 @@ const POLL_MS = 30000;
  *   不要讓畫面因為一次逾時就整個空掉——未解除的案件不能消失。
  */
 export default function useEscalations({ pollMs = POLL_MS } = {}) {
-  const [cases, setCases] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  const [counts, setCounts] = useState({ open: 0, banner: 0, prompt: 0 });
+  const cached = peekResource(LIVE_CACHE_KEY);
+  const [cases, setCases] = useState(() => cached?.cases ?? []);
+  const [notifications, setNotifications] = useState(() => cached?.notifications ?? []);
+  const [counts, setCounts] = useState(() => cached?.counts ?? { open: 0, banner: 0, prompt: 0 });
   const [error, setError] = useState("");
   const [stale, setStale] = useState(false);
-  const [loading, setLoading] = useState(isApiMode);
+  const [loading, setLoading] = useState(() => cached == null && isApiMode);
   const alive = useRef(true);
   const inFlight = useRef(false);
 
@@ -37,9 +41,15 @@ export default function useEscalations({ pollMs = POLL_MS } = {}) {
         getMyNotifications().catch(() => ({ notifications: [] })),
       ]);
       if (!alive.current) return;
-      setCases(data.cases ?? []);
-      setCounts(data.counts ?? { open: 0, banner: 0, prompt: 0 });
-      setNotifications(notif.notifications ?? []);
+      const next = {
+        cases: data.cases ?? [],
+        counts: data.counts ?? { open: 0, banner: 0, prompt: 0 },
+        notifications: notif.notifications ?? [],
+      };
+      rememberResource(LIVE_CACHE_KEY, next);
+      setCases(next.cases);
+      setCounts(next.counts);
+      setNotifications(next.notifications);
       setError("");
       setStale(false);
     } catch (err) {

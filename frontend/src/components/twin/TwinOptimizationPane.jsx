@@ -18,7 +18,7 @@ const DECISIONS = [
 ];
 
 export default function TwinOptimizationPane({ onSelectStation, onHighlightStations }) {
-  const resource = useAsyncResource(getDailyReview);
+  const resource = useAsyncResource(getDailyReview, { cacheKey: "daily-review" });
   const [busy, setBusy] = useState(false);
   const [decisions, setDecisions] = useState({});
   const [overrides, setOverrides] = useState({});

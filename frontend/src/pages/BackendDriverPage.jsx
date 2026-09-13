@@ -33,6 +33,7 @@ import {
   startTask,
 } from "../api/taskApi.js";
 import AsyncState from "../components/common/AsyncState.jsx";
+import { usePageActive } from "../components/layout/PersistentPages.jsx";
 import SharedMap from "../components/map/SharedMap.jsx";
 import {
   createPlanRouteLayers,
@@ -324,11 +325,15 @@ function StopCard({ stop, current, canReport, busy, value, onChange, onReport, s
 
 export default function BackendDriverPage() {
   const actor = useDriverActor();
+  const pageActive = usePageActive();
   const loader = useCallback(
-    () => (actor.ready ? getAssignedWorkspace(actor.actorId) : Promise.resolve(null)),
-    [actor.ready, actor.actorId],
+    () => getAssignedWorkspace(actor.actorId),
+    [actor.actorId],
   );
-  const resource = useAsyncResource(loader);
+  const resource = useAsyncResource(loader, {
+    cacheKey: actor.actorId ? `driver-assigned:${actor.actorId}` : undefined,
+    enabled: actor.ready && Boolean(actor.actorId),
+  });
   const [counts, setCounts] = useState({});
   const [load, setLoad] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -363,9 +368,9 @@ export default function BackendDriverPage() {
   // 手機預覽＝沉浸式：比照找車（RiderPage）在 body 掛 class，隱藏 App 頂部導覽列與
   // page padding，讓司機端手機版變成「深底置中一支全螢幕手機」，而非頁面裡縮小的卡片。
   useEffect(() => {
-    document.body.classList.toggle("driver-phone-preview", isPhoneLayout);
+    document.body.classList.toggle("driver-phone-preview", pageActive && isPhoneLayout);
     return () => document.body.classList.remove("driver-phone-preview");
-  }, [isPhoneLayout]);
+  }, [pageActive, isPhoneLayout]);
 
   const operator = resource.data?.operator ?? null;
   const vehicles = resource.data?.vehicles ?? {};
@@ -569,7 +574,7 @@ export default function BackendDriverPage() {
       {whoBar}
       <AsyncState
         {...resource}
-        loading={resource.loading || !actor.ready}
+        loading={!resource.data && (resource.loading || !actor.ready)}
         onRetry={resource.reload}
       >
         {!operator ? (

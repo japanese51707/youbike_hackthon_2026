@@ -1,5 +1,6 @@
 import { isApiMode, request } from "./httpClient.js";
 import { mockAdapter } from "./mockAdapter.js";
+import { cachedRead } from "./resourceCache.js";
 
 export function getOperatorWorkspace() {
   if (isApiMode) return Promise.all([request("/dispatch/tasks"), request("/operators")]).then(([tasks, operators]) => ({ tasks, operators }));
@@ -12,7 +13,9 @@ export function completeTaskStop(taskId, sequence) {
 }
 
 export function getOperationsOverview() {
-  if (isApiMode) return request("/dispatch/overview");
+  if (isApiMode) {
+    return cachedRead("dispatch-overview-api", () => request("/dispatch/overview", { timeoutMs: 45_000 }), { ttlMs: 15_000 });
+  }
   return mockAdapter.getOverview();
 }
 

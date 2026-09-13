@@ -125,7 +125,7 @@ export async function getBackendDashboard() {
     // 冷啟動較久，timeout 拉高到 45s，避免首次載入被 20s 預設砍掉而清單全空。
     settle(request("/dispatch/recommendations?limit=200", { timeoutMs: 45000 })),
     settle(request("/alerts", { timeoutMs: 45000 })),
-    settle(request("/kpi")),
+    settle(request("/kpi", { timeoutMs: 45000 })),
     settle(request("/vehicles")),
     settle(
       request(`/weather/by-location?lat=${fallbackPoint.lat}&lng=${fallbackPoint.lng}`, {

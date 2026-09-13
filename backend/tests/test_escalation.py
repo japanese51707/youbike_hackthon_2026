@@ -227,6 +227,33 @@ def test_unknown_action_and_missing_case_are_rejected():
         escalation.record_action("CASE-X", "acknowledged", "OP-1", config=CFG)
 
 
+def test_describe_accepts_aware_opened_at_against_naive_now():
+    """官方觀測帶時區、本機 now 常是 naive，兩者相減不得整頁 500。"""
+    opened = _dt.datetime(2026, 9, 13, 2, 14, tzinfo=_dt.timezone.utc)
+    case = {
+        "case_id": "CASE-TZ",
+        "station_id": "S1",
+        "opened_at": opened.isoformat(),
+        "district": "板橋區",
+    }
+    row = escalation.describe(case, now=T0, config=CFG)
+    assert row["waited_minutes"] >= 0
+    assert row["next_stage_at"]
+    assert row["stage"] == 0
+
+
+def test_next_stage_uses_taipei_wall_clock_not_container_utc():
+    """naive 09:19 是台北牆上時間；10:20 台北不該算出還有 450 分。"""
+    now = _dt.datetime(2026, 9, 13, 10, 20, tzinfo=_dt.timezone(_dt.timedelta(hours=8)))
+    row = escalation.describe(
+        {"case_id": "CASE-TZ2", "station_id": "S1",
+         "opened_at": "2026-09-13T09:19:00", "district": "土城區"},
+        now=now, config=CFG)
+    assert 50 < row["waited_minutes"] < 70
+    assert row["next_stage_in_minutes"] is not None
+    assert abs(row["next_stage_in_minutes"]) < 60
+
+
 def test_one_open_case_per_station():
     """同一站重複同步不得長出第二個未結案案件。"""
     for _ in range(3):

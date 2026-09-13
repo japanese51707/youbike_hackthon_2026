@@ -3,7 +3,6 @@
 from fastapi import APIRouter, HTTPException
 
 from core.service_problems import empty_board, snapshot, station_history
-from core.data import get_stations_with_degradation
 
 router = APIRouter(prefix="/api/v1", tags=["service-problems"])
 
@@ -13,12 +12,8 @@ def service_problems():
     """進行中空／滿時計＋窗口內已排除平均＋站況收集覆蓋。
 
     窗口是「現在往回最多 24 小時」，有多少算多少，不必等滿 24 小時。
-    站況同步失敗不擋讀庫，避免看板整卡空白。
+    只讀時計庫（ADR-325／327），不在此重抓官方站況，避免看板逾時後把時間燈換成站數。
     """
-    try:
-        get_stations_with_degradation()
-    except Exception as exc:  # noqa: BLE001
-        print(f"[service_problems] 同步站況失敗（仍回既有時計）：{exc}")
     try:
         return snapshot()
     except Exception as exc:  # noqa: BLE001

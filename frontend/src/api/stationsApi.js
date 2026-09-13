@@ -5,6 +5,7 @@ import { fetchBackendStations } from "./backendStations.js";
 import { getBackendDashboard, getTwinDashboard } from "./backendDashboard.js";
 
 const dashboardCache = { full: null, twin: null };
+const dashboardInflight = { full: null, twin: null };
 const MOCK_SWAP_MAX_STATIONS = 50;
 
 export function peekDashboardData(lite = false) {
@@ -28,6 +29,15 @@ function keepPreviousStations(key, reason) {
 // - mock 模式：全用 mock；若只是想預覽後端站點，useBackendStations 開關可只覆蓋站點。
 export async function getDashboardData({ lite = false } = {}) {
   const key = lite ? "twin" : "full";
+  if (dashboardInflight[key]) return dashboardInflight[key];
+  dashboardInflight[key] = loadDashboardData(key).finally(() => {
+    dashboardInflight[key] = null;
+  });
+  return dashboardInflight[key];
+}
+
+async function loadDashboardData(key) {
+  const lite = key === "twin";
   const remember = (payload) => {
     const previous = dashboardCache[key];
     const incoming = payload?.stations?.length ?? 0;

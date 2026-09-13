@@ -124,7 +124,7 @@ function MockDriverPage() {
     <div className="driver-frame">
       {contextHolder}
       <AsyncState
-        loading={driver.loading}
+        loading={driver.loading && !driver.data}
         error={driver.error}
         data={driver.data}
         onRetry={driver.reload}
