@@ -229,3 +229,28 @@ CREATE TABLE IF NOT EXISTS task_seq (
     seq_key TEXT PRIMARY KEY,     -- 例：20260911-早
     seq     INTEGER NOT NULL      -- 目前已用到的最大流水號
 );
+
+-- ADR-335：分級催辦的站內通知。每「事件×階段×收件人×承辦版本×提醒批次」一筆，
+-- 唯一鍵擋掉重複送；建立／取走／看到／已讀四件事分開記，不混成一個 bool。
+CREATE TABLE IF NOT EXISTS alert_notifications (
+    notification_id    TEXT PRIMARY KEY,
+    case_id            TEXT NOT NULL,
+    stage              INTEGER NOT NULL,
+    recipient_id       TEXT NOT NULL,
+    recipient_role     TEXT NOT NULL DEFAULT 'controller',
+    task_id            TEXT,
+    assignment_version TEXT NOT NULL DEFAULT '',   -- 轉派後新承辦收得到自己那份
+    reminder_index     INTEGER NOT NULL DEFAULT 0, -- 最高階段後的第幾次持續提醒
+    digest_key         TEXT,                       -- 同區同階段合併時的分組鍵
+    body               TEXT,
+    created_at         TEXT NOT NULL,
+    delivered_at       TEXT,                       -- 前端取走（不等於送達手機）
+    seen_at            TEXT,
+    acknowledged_at    TEXT,
+    muted_until        TEXT                        -- 個人靜音；不遮清單、不擋下一階段
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_alert_notifications_unique
+    ON alert_notifications(case_id, stage, recipient_id, assignment_version, reminder_index);
+CREATE INDEX IF NOT EXISTS idx_alert_notifications_recipient
+    ON alert_notifications(recipient_id, created_at);

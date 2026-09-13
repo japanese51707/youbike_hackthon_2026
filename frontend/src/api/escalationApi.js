@@ -1,8 +1,8 @@
 // ADR-309：緊急調度案件升級追蹤。時間一律用後端回的欄位，前端不自己累加計時。
 import { isApiMode, request } from "./httpClient.js";
 
-export const STAGE_LABELS = ["已開案", "需再提示", "需電話聯絡"];
-export const CLOSE_LABELS = { dispatched: "已派工", recovered: "站況恢復" };
+export const STAGE_LABELS = ["已開案", "需再提示", "需核實／電話聯絡", "需安排支援"];
+export const CLOSE_LABELS = { dispatched: "已派工（舊規則）", recovered: "確認站況恢復" };
 export const ACTION_LABELS = {
   acknowledged: "已讀（暫時靜音）",
   called: "已電話聯絡",
@@ -15,6 +15,19 @@ const EMPTY = { cases: [], counts: { open: 0, banner: 0, prompt: 0 } };
 export async function getEscalations() {
   if (!isApiMode) return EMPTY;
   return request("/alerts/escalations");
+}
+
+/** ADR-335：我的分級提醒（後端依登入身分授權，司機只拿得到自己的）。 */
+export async function getMyNotifications() {
+  if (!isApiMode) return { notifications: [] };
+  return request("/alerts/notifications");
+}
+
+/** action：seen / ack / mute —— 只會動到自己那一筆，不替別人消音。 */
+export async function markNotification(notificationId, action) {
+  return request(
+    `/alerts/notifications/${encodeURIComponent(notificationId)}/${encodeURIComponent(action)}`,
+    { method: "POST" });
 }
 
 export async function getEscalationHistory(limit = 100) {

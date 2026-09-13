@@ -24,8 +24,36 @@ import json
 import uuid
 from typing import Iterable, Optional
 
-CLOSE_DISPATCHED = "dispatched"
+CLOSE_DISPATCHED = "dispatched"   # ADR-335 起不再使用；保留供歷史資料讀取
 CLOSE_RECOVERED = "recovered"
+
+# ADR-335 觀測狀態：案件此刻是被什麼樣的資料支撐著
+OBS_CONFIRMED = "confirmed"     # 新鮮可信觀測，確認仍緊急
+OBS_UNVERIFIED = "unverified"   # 過期／離線／缺站／規則結果不可用 → 保留時計，不得當恢復
+
+
+def observation_trustworthy(station: Optional[dict], config: Optional[dict] = None) -> bool:
+    """這筆站況能不能拿來「確認緊急已解除」。
+
+    ★這條路徑會關掉案件，所以標準要嚴：正式資料必須明確標示 data_freshness == 'live'，
+      欄位缺漏一律視為不可信。缺漏可能來自任何一個上游忘了帶欄位，把它當可信
+      就會安靜地關掉不該關的案——而關錯的代價是沒人去處理那一站。
+      只有 mock 資料源（測試 fixture 沒有這些欄位）才放行缺漏。
+    """
+    if not station:
+        return False
+    if station.get("service_available") is False or station.get("status") == "offline":
+        return False
+    freshness = station.get("data_freshness")
+    if freshness == "live":
+        return True
+    if freshness is None:
+        if config is None:
+            from config_loader import get_config
+            config = get_config()
+        mode = ((config or {}).get("data_source", {}) or {}).get("mode", "mock")
+        return mode == "mock"
+    return False
 
 ACTION_ACK = "acknowledged"
 ACTION_CALLED = "called"
@@ -168,60 +196,161 @@ def describe(case: dict, now: Optional[_dt.datetime] = None,
 def sync_cases(stations: list, recommendations: Optional[list] = None,
                tasks: Optional[list] = None, config: Optional[dict] = None,
                now: Optional[_dt.datetime] = None) -> list:
-    """依即時站況與任務開案／關案，回傳所有未結案案件（已補推算欄位）。
+    """依即時站況開案／關案，回傳所有未結案案件（已補推算欄位）。
 
-    關案只有兩種確定性理由（ADR-309 §2）：
-      dispatched —— 有未結案任務涵蓋該站
-      recovered  —— 該站本輪不再需要緊急警示
-    人按「已讀」不關案，只靜音。
+    ADR-335 改寫了關案規則。舊規則（ADR-309）是「有未結案任務涵蓋該站就關案」，
+    但派工只代表**有人承辦**，不代表**問題解除**——司機還沒到、到了發現車不夠、
+    或補完又被借光，站點其實一直是空的。舊規則等於一派工就停止催辦，
+    這正是「派完就沒人再管」的根因。
+
+    現在只有一種關案理由：**新鮮且可信的觀測，配合有效規則結果，確認不再緊急**。
+      - 派工、轉派、已讀、任務回報完成、跨日、換班：一律不關案，時計不重設。
+      - 缺站、空回應、過期、離線、規則結果不可用：保留案件並標 unverified，
+        絕不當成恢復。資料不知道不等於問題解決了。
+      - 亂序：比 last_confirmed_at 舊的觀測不得反轉狀態。
     """
     from db import escalation_repo
 
     moment = now or _now()
     rec_by_id = {r.get("station_id"): r for r in (recommendations or [])}
+    station_by_id = {s.get("station_id"): s for s in (stations or []) if s.get("station_id")}
+
     need = {}
-    for station in stations or []:
-        station_id = station.get("station_id")
-        if not station_id:
-            continue
+    for station_id, station in station_by_id.items():
         if needs_case(station, rec_by_id.get(station_id)):
             need[station_id] = station
 
-    covered = stations_with_open_task(tasks or [])
     open_cases = {c["station_id"]: c for c in escalation_repo.list_open_cases()}
 
-    # 1. 關案：已派工優先（那是真的有人在處理），其次站況恢復。
+    # ── 1. 逐案判斷：只有「確認解除」才關 ────────────────────────────
     for station_id, case in open_cases.items():
-        if station_id in covered:
-            escalation_repo.close_case(case["case_id"], CLOSE_DISPATCHED, _iso(moment))
-        elif station_id not in need:
+        station = station_by_id.get(station_id)
+        observed_at = _observed_at(station)
+
+        # 亂序防護：這筆觀測比上次確認還舊 → 不採信，狀態維持原樣
+        last_confirmed = _parse(case.get("last_confirmed_at"))
+        if observed_at and last_confirmed and observed_at < last_confirmed:
+            continue
+
+        if station is None:
+            # 這輪根本沒看到這個站（缺站／查詢失敗）→ 不能當恢復
+            escalation_repo.mark_unverified(case["case_id"], OBS_UNVERIFIED)
+            continue
+        if not observation_trustworthy(station, config):
+            escalation_repo.mark_unverified(case["case_id"], OBS_UNVERIFIED)
+            continue
+
+        stamp = _iso(observed_at or moment)
+        if station_id in need:
+            # 新鮮觀測確認「仍然緊急」→ 續案並記錄確認時間
+            escalation_repo.mark_confirmed(case["case_id"], stamp, OBS_CONFIRMED,
+                                           station.get("source"))
+        else:
+            # 新鮮觀測確認「不再緊急」→ 這是唯一的關案路徑
+            escalation_repo.mark_confirmed(case["case_id"], stamp, OBS_CONFIRMED,
+                                           station.get("source"))
             escalation_repo.close_case(case["case_id"], CLOSE_RECOVERED, _iso(moment))
 
-    # 2. 開案：需要緊急調度、沒有未結案案件、且尚未被任務涵蓋。
+    # ── 2. 開案：需要緊急調度且沒有未結案案件 ───────────────────────
+    #    ★不再因為「已被任務涵蓋」而跳過開案——派工中的站一樣要計時，
+    #      否則司機還沒到之前那段延誤沒有人在算。
     for station_id, station in need.items():
-        if station_id in open_cases or station_id in covered:
+        if station_id in open_cases:
             continue
         rec = rec_by_id.get(station_id)
+        observed_at = _observed_at(station)
         escalation_repo.open_case({
             "case_id": f"CASE-{_iso(moment).replace(':', '').replace('-', '')}-{uuid.uuid4().hex[:6]}",
             "station_id": station_id,
             "station_name": station.get("station_name", ""),
             "district": station.get("district", ""),
-            "opened_at": _iso(moment),
+            "opened_at": _iso(observed_at or moment),
             "trigger_reason": (rec or {}).get("reason") or _default_reason(station),
             "suggested_action": (f"{rec['action']} {rec['quantity']} 台" if rec else None),
         })
+        fresh = escalation_repo.get_open_case_by_station(station_id)
+        if fresh:
+            escalation_repo.mark_confirmed(
+                fresh["case_id"], _iso(observed_at or moment),
+                OBS_CONFIRMED if observation_trustworthy(station, config) else OBS_UNVERIFIED,
+                station.get("source"))
 
-    # 3. 記錄曾達到的最高階段（供稽核與「已提示過」判斷）。
+    # ── 3. 補推算欄位 + 承辦責任 ────────────────────────────────────
+    assignments = assignments_by_station(tasks or [])
     result = []
     for case in escalation_repo.list_open_cases():
         described = describe(case, moment, config)
+        described.update(responsibility_of(case["station_id"], assignments))
         if described["stage"] > int(case.get("highest_stage") or 0):
             escalation_repo.set_highest_stage(case["case_id"], described["stage"])
             described["highest_stage"] = described["stage"]
         result.append(described)
     result.sort(key=lambda c: (-c["stage"], -c["waited_minutes"]))
     return result
+
+
+def _observed_at(station: Optional[dict]) -> Optional[_dt.datetime]:
+    """這筆站況的觀測時間（用於亂序防護與案件起算）。"""
+    if not station:
+        return None
+    for key in ("observed_at", "source_timestamp", "timestamp", "received_at"):
+        stamp = _parse(station.get(key))
+        if stamp:
+            return stamp
+    return None
+
+
+def assignments_by_station(tasks: Iterable[dict]) -> dict:
+    """哪些站正被哪張未結案任務的哪個人承辦。
+
+    只認「還沒處理完」的停靠站：completed／removed 的 stop 不算承辦，
+    已釋放資源、已取消／完成的任務也不算——否則案件會掛在一個早就收工的人身上。
+    """
+    out: dict = {}
+    for task in tasks or []:
+        if task.get("task_status") not in OPEN_TASK_STATUS:
+            continue
+        if task.get("resources_released"):
+            continue
+        route = task.get("route") or task.get("route_json") or []
+        if isinstance(route, str):
+            try:
+                route = json.loads(route)
+            except (TypeError, ValueError):
+                route = []
+        for stop in route or []:
+            if not isinstance(stop, dict) or not stop.get("station_id"):
+                continue
+            if (stop.get("station_status") or "pending") != "pending":
+                continue
+            out.setdefault(str(stop["station_id"]), []).append({
+                "task_id": task.get("task_id"),
+                "task_status": task.get("task_status"),
+                "operator_id": task.get("assigned_operator"),
+                "escort_id": task.get("assigned_escort"),
+                "vehicle_id": task.get("assigned_vehicle"),
+                "assigned_at": task.get("assigned_at"),
+            })
+    return out
+
+
+def responsibility_of(station_id: str, assignments: dict) -> dict:
+    """這一站現在由誰負責，以及該把提醒送給誰。
+
+    多張未結案任務同時涵蓋同一站是資料異常，回 conflict 讓後台去查，
+    不任選一個人扛——挑錯人比沒挑更糟。
+    """
+    rows = assignments.get(str(station_id)) or []
+    if not rows:
+        return {"assignments": [], "responsibility_status": "unassigned",
+                "responsible_operator": None}
+    if len(rows) > 1:
+        return {"assignments": rows, "responsibility_status": "conflict",
+                "responsible_operator": None}
+    row = rows[0]
+    status = "in_progress" if row.get("task_status") == "in_progress" else "assigned"
+    return {"assignments": rows, "responsibility_status": status,
+            "responsible_operator": row.get("operator_id")}
 
 
 def _default_reason(station: dict) -> str:

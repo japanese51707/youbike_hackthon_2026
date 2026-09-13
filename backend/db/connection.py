@@ -138,6 +138,12 @@ def _init_schema(conn: sqlite3.Connection) -> None:
 # 輕量 migration：既有 DB 的表已存在，schema.sql 的 IF NOT EXISTS 不會補新欄位，
 # 這裡用 PRAGMA 檢查後 ADD COLUMN（SQLite 無 ADD COLUMN IF NOT EXISTS）。冪等、重跑安全。
 _MIGRATIONS = [
+    ("tasks", "started_at", "TEXT"),
+    ("tasks", "closed_at", "TEXT"),
+    ("alert_cases", "last_confirmed_at", "TEXT"),
+    ("alert_cases", "observation_status", "TEXT"),
+    ("alert_cases", "source", "TEXT"),
+    ("service_problems", "last_observed_at", "TEXT"),
     ("operators", "current_district", "TEXT"),   # ADR-114
     ("tasks", "district", "TEXT"),               # ADR-114
     ("tasks", "assigned_vehicle", "TEXT"),       # ADR-114

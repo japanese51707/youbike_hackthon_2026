@@ -1,4 +1,5 @@
 import {
+  AlertOutlined,
   ProfileOutlined,
   BarChartOutlined,
   DashboardOutlined,
@@ -28,6 +29,7 @@ import brandLogo from "../../assets/brand/youbike-logo.png";
 const baseNavigation = [
   { key: "/dashboard", icon: <DashboardOutlined />, label: "調度面板" },
   { key: "/alerts", icon: <ProfileOutlined />, label: "分派任務狀況" },
+  { key: "/alert-tracking", icon: <AlertOutlined />, label: "警示追蹤" },
   { key: "/driver", icon: <MobileOutlined />, label: "司機手機端" },
   { key: "/overview", icon: <BarChartOutlined />, label: "服務水準看板" },
   { key: "/rider", icon: <EnvironmentOutlined />, label: "找車（使用者）" },
@@ -45,8 +47,9 @@ export default function AppShell({ children }) {
   const [messageApi, contextHolder] = message.useMessage();
   // ADR-309：升級提示跨頁常駐——調度員切到別頁也不會漏掉該打電話的案件。
   const escalation = useEscalations();
-  const [dismissedCaseId, setDismissedCaseId] = useState(null);
-  const promptCase = escalation.promptCase;
+  // ADR-335：詳情只在使用者主動點開時出現；沒有「該不該強制跳出」這回事。
+  const [detailCase, setDetailCase] = useState(null);
+
   // ★彈窗會蓋住整頁（含頁首的身分選單），所以只在「這個人真的能處理」時才強制跳出：
   //   沒選身分 → 選不了身分，變成跳出來但什麼都不能做；
   //   身分是司機 → 送出會被後端擋（需要 dispatcher/maintainer），跳了也只是卡住他。
@@ -54,13 +57,12 @@ export default function AppShell({ children }) {
   const actorId = isApiMode ? getActorId() : "";
   const actorRole = operators.find((o) => o.operator_id === actorId)?.role;
   const canAct = !isApiMode || (Boolean(actorId) && ["dispatcher", "maintainer"].includes(actorRole));
-  const showPrompt = Boolean(promptCase) && promptCase.case_id !== dismissedCaseId && canAct;
 
   // escalation 的提示改走全域橫幅/彈窗（下方 EscalationBanner/Modal），不再掛在導覽項上。
   const navigation = baseNavigation;
 
   const goHandle = (item) => {
-    setDismissedCaseId(null);
+    setDetailCase(null);
     navigate(`/dashboard?station=${encodeURIComponent(item.station_id)}`);
   };
 
@@ -73,15 +75,21 @@ export default function AppShell({ children }) {
   return (
     <Layout className="app-shell">
       {contextHolder}
-      {escalation.bannerCases.length ? (
-        <EscalationBanner cases={escalation.bannerCases} onOpen={goHandle}
-          hint={canAct ? "" : (actorId ? "此身分無派工權限，請切換為調度或維運人員" : "請先於右上角選擇操作身分")} />
-      ) : null}
+      {/* ADR-335：全域最多一條可收合彙總橫幅。詳情由使用者主動點開，
+          不再有自動跳出且關不掉的彈窗——多站同時逾時不會把畫面鎖死。 */}
+      <EscalationBanner
+        summary={escalation.summary}
+        cases={escalation.cases}
+        stale={escalation.stale}
+        onOpen={(item) => setDetailCase(item ?? escalation.worstCase)}
+        hint={canAct ? "" : (actorId ? "此身分無派工權限，請切換為調度或維運人員" : "請先於右上角選擇操作身分")}
+      />
       <EscalationModal
-        open={showPrompt}
-        item={promptCase}
+        open={Boolean(detailCase)}
+        item={detailCase}
         onDispatch={goHandle}
-        onDone={() => { setDismissedCaseId(promptCase?.case_id ?? null); escalation.reload(); }}
+        onClose={() => setDetailCase(null)}
+        onDone={() => { setDetailCase(null); escalation.reload(); }}
       />
       <header className="topbar">
         <Space className="brand" size={10}>

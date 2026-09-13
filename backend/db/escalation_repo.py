@@ -115,3 +115,27 @@ def list_actions(case_id: Optional[str] = None, limit: int = 200) -> list:
             "SELECT * FROM alert_case_actions ORDER BY created_at DESC LIMIT ?",
             (int(limit),)).fetchall()
     return [dict(r) for r in rows]
+
+# ── ADR-335：持續緊急事件的觀測欄位 ───────────────────────────────────
+def mark_confirmed(case_id: str, observed_at: str, observation_status: str,
+                   source: str = None) -> None:
+    """記錄「這個案件最後一次被新鮮觀測確認仍緊急」的時間與來源。
+
+    last_confirmed_at 是亂序防護的依據：比它舊的觀測不得反轉案件狀態。
+    """
+    conn = get_connection()
+    conn.execute(
+        """UPDATE alert_cases
+           SET last_confirmed_at = ?, observation_status = ?, source = COALESCE(?, source)
+           WHERE case_id = ? AND closed_at IS NULL""",
+        (observed_at, observation_status, source, case_id))
+    conn.commit()
+
+
+def mark_unverified(case_id: str, observation_status: str) -> None:
+    """資料不可信時只更新觀測狀態，不動 last_confirmed_at，也不關案。"""
+    conn = get_connection()
+    conn.execute(
+        "UPDATE alert_cases SET observation_status = ? WHERE case_id = ? AND closed_at IS NULL",
+        (observation_status, case_id))
+    conn.commit()
