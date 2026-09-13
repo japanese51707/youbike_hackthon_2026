@@ -1548,6 +1548,23 @@ body {
   position: relative;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.slb-map-frame.is-zoomed {
+  cursor: grab;
+}
+
+.slb-map-frame.is-zoomed:active {
+  cursor: grabbing;
+}
+
+.slb-map-reset {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
 }
 
 .slb-map-svg {
@@ -1561,7 +1578,13 @@ body {
   stroke: var(--ct-border);
   stroke-width: 1;
   cursor: default;
+  outline: none;
   transition: fill 160ms ease, stroke 160ms ease;
+}
+
+.slb-map-poly:focus,
+.slb-map-poly:focus-visible {
+  outline: none;
 }
 
 .slb-map-poly.is-green {
